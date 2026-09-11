@@ -1,0 +1,23 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".validate": "newData.hasChildren(['uid', 'email', 'role'])"
+      }
+    },
+    "requests": {
+      ".read": "auth != null",
+      "$childId": {
+        ".write": "auth != null"
+      }
+    },
+    "signaling": {
+      "$sessionId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
