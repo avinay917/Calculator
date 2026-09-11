@@ -1,4 +1,4 @@
-name: Build Android Debug APK
+name: Run Unit Tests & Build Android Debug APK
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build_and_test:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,10 +25,21 @@ jobs:
       - name: 3. Make Gradlew Executable
         run: chmod +x gradlew
 
-      - name: 4. Build Debug APK with Gradle
+      - name: 4. Run Android Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: 5. Upload Unit Test Reports as Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 14
+
+      - name: 6. Build Debug APK with Gradle
         run: ./gradlew assembleDebug
 
-      - name: 5. Upload Generated APK as Artifact
+      - name: 7. Upload Generated APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
