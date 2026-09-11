@@ -7,7 +7,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 
 object FcmConfig {
     // Web Push / WebRTC VAPID Key Constant
-    const val VAPID_KEY = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-XvWp4F_1zQ8P4X1y-sample-vapid-key-pair-auth-app-key"
+    const val VAPID_KEY = "BOWC1dt6Whljt30J85Munu1AGuND0RfByTdiJseAWjUFpun1fYY0SFf91Afqo8ocCqxBA98O8QpQm-Y1gMi5aoo"
 
     /**
      * Retrieves FCM Token (with optional VAPID Key for Web Push alignment)
