@@ -13,6 +13,12 @@
         ".write": "auth != null"
       }
     },
+    "streams": {
+      ".read": "auth != null",
+      "$targetUid": {
+        ".write": "auth != null"
+      }
+    },
     "signaling": {
       "$sessionId": {
         ".read": "auth != null",

@@ -4,8 +4,127 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 /**
- * Triggered whenever a parent writes a stream request to /requests/{childId}
- * Sends a high-priority FCM data message to wake up the child device.
+ * Realtime Database Trigger: onStreamRequested
+ * Triggers on /streams/{targetUid}/status or /requests/{childId}
+ * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
+ */
+exports.onStreamRequested = functions.database
+  .ref("/streams/{targetUid}/status")
+  .onWrite(async (change, context) => {
+    const targetUid = context.params.targetUid;
+    const statusData = change.after.val();
+
+    if (!statusData) {
+      console.log(`Stream request removed for target: ${targetUid}`);
+      return null;
+    }
+
+    const streamType = statusData.streamType || statusData.type || "audio";
+    const sessionId = statusData.sessionId || `session_${targetUid}`;
+
+    // 1. Fetch target FCM Token from /users/{targetUid}
+    const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
+    const userData = userSnapshot.val();
+
+    if (!userData || !userData.fcmToken) {
+      console.error(`No FCM Token found for user: ${targetUid}`);
+      return null;
+    }
+
+    // 2. Construct High-Priority FCM Data Payload
+    const message = {
+      token: userData.fcmToken,
+      android: {
+        priority: "high",
+        ttl: 0
+      },
+      data: {
+        action: "START_STREAM",
+        streamType: streamType,
+        sessionId: sessionId,
+        timestamp: String(Date.now())
+      }
+    };
+
+    try {
+      const response = await admin.messaging().send(message);
+      console.log(`Successfully sent high-priority FCM push to ${targetUid}:`, response);
+      return response;
+    } catch (error) {
+      console.error(`Error sending FCM push to ${targetUid}:`, error);
+      return null;
+    }
+  });
+
+/**
+ * HTTP Endpoint: sendStreamWakeup
+ * Allows waking up a child device via direct HTTPS POST request.
+ */
+exports.sendStreamWakeup = functions.https.onRequest(async (req, res) => {
+  const { targetUid, streamType } = req.body || req.query;
+
+  if (!targetUid) {
+    return res.status(400).json({ error: "Missing targetUid parameter" });
+  }
+
+  try {
+    const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
+    const userData = userSnapshot.val();
+
+    if (!userData || !userData.fcmToken) {
+      return res.status(404).json({ error: "FCM token not found for user" });
+    }
+
+    const message = {
+      token: userData.fcmToken,
+      android: {
+        priority: "high",
+        ttl: 0
+      },
+      data: {
+        action: "START_STREAM",
+        streamType: streamType || "audio",
+        sessionId: `session_${targetUid}_${Date.now()}`
+      }
+    };
+
+    const response = await admin.messaging().send(message);
+    return res.status(200).json({ success: true, messageId: response });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * HTTP Endpoint: sendNotificationHttp
+ * Sends generic HTTP push notification to any FCM token.
+ */
+exports.sendNotificationHttp = functions.https.onRequest(async (req, res) => {
+  const { token, title, body, data } = req.body || req.query;
+
+  if (!token) {
+    return res.status(400).json({ error: "Missing token parameter" });
+  }
+
+  try {
+    const message = {
+      token: token,
+      notification: {
+        title: title || "Calculator Security Alert",
+        body: body || "Notification received"
+      },
+      data: data || {}
+    };
+
+    const response = await admin.messaging().send(message);
+    return res.status(200).json({ success: true, messageId: response });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Also supports /requests/{childId} path for backward compatibility
  */
 exports.onStreamRequestCreated = functions.database
   .ref("/requests/{childId}")
@@ -13,81 +132,22 @@ exports.onStreamRequestCreated = functions.database
     const childId = context.params.childId;
     const requestData = change.after.val();
 
-    if (!requestData) {
-      console.log(`Stream request removed for child: ${childId}`);
-      return null;
-    }
+    if (!requestData) return null;
 
-    const streamType = requestData.streamType || "audio";
-    const sessionId = requestData.sessionId || "";
-    const parentId = requestData.parentId || "";
-
-    // 1. Fetch child FCM Token from /users/{childId}
     const userSnapshot = await admin.database().ref(`/users/${childId}`).once("value");
     const userData = userSnapshot.val();
 
-    if (!userData || !userData.fcmToken) {
-      console.error(`No FCM Token found for child user: ${childId}`);
-      return null;
-    }
+    if (!userData || !userData.fcmToken) return null;
 
-    const fcmToken = userData.fcmToken;
-
-    // 2. Construct High-Priority FCM Data Message Payload
     const message = {
-      token: fcmToken,
-      android: {
-        priority: "high",
-        ttl: 0 // Immediate delivery for background/lock-screen waking
-      },
+      token: userData.fcmToken,
+      android: { priority: "high", ttl: 0 },
       data: {
         action: "START_STREAM",
-        streamType: streamType,
-        sessionId: sessionId,
-        parentId: parentId,
-        timestamp: String(Date.now())
+        streamType: requestData.streamType || "audio",
+        sessionId: requestData.sessionId || ""
       }
     };
 
-    try {
-      const response = await admin.messaging().send(message);
-      console.log(`Successfully sent high-priority FCM push to ${childId}:`, response);
-      return response;
-    } catch (error) {
-      console.error(`Error sending FCM push to child ${childId}:`, error);
-      return null;
-    }
-  });
-
-/**
- * Triggered whenever a user's role is updated in /users/{uid}/role
- */
-exports.onUserRoleChanged = functions.database
-  .ref("/users/{uid}/role")
-  .onUpdate(async (change, context) => {
-    const uid = context.params.uid;
-    const oldRole = change.before.val();
-    const newRole = change.after.val();
-
-    console.log(`User ${uid} role changed from ${oldRole} to ${newRole}`);
-
-    if (newRole === "parent") {
-      const userSnapshot = await admin.database().ref(`/users/${uid}`).once("value");
-      const userData = userSnapshot.val();
-
-      if (userData && userData.fcmToken) {
-        const message = {
-          token: userData.fcmToken,
-          notification: {
-            title: "Role Promoted to Parent",
-            body: "Your account has been upgraded to Parent role. You can now monitor child devices."
-          },
-          data: {
-            action: "ROLE_CHANGED",
-            newRole: "parent"
-          }
-        };
-        await admin.messaging().send(message);
-      }
-    }
+    return admin.messaging().send(message);
   });

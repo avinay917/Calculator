@@ -120,9 +120,12 @@ object FirebaseRepository {
             "childId" to childId,
             "parentId" to parentId,
             "streamType" to streamType, // "audio" or "video"
+            "type" to streamType,
             "sessionId" to sessionId,
+            "status" to "REQUESTED",
             "timestamp" to System.currentTimeMillis()
         )
+        database.reference.child("streams").child(childId).child("status").setValue(requestData)
         database.reference.child("requests").child(childId).setValue(requestData)
             .addOnSuccessListener {
                 onComplete(sessionId)
