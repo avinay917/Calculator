@@ -3,10 +3,12 @@ package com.example.authapp.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.webrtc.WebRtcManager
 import org.webrtc.PeerConnection
@@ -36,7 +38,23 @@ class ChildForegroundService : Service() {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
 
-                startForeground(NOTIFICATION_ID, buildNotification("Active Security Stream ($streamType)"))
+                val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    if (streamType == "video") {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    } else {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
+                } else {
+                    0
+                }
+
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildNotification("Active Security Stream ($streamType)"),
+                    serviceType
+                )
+
                 startWebRtcStream(sessionId, streamType)
             }
             ACTION_STOP -> {
