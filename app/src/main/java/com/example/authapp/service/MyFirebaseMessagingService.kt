@@ -27,7 +27,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 putExtra(ChildForegroundService.EXTRA_STREAM_TYPE, streamType)
                 putExtra(ChildForegroundService.EXTRA_SESSION_ID, sessionId)
             }
-            ContextCompat.startForegroundService(this, intent)
+            try {
+                ContextCompat.startForegroundService(this, intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         } else if (action == "STOP_STREAM") {
             val intent = Intent(this, ChildForegroundService::class.java).apply {
                 this.action = ChildForegroundService.ACTION_STOP

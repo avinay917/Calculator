@@ -9,7 +9,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 
 object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
-    private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance()
+    private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance("https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app")
 
     val currentUser get() = auth.currentUser
 

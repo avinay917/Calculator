@@ -49,14 +49,22 @@ fun ChildScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        checkPermissions()
-    }
-
     val stage1Launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         hasStage1Permissions = permissions.values.all { it }
+    }
+
+    LaunchedEffect(Unit) {
+        checkPermissions()
+        val perms = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        stage1Launcher.launch(perms.toTypedArray())
     }
 
     Column(
