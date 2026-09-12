@@ -232,6 +232,23 @@ object FirebaseRepository {
             .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Storage upload failed") }
     }
 
+    fun toggleCameraFacing(sessionId: String, isFront: Boolean) {
+        database.reference.child("signaling").child(sessionId).child("cameraFacing").setValue(if (isFront) "front" else "back")
+    }
+
+    fun listenToCameraFacing(sessionId: String, onFacingChanged: (isFront: Boolean) -> Unit) {
+        database.reference.child("signaling").child(sessionId).child("cameraFacing")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val facing = snapshot.getValue(String::class.java)
+                    if (facing != null) {
+                        onFacingChanged(facing == "front")
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
     fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit) {
         database.reference.child("recordings").child(childId)
             .addValueEventListener(object : ValueEventListener {

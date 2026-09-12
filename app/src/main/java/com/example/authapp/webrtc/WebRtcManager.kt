@@ -156,6 +156,33 @@ class WebRtcManager(private val context: Context) {
         return null
     }
 
+    companion object {
+        fun getDefaultIceServers(): List<PeerConnection.IceServer> {
+            return listOf(
+                PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
+                PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer()
+            )
+        }
+    }
+
+    fun switchCamera(onSwitched: ((Boolean) -> Unit)? = null) {
+        (videoCapturer as? CameraVideoCapturer)?.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switched successfully. Front: $isFrontCamera")
+                onSwitched?.invoke(isFrontCamera)
+            }
+            override fun onCameraSwitchError(errorDescription: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switch error: $errorDescription")
+                FirebaseCrashlytics.getInstance().recordException(Exception("Camera switch error: $errorDescription"))
+            }
+        })
+    }
+
     fun stopStream() {
         try {
             videoCapturer?.stopCapture()

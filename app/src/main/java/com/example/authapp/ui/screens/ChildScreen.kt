@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.content.Context
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,12 +42,16 @@ fun ChildScreen(
     val context = LocalContext.current
     var hasStage1Permissions by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
+    var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
 
     fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             hasOverlayPermission = Settings.canDrawOverlays(context)
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            isBatteryOptimizationIgnored = pm.isIgnoringBatteryOptimizations(context.packageName)
         } else {
             hasOverlayPermission = true
+            isBatteryOptimizationIgnored = true
         }
     }
 
@@ -224,6 +230,58 @@ fun ChildScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(text = if (hasOverlayPermission) "Lock Screen Access Enabled ✓" else "Grant Display Over Apps Permission")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Card 3: Stage 3 Battery Optimization Exemption
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isBatteryOptimizationIgnored) Icons.Default.Check else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (isBatteryOptimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Stage 3: Battery Saver Exemption",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Prevents Xiaomi, Samsung, and Vivo OS from killing background streaming services.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(text = if (isBatteryOptimizationIgnored) "Unrestricted Background Running ✓" else "Disable Battery Optimization")
                 }
             }
         }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
@@ -51,6 +52,7 @@ fun ParentScreen(
 
     var isRecording by remember { mutableStateOf(false) }
     var recordingSeconds by remember { mutableLongStateOf(0L) }
+    var isFrontCamera by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         FirebaseRepository.listenToChildUsers { list ->
@@ -245,6 +247,24 @@ fun ParentScreen(
                                 Icon(imageVector = Icons.Default.Stop, contentDescription = null, tint = Color.Red)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("⏹️ Stop Recording ($formattedTime)")
+                            }
+                        }
+
+                        // Live Camera Switch Control (Front/Back)
+                        if (activeStreamType.equals("video", ignoreCase = true)) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    isFrontCamera = !isFrontCamera
+                                    FirebaseRepository.toggleCameraFacing(sessionId, isFrontCamera)
+                                    Toast.makeText(context, "Switching Camera (Front/Back)...", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Cameraswitch, contentDescription = "Switch Camera")
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("📷 Flip Camera (${if (isFrontCamera) "Front -> Back" else "Back -> Front"})")
                             }
                         }
                     }

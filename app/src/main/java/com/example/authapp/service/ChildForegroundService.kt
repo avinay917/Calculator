@@ -67,11 +67,11 @@ class ChildForegroundService : Service() {
 
     private fun startWebRtcStream(sessionId: String, streamType: String) {
         webRtcManager = WebRtcManager(applicationContext)
-        val stunServer = PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
+        val iceServers = WebRtcManager.getDefaultIceServers()
 
         webRtcManager?.startStream(
             streamType = streamType,
-            iceServers = listOf(stunServer),
+            iceServers = iceServers,
             onIceCandidate = { candidate ->
                 val candMap = mapOf(
                     "sdpMid" to candidate.sdpMid,
@@ -84,6 +84,10 @@ class ChildForegroundService : Service() {
                 FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
             }
         )
+
+        FirebaseRepository.listenToCameraFacing(sessionId) { _ ->
+            webRtcManager?.switchCamera()
+        }
     }
 
     private fun stopStream() {
