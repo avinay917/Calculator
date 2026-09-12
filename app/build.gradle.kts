@@ -3,6 +3,7 @@ plugins {
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.services)
+  alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
@@ -93,5 +94,6 @@ dependencies {
   implementation(libs.firebase.database)
   implementation(libs.firebase.messaging)
   implementation(libs.firebase.analytics)
+  implementation(libs.firebase.crashlytics)
   implementation(libs.webrtc)
 }

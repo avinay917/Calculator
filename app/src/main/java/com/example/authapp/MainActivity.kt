@@ -9,10 +9,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.authapp.theme.AuthAppTheme
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    try {
+      FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+      FirebaseCrashlytics.getInstance().log("Calculator App Launched")
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
 
     enableEdgeToEdge()
     setContent {
