@@ -1,7 +1,6 @@
 {
   "name": "authapp-functions",
   "scripts": {
-    "lint": "eslint .",
     "serve": "firebase serve --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
@@ -9,12 +8,12 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^11.8.0",
-    "firebase-functions": "^4.3.1"
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.1.1"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"

@@ -168,4 +168,40 @@ object FirebaseRepository {
             override fun onCancelled(error: DatabaseError) {}
         })
     }
+
+    fun saveRecordingSession(
+        childId: String,
+        streamType: String,
+        durationSeconds: Long,
+        onSaved: () -> Unit
+    ) {
+        val parentId = currentUser?.uid ?: return
+        val recId = "rec_${System.currentTimeMillis()}"
+        val session = RecordingSession(
+            id = recId,
+            childId = childId,
+            parentId = parentId,
+            streamType = streamType,
+            durationSeconds = durationSeconds,
+            status = "SAVED",
+            storageUrl = "gs://apnasatthilko.appspot.com/recordings/$childId/$recId.mp4"
+        )
+        database.reference.child("recordings").child(childId).child(recId).setValue(session)
+            .addOnSuccessListener { onSaved() }
+    }
+
+    fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit) {
+        database.reference.child("recordings").child(childId)
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val list = mutableListOf<RecordingSession>()
+                    for (child in snapshot.children) {
+                        val session = child.getValue(RecordingSession::class.java)
+                        if (session != null) list.add(session)
+                    }
+                    onRecordingsUpdated(list.reversed())
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
 }
