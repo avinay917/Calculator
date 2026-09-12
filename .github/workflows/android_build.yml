@@ -31,7 +31,9 @@ jobs:
 
       # Step 4: Build Debug APK
       - name: 4. Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace 2>&1 | tee build_output.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build_output.log
 
       - name: Upload Build Log
         if: always()
