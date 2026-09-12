@@ -54,9 +54,16 @@ import org.webrtc.*
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.delay
 import java.io.File
+import java.io.FileInputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.authapp.recorder.StreamAudioRecorder
 
 @Composable
 fun ParentScreen(
@@ -80,6 +87,77 @@ fun ParentScreen(
     var recordingDurationSeconds by remember { mutableLongStateOf(0L) }
     var showLocationDialogForChild by remember { mutableStateOf<User?>(null) }
     var streamStatusText by remember { mutableStateOf("Connecting to child device...") }
+
+    val streamRecorder = remember { StreamAudioRecorder(context) }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(context, "Microphone permission is required to record stream audio", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun toggleRecording(streamType: String) {
+        if (isRecording) {
+            val childId = activeChildId ?: ""
+            val durationSec = recordingDurationSeconds
+            val recordedFile = streamRecorder.stopRecording()
+            isRecording = false
+
+            if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                val filePath = recordedFile.absolutePath
+                FirebaseRepository.saveRecordingSession(
+                    childId = childId,
+                    streamType = streamType.lowercase(),
+                    durationSeconds = durationSec,
+                    localFilePath = filePath
+                ) {
+                    Toast.makeText(context, "Recording saved to device! (${recordedFile.name})", Toast.LENGTH_SHORT).show()
+                }
+
+                // Background cloud sync to Firebase Storage
+                try {
+                    val fileUri = Uri.fromFile(recordedFile)
+                    FirebaseRepository.uploadRecordingFile(
+                        childId = childId,
+                        fileUri = fileUri,
+                        streamType = streamType.lowercase(),
+                        durationSeconds = durationSec,
+                        localFilePath = filePath
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
+                }
+            } else {
+                FirebaseRepository.saveRecordingSession(
+                    childId = childId,
+                    streamType = streamType.lowercase(),
+                    durationSeconds = durationSec
+                ) {
+                    Toast.makeText(context, "Recording saved to history", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                Toast.makeText(context, "Microphone permission required for recording", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val file = streamRecorder.startRecording(streamType)
+            if (file != null) {
+                isRecording = true
+                Toast.makeText(context, "Recording started to ${file.name}...", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     LaunchedEffect(isRecording) {
         if (isRecording) {
@@ -165,6 +243,9 @@ fun ParentScreen(
                 webRtcManager = null
                 remoteVideoTrack = null
                 remoteAudioTrack = null
+                if (streamRecorder.isRecording) {
+                    streamRecorder.stopRecording()
+                }
                 isRecording = false
             }
         } else {
@@ -447,12 +528,38 @@ fun ParentScreen(
                 }
                 if (isRecording) {
                     val childId = activeChildId ?: ""
-                    val streamType = activeStreamType ?: "Audio"
-                    FirebaseRepository.saveRecordingSession(
-                        childId = childId,
-                        streamType = streamType,
-                        durationSeconds = recordingDurationSeconds
-                    ) {}
+                    val streamType = (activeStreamType ?: "audio").lowercase()
+                    val durationSec = recordingDurationSeconds
+                    val recordedFile = streamRecorder.stopRecording()
+                    isRecording = false
+
+                    if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                        val filePath = recordedFile.absolutePath
+                        FirebaseRepository.saveRecordingSession(
+                            childId = childId,
+                            streamType = streamType,
+                            durationSeconds = durationSec,
+                            localFilePath = filePath
+                        ) {}
+                        try {
+                            val fileUri = Uri.fromFile(recordedFile)
+                            FirebaseRepository.uploadRecordingFile(
+                                childId = childId,
+                                fileUri = fileUri,
+                                streamType = streamType,
+                                durationSeconds = durationSec,
+                                localFilePath = filePath
+                            )
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().recordException(e)
+                        }
+                    } else {
+                        FirebaseRepository.saveRecordingSession(
+                            childId = childId,
+                            streamType = streamType,
+                            durationSeconds = durationSec
+                        ) {}
+                    }
                 }
                 activeSessionId = null
                 activeStreamType = null
@@ -578,22 +685,7 @@ fun ParentScreen(
                                 }
 
                                 Button(
-                                    onClick = {
-                                        if (isRecording) {
-                                            val childId = activeChildId ?: ""
-                                            FirebaseRepository.saveRecordingSession(
-                                                childId = childId,
-                                                streamType = "video",
-                                                durationSeconds = recordingDurationSeconds
-                                            ) {
-                                                Toast.makeText(context, "Video recording saved to History!", Toast.LENGTH_SHORT).show()
-                                            }
-                                            isRecording = false
-                                        } else {
-                                            isRecording = true
-                                            Toast.makeText(context, "Video recording started...", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
+                                    onClick = { toggleRecording("video") },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = if (isRecording) Color.Red else MaterialTheme.colorScheme.errorContainer,
                                         contentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.onErrorContainer
@@ -624,22 +716,7 @@ fun ParentScreen(
                                 onSensitivityChange = { audioSensitivity = it },
                                 isRecording = isRecording,
                                 recordingDurationSeconds = recordingDurationSeconds,
-                                onToggleRecording = {
-                                    if (isRecording) {
-                                        val childId = activeChildId ?: ""
-                                        FirebaseRepository.saveRecordingSession(
-                                            childId = childId,
-                                            streamType = "audio",
-                                            durationSeconds = recordingDurationSeconds
-                                        ) {
-                                            Toast.makeText(context, "Audio recording saved to History!", Toast.LENGTH_SHORT).show()
-                                        }
-                                        isRecording = false
-                                    } else {
-                                        isRecording = true
-                                        Toast.makeText(context, "Audio recording started...", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+                                onToggleRecording = { toggleRecording("audio") }
                             )
                         }
                     }
@@ -1051,7 +1128,8 @@ fun ChildUserCard(
                     } else {
                         val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
                         recordings.forEach { rec ->
-                            val hasLocalFile = rec.localFilePath.isNotEmpty() && File(rec.localFilePath).exists()
+                            val localFile = if (rec.localFilePath.isNotEmpty()) File(rec.localFilePath) else null
+                            val hasLocalFile = localFile != null && localFile.exists() && localFile.length() > 0
                             val hasRemoteUrl = rec.storageUrl.isNotEmpty() && (rec.storageUrl.startsWith("http://") || rec.storageUrl.startsWith("https://"))
                             val isPlayable = hasLocalFile || hasRemoteUrl
                             val isPlayingThis = currentlyPlayingRecId == rec.id
@@ -1092,8 +1170,13 @@ fun ChildUserCard(
                                             text = "${rec.streamType.replaceFirstChar { it.uppercase() }} Stream Recording",
                                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                                         )
+                                        val sizeMb = if (hasLocalFile && localFile != null) localFile.length().toFloat() / (1024 * 1024) else 0f
+                                        val sizeStr = if (hasLocalFile && localFile != null) {
+                                            if (sizeMb >= 0.1f) String.format(Locale.getDefault(), " • %.1f MB", sizeMb)
+                                            else " • ${localFile.length() / 1024} KB"
+                                        } else ""
                                         Text(
-                                            text = "${dateFormat.format(Date(rec.startTime))} • ${rec.durationSeconds}s",
+                                            text = "${dateFormat.format(Date(rec.startTime))} • ${rec.durationSeconds}s$sizeStr",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1123,8 +1206,10 @@ fun ChildUserCard(
                                                     } catch (e: Exception) {}
                                                     try {
                                                         val mp = MediaPlayer().apply {
-                                                            if (hasLocalFile) {
-                                                                setDataSource(rec.localFilePath)
+                                                            if (hasLocalFile && localFile != null) {
+                                                                val fis = FileInputStream(localFile)
+                                                                setDataSource(fis.fd)
+                                                                fis.close()
                                                             } else {
                                                                 setDataSource(rec.storageUrl)
                                                             }
@@ -1159,6 +1244,12 @@ fun ChildUserCard(
                                                 modifier = Modifier.size(28.dp)
                                             )
                                         }
+                                    } else {
+                                        Text(
+                                            text = "No media file",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
                                     }
                                 }
                             }

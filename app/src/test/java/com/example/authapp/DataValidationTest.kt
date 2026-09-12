@@ -156,4 +156,18 @@ class DataValidationTest {
         val blankId = RecordingSession(id = "", childId = "2", streamType = "video", durationSeconds = 10)
         assertFalse(isValidRecordingSession(blankId))
     }
+
+    @Test
+    fun recordingSession_supportsPhysicalLocalFilePath() {
+        val physicalSession = RecordingSession(
+            id = "rec_999",
+            childId = "child_001",
+            streamType = "audio",
+            startTime = System.currentTimeMillis(),
+            durationSeconds = 15,
+            localFilePath = "/data/user/0/com.example.authapp/files/recordings/rec_audio_123.m4a"
+        )
+        assertTrue(isValidRecordingSession(physicalSession))
+        assertTrue(physicalSession.localFilePath.endsWith(".m4a") || physicalSession.localFilePath.endsWith(".mp4"))
+    }
 }

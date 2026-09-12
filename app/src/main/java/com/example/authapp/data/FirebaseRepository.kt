@@ -391,12 +391,14 @@ object FirebaseRepository {
         fileUri: Uri,
         streamType: String,
         durationSeconds: Long,
-        onSuccess: (RecordingSession) -> Unit,
-        onFailure: (String) -> Unit
+        localFilePath: String = "",
+        onSuccess: (RecordingSession) -> Unit = {},
+        onFailure: (String) -> Unit = {}
     ) {
         val parentId = currentUser?.uid ?: return
         val recId = "rec_${System.currentTimeMillis()}"
-        val ref = storage.reference.child("recordings/$childId/$recId.mp4")
+        val extension = if (streamType.equals("video", ignoreCase = true)) "mp4" else "m4a"
+        val ref = storage.reference.child("recordings/$childId/$recId.$extension")
 
         ref.putFile(fileUri)
             .addOnSuccessListener {
@@ -409,7 +411,8 @@ object FirebaseRepository {
                         startTime = System.currentTimeMillis(),
                         durationSeconds = durationSeconds,
                         status = "SAVED",
-                        storageUrl = downloadUri.toString()
+                        storageUrl = downloadUri.toString(),
+                        localFilePath = localFilePath
                     )
                     database.reference.child("recordings").child(childId).child(recId).setValue(session)
                         .addOnSuccessListener { onSuccess(session) }
