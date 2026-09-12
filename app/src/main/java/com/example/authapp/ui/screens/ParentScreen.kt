@@ -814,13 +814,44 @@ fun LiveAudioMonitorView(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            val profileText = when {
+                audioSensitivity >= 80f -> "⚡ Whisper Surveillance Mode (10x Far-Field Boost)"
+                audioSensitivity >= 40f -> "🎙️ Balanced Room Mode (Dual-Mic Noise-Suppressed)"
+                else -> "👤 Near-Field Mode (Standard)"
+            }
+            val profileColor = when {
+                audioSensitivity >= 80f -> Color(0xFFC62828)
+                audioSensitivity >= 40f -> Color(0xFF1565C0)
+                else -> Color(0xFF2E7D32)
+            }
+            val profileBg = when {
+                audioSensitivity >= 80f -> Color(0xFFFFEBEE)
+                audioSensitivity >= 40f -> Color(0xFFE3F2FD)
+                else -> Color(0xFFE8F5E9)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = profileBg,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = profileText,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = profileColor,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             Text(
-                text = "Ultra-Sensitive Far-Field Mic • Fan/AC Filter Active",
+                text = "Dual-Mic Beamforming Active • 80Hz Rumble & Fan Filter ON",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Surface(
                 shape = RoundedCornerShape(10.dp),

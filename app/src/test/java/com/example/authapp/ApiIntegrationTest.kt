@@ -1,5 +1,6 @@
 package com.example.authapp
 
+import com.example.authapp.webrtc.WebRtcManager
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
@@ -34,6 +35,48 @@ class ApiIntegrationTest {
         assertTrue((signalingPayload["sdp"] as String).contains("m=audio"))
         assertTrue((signalingPayload["sdp"] as String).contains("opus/48000"))
         assertTrue((signalingPayload["timestamp"] as Long) > 0)
+    }
+
+    @Test
+    fun opusSdpOptimization_injectsRequiredFmtpParametersWhenFmtpPresent() {
+        val rawOfferSdp = """
+            v=0
+            o=- 123456789 2 IN IP4 127.0.0.1
+            s=-
+            t=0 0
+            m=audio 9 UDP/TLS/RTP/SAVPF 111
+            a=rtpmap:111 opus/48000/2
+            a=fmtp:111 minptime=10;useinbandfec=1
+            a=sendonly
+        """.trimIndent()
+
+        val optimized = WebRtcManager.optimizeOpusSdp(rawOfferSdp)
+        assertTrue(optimized.contains("maxaveragebitrate=64000"))
+        assertTrue(optimized.contains("sprop-maxcapturerate=48000"))
+        assertTrue(optimized.contains("usedtx=1"))
+        assertTrue(optimized.contains("useinbandfec=1"))
+        assertTrue(optimized.contains("stereo=0"))
+    }
+
+    @Test
+    fun opusSdpOptimization_injectsFmtpLineWhenMissing() {
+        val rawOfferSdp = """
+            v=0
+            o=- 123456789 2 IN IP4 127.0.0.1
+            s=-
+            t=0 0
+            m=audio 9 UDP/TLS/RTP/SAVPF 111
+            a=rtpmap:111 opus/48000/2
+            a=sendonly
+        """.trimIndent()
+
+        val optimized = WebRtcManager.optimizeOpusSdp(rawOfferSdp)
+        assertTrue(optimized.contains("a=fmtp:111"))
+        assertTrue(optimized.contains("maxaveragebitrate=64000"))
+        assertTrue(optimized.contains("sprop-maxcapturerate=48000"))
+        assertTrue(optimized.contains("usedtx=1"))
+        assertTrue(optimized.contains("useinbandfec=1"))
+        assertTrue(optimized.contains("stereo=0"))
     }
 
     @Test

@@ -37,6 +37,7 @@ class WebRtcManager(private val context: Context) {
         val adm = JavaAudioDeviceModule.builder(context)
             .setUseHardwareAcousticEchoCanceler(useAec)
             .setUseHardwareNoiseSuppressor(useNs)
+            .setAudioSource(android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
             .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                 override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
                     FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
@@ -105,8 +106,8 @@ class WebRtcManager(private val context: Context) {
             // Noise Suppression eliminates stationary background hum (Fan, AC, buzzing static)
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googExperimentalNoiseSuppression", "true"))
-            // Preserve low-frequency human vocal fundamentals (do NOT cut off whisper voice)
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "false"))
+            // High-pass filter cuts sub-80Hz low rumble, table vibrations, and motor hum
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
             // Broadcaster does not play receiver audio, so disable echo cancellation
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "false"))
@@ -153,12 +154,13 @@ class WebRtcManager(private val context: Context) {
 
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
-                desc?.let {
+                desc?.let { originalOffer ->
+                    val optimizedOffer = SessionDescription(originalOffer.type, optimizeOpusSdp(originalOffer.description))
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
                             perfTrace.stop()
-                            onSdpCreated(it)
+                            onSdpCreated(optimizedOffer)
                         }
                         override fun onCreateFailure(p0: String?) {
                             FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Create Failure: $p0")
@@ -168,7 +170,7 @@ class WebRtcManager(private val context: Context) {
                             FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Set Failure: $p0")
                             FirebaseCrashlytics.getInstance().recordException(Exception("Local SDP Set Failure: $p0"))
                         }
-                    }, it)
+                    }, optimizedOffer)
                 }
             }
             override fun onSetSuccess() {}
@@ -268,15 +270,16 @@ class WebRtcManager(private val context: Context) {
                 }
                 peerConnection?.createAnswer(object : SdpObserver {
                     override fun onCreateSuccess(answerDesc: SessionDescription?) {
-                        answerDesc?.let { answer ->
+                        answerDesc?.let { originalAnswer ->
+                            val optimizedAnswer = SessionDescription(originalAnswer.type, optimizeOpusSdp(originalAnswer.description))
                             peerConnection?.setLocalDescription(object : SdpObserver {
                                 override fun onCreateSuccess(p0: SessionDescription?) {}
                                 override fun onSetSuccess() {
-                                    onAnswerCreated(answer)
+                                    onAnswerCreated(optimizedAnswer)
                                 }
                                 override fun onCreateFailure(p0: String?) {}
                                 override fun onSetFailure(p0: String?) {}
-                            }, answer)
+                            }, optimizedAnswer)
                         }
                     }
                     override fun onSetSuccess() {}
@@ -353,6 +356,35 @@ class WebRtcManager(private val context: Context) {
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
                 PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer()
             )
+        }
+
+        fun optimizeOpusSdp(sdpDescription: String): String {
+            val hasFmtp = sdpDescription.lines().any { it.startsWith("a=fmtp:111") }
+            return sdpDescription.lines().joinToString("\r\n") { line ->
+                if (line.startsWith("a=fmtp:111") || (line.startsWith("a=fmtp:") && line.contains("opus", ignoreCase = true))) {
+                    var modified = line
+                    if (!modified.contains("maxaveragebitrate=")) {
+                        modified += ";maxaveragebitrate=64000"
+                    }
+                    if (!modified.contains("sprop-maxcapturerate=")) {
+                        modified += ";sprop-maxcapturerate=48000"
+                    }
+                    if (!modified.contains("usedtx=")) {
+                        modified += ";usedtx=1"
+                    }
+                    if (!modified.contains("useinbandfec=")) {
+                        modified += ";useinbandfec=1"
+                    }
+                    if (!modified.contains("stereo=")) {
+                        modified += ";stereo=0"
+                    }
+                    modified
+                } else if (!hasFmtp && line.startsWith("a=rtpmap:111 opus/48000")) {
+                    "$line\r\na=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0"
+                } else {
+                    line
+                }
+            }
         }
     }
 
