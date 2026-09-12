@@ -127,6 +127,10 @@ fun ParentScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.loadChildUsers()
+    }
+
     LaunchedEffect(uiState.audioSensitivity, remoteAudioTrack) {
         remoteAudioTrack?.setVolume(calculateSafeAudioGain(uiState.audioSensitivity))
     }

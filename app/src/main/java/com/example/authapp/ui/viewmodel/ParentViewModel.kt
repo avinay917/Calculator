@@ -19,27 +19,38 @@ class ParentViewModel : ViewModel() {
 
     private var recordingTimerJob: Job? = null
 
-    init {
-        loadChildUsers()
-    }
-
     fun loadChildUsers() {
-        FirebaseRepository.listenToChildUsers { list ->
-            _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
+        try {
+            FirebaseRepository.listenToChildUsers { list ->
+                _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
+            }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isLoadingChildren = false) }
         }
     }
 
     fun startStream(child: User, streamType: String) {
         val typeNormalized = if (streamType.equals("video", ignoreCase = true)) "Video" else "Audio"
-        FirebaseRepository.requestStream(child.uid, streamType.lowercase()) { sessionId ->
+        try {
+            FirebaseRepository.requestStream(child.uid, streamType.lowercase()) { sessionId ->
+                _uiState.update {
+                    it.copy(
+                        activeSessionId = sessionId,
+                        activeStreamType = typeNormalized,
+                        activeChildId = child.uid,
+                        activeChildName = child.name.ifEmpty { "Child Device" },
+                        streamStatusText = "Connecting to child device...",
+                        isFrontCamera = true
+                    )
+                }
+            }
+        } catch (e: Exception) {
             _uiState.update {
                 it.copy(
-                    activeSessionId = sessionId,
                     activeStreamType = typeNormalized,
                     activeChildId = child.uid,
                     activeChildName = child.name.ifEmpty { "Child Device" },
-                    streamStatusText = "Connecting to child device...",
-                    isFrontCamera = true
+                    streamStatusText = "Stream request failed"
                 )
             }
         }
@@ -53,7 +64,9 @@ class ParentViewModel : ViewModel() {
         val current = _uiState.value
         val sessionId = current.activeSessionId ?: return
         val newFacing = !current.isFrontCamera
-        FirebaseRepository.toggleCameraFacing(sessionId, newFacing)
+        try {
+            FirebaseRepository.toggleCameraFacing(sessionId, newFacing)
+        } catch (e: Exception) {}
         _uiState.update { it.copy(isFrontCamera = newFacing) }
     }
 
@@ -84,7 +97,9 @@ class ParentViewModel : ViewModel() {
         val sessionId = current.activeSessionId
         val childId = current.activeChildId
         if (childId != null && sessionId != null) {
-            FirebaseRepository.stopStream(childId, sessionId)
+            try {
+                FirebaseRepository.stopStream(childId, sessionId)
+            } catch (e: Exception) {}
         }
         onRecordingStopped()
         _uiState.update {
@@ -114,7 +129,11 @@ class ParentViewModel : ViewModel() {
 
     fun requestLocationRefresh(childId: String) {
         _uiState.update { it.copy(isRefreshingLocation = true) }
-        FirebaseRepository.requestChildLocation(childId)
+        try {
+            FirebaseRepository.requestChildLocation(childId)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isRefreshingLocation = false) }
+        }
     }
 
     fun closeLocationDialog() {

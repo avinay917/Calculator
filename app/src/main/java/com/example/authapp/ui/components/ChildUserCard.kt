@@ -49,7 +49,7 @@ fun ChildUserCard(
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     DisposableEffect(user.uid) {
-        val listener = FirebaseRepository.listenToRecordingSessions(user.uid) { list ->
+        val listener = FirebaseRepository.listenToRecordings(user.uid) { list ->
             recordings = list
         }
         onDispose {
