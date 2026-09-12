@@ -52,6 +52,17 @@ fun ChildScreen(
         return mic && cam
     }
 
+    fun startMonitoringService() {
+        val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
+            action = ChildForegroundService.ACTION_START_MONITORING
+        }
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun checkPermissions() {
         hasStage1Permissions = isMicrophoneAndCameraGranted()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -76,17 +87,6 @@ fun ChildScreen(
             startMonitoringService()
         } else {
             com.example.authapp.analytics.AppAnalytics.logActionFailure("child_permissions", "ChildScreen", "Required permissions were denied")
-        }
-    }
-
-    fun startMonitoringService() {
-        val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
-            action = ChildForegroundService.ACTION_START_MONITORING
-        }
-        try {
-            ContextCompat.startForegroundService(context, serviceIntent)
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
