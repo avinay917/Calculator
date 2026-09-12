@@ -24,6 +24,12 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "recordings": {
+      "$childId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     }
   }
 }
