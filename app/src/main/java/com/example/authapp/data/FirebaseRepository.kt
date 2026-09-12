@@ -129,7 +129,6 @@ object FirebaseRepository {
             "timestamp" to System.currentTimeMillis()
         )
         database.reference.child("streams").child(childId).child("status").setValue(requestData)
-        database.reference.child("requests").child(childId).setValue(requestData)
             .addOnSuccessListener {
                 onComplete(sessionId)
             }

@@ -59,41 +59,6 @@ exports.onStreamRequested = functions.database
   });
 
 /**
- * Realtime Database Trigger: onStreamRequestCreated
- * Triggers on /requests/{childId}
- */
-exports.onStreamRequestCreated = functions.database
-  .ref("/requests/{childId}")
-  .onWrite(async (change, context) => {
-    const childId = context.params.childId;
-    const requestData = change.after.val();
-
-    if (!requestData) return null;
-
-    try {
-      const userSnapshot = await admin.database().ref(`/users/${childId}`).once("value");
-      const userData = userSnapshot.val();
-
-      if (!userData || !userData.fcmToken) return null;
-
-      const message = {
-        token: userData.fcmToken,
-        android: { priority: "high", ttl: 0 },
-        data: {
-          action: "START_STREAM",
-          streamType: requestData.streamType || "audio",
-          sessionId: requestData.sessionId || ""
-        }
-      };
-
-      return await admin.messaging().send(message);
-    } catch (err) {
-      console.error("Error in onStreamRequestCreated:", err);
-      return null;
-    }
-  });
-
-/**
  * HTTP Endpoint: sendStreamWakeup
  * Allows waking up a child device via direct HTTPS POST request.
  */
