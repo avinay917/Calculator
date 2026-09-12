@@ -1,15 +1,18 @@
 package com.example.authapp.data
 
+import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.storage.FirebaseStorage
 
 object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance("https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app")
+    private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
 
     val currentUser get() = auth.currentUser
 
@@ -188,6 +191,39 @@ object FirebaseRepository {
         )
         database.reference.child("recordings").child(childId).child(recId).setValue(session)
             .addOnSuccessListener { onSaved() }
+    }
+
+    fun uploadRecordingFile(
+        childId: String,
+        fileUri: Uri,
+        streamType: String,
+        durationSeconds: Long,
+        onSuccess: (RecordingSession) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        val parentId = currentUser?.uid ?: return
+        val recId = "rec_${System.currentTimeMillis()}"
+        val ref = storage.reference.child("recordings/$childId/$recId.mp4")
+
+        ref.putFile(fileUri)
+            .addOnSuccessListener {
+                ref.downloadUrl.addOnSuccessListener { downloadUri ->
+                    val session = RecordingSession(
+                        id = recId,
+                        childId = childId,
+                        parentId = parentId,
+                        streamType = streamType,
+                        startTime = System.currentTimeMillis(),
+                        durationSeconds = durationSeconds,
+                        status = "SAVED",
+                        storageUrl = downloadUri.toString()
+                    )
+                    database.reference.child("recordings").child(childId).child(recId).setValue(session)
+                        .addOnSuccessListener { onSuccess(session) }
+                        .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Database error") }
+                }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Failed to get download URL") }
+            }
+            .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Storage upload failed") }
     }
 
     fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit) {

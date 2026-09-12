@@ -69,7 +69,8 @@ class ChildForegroundService : Service() {
         webRtcManager = WebRtcManager(applicationContext)
         val stunServer = PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
 
-        webRtcManager?.startAudioStream(
+        webRtcManager?.startStream(
+            streamType = streamType,
             iceServers = listOf(stunServer),
             onIceCandidate = { candidate ->
                 val candMap = mapOf(

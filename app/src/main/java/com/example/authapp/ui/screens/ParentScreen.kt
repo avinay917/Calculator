@@ -23,10 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import org.webrtc.EglBase
+import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoTrack
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.data.User
@@ -423,4 +423,25 @@ fun ChildUserCard(
             }
         }
     }
+}
+
+@Composable
+fun VideoStreamRenderer(
+    videoTrack: VideoTrack?,
+    eglBaseContext: EglBase.Context,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        factory = { ctx ->
+            SurfaceViewRenderer(ctx).apply {
+                init(eglBaseContext, null)
+                setEnableHardwareScaler(true)
+                setMirror(false)
+            }
+        },
+        update = { renderer ->
+            videoTrack?.addSink(renderer)
+        },
+        modifier = modifier
+    )
 }

@@ -4,11 +4,13 @@ import android.content.Context
 import org.webrtc.*
 
 class WebRtcManager(private val context: Context) {
+    val eglBase: EglBase = EglBase.create()
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
+    private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
 
@@ -18,15 +20,22 @@ class WebRtcManager(private val context: Context) {
             .createInitializationOptions()
         PeerConnectionFactory.initialize(options)
 
+        val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
+        val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+
         factory = PeerConnectionFactory.builder()
+            .setVideoEncoderFactory(encoderFactory)
+            .setVideoDecoderFactory(decoderFactory)
             .setOptions(PeerConnectionFactory.Options())
             .createPeerConnectionFactory()
     }
 
-    fun startAudioStream(
+    fun startStream(
+        streamType: String, // "audio" or "video"
         iceServers: List<PeerConnection.IceServer>,
         onIceCandidate: (IceCandidate) -> Unit,
-        onSdpCreated: (SessionDescription) -> Unit
+        onSdpCreated: (SessionDescription) -> Unit,
+        onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {}
     ) {
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -44,15 +53,38 @@ class WebRtcManager(private val context: Context) {
             override fun onRemoveStream(stream: MediaStream?) {}
             override fun onDataChannel(channel: DataChannel?) {}
             override fun onRenegotiationNeeded() {}
-            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {}
+            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
+                receiver?.track()?.let { onRemoteTrackAdded(it) }
+            }
         })
 
-        // Initialize Audio Capturer
+        // Audio Track
         audioSource = factory?.createAudioSource(MediaConstraints())
         audioTrack = factory?.createAudioTrack("ARDAMSa0", audioSource)
         peerConnection?.addTrack(audioTrack, listOf("ARDAMS"))
 
+        // Video Track (if requested)
+        if (streamType.equals("video", ignoreCase = true)) {
+            val capturer = createVideoCapturer()
+            if (capturer != null) {
+                videoCapturer = capturer
+                surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+                videoSource = factory?.createVideoSource(capturer.isScreencast)
+                capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
+                capturer.startCapture(1280, 720, 30)
+
+                videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
+                peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
+            }
+        }
+
         // Create SDP Offer
+        val mediaConstraints = MediaConstraints()
+        if (streamType.equals("video", ignoreCase = true)) {
+            mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+        }
+        mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
                 desc?.let {
@@ -67,13 +99,48 @@ class WebRtcManager(private val context: Context) {
             override fun onSetSuccess() {}
             override fun onCreateFailure(error: String?) {}
             override fun onSetFailure(error: String?) {}
-        }, MediaConstraints())
+        }, mediaConstraints)
+    }
+
+    fun startAudioStream(
+        iceServers: List<PeerConnection.IceServer>,
+        onIceCandidate: (IceCandidate) -> Unit,
+        onSdpCreated: (SessionDescription) -> Unit
+    ) {
+        startStream("audio", iceServers, onIceCandidate, onSdpCreated)
+    }
+
+    private fun createVideoCapturer(): VideoCapturer? {
+        val enumerator = if (Camera2Enumerator.isSupported(context)) {
+            Camera2Enumerator(context)
+        } else {
+            Camera1Enumerator(true)
+        }
+        for (deviceName in enumerator.deviceNames) {
+            if (enumerator.isFrontFacing(deviceName)) {
+                val capturer = enumerator.createCapturer(deviceName, null)
+                if (capturer != null) return capturer
+            }
+        }
+        for (deviceName in enumerator.deviceNames) {
+            if (!enumerator.isFrontFacing(deviceName)) {
+                val capturer = enumerator.createCapturer(deviceName, null)
+                if (capturer != null) return capturer
+            }
+        }
+        return null
     }
 
     fun stopStream() {
-        videoCapturer?.stopCapture()
+        try {
+            videoCapturer?.stopCapture()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         videoCapturer?.dispose()
+        surfaceTextureHelper?.dispose()
         peerConnection?.close()
         factory?.dispose()
+        eglBase.release()
     }
 }
