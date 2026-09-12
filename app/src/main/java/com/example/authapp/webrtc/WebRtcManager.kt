@@ -98,14 +98,12 @@ class WebRtcManager(private val context: Context) {
             }
         })
 
-        // Audio Track with Advanced Far-Field Surveillance & Noise Filter
+        // Audio Track with Clean Studio Surveillance & Vibration Filter
         val audioConstraints = MediaConstraints().apply {
-            // Multi-band Auto Gain Control boosts soft whispers and distant room voices
+            // Standard Automatic Gain Control boosts soft speech cleanly
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
-            // Noise Suppression eliminates stationary background hum (Fan, AC, buzzing static)
+            // Noise Suppression eliminates stationary background hum (Fan, AC, humming noise)
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googExperimentalNoiseSuppression", "true"))
             // High-pass filter cuts sub-80Hz low rumble, table vibrations, and motor hum
             mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
             // Broadcaster does not play receiver audio, so disable echo cancellation
@@ -235,7 +233,7 @@ class WebRtcManager(private val context: Context) {
                 } else if (track is AudioTrack) {
                     FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote AudioTrack received")
                     track.setEnabled(true)
-                    track.setVolume(10.0)
+                    track.setVolume(1.0)
                     onRemoteAudioTrack(track)
                 }
             }
@@ -386,6 +384,11 @@ class WebRtcManager(private val context: Context) {
                 }
             }
         }
+
+        fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
+            val clamped = sensitivityPercent.coerceIn(0f, 100f)
+            return 0.5 + (clamped / 100.0) * 1.5
+        }
     }
 
     fun switchCamera(onSwitched: ((Boolean) -> Unit)? = null) {
@@ -417,7 +420,11 @@ class WebRtcManager(private val context: Context) {
         audioDeviceModule = null
         factory?.dispose()
         factory = null
-        eglBase.release()
+        try {
+            eglBase.release()
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${e.localizedMessage}")
+        }
         synchronized(pendingCandidates) {
             pendingCandidates.clear()
             isRemoteDescriptionSet = false

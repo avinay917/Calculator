@@ -193,4 +193,24 @@ class ApiIntegrationTest {
         assertTrue(activeSessions.isEmpty())
         assertNull(activeSessions[sessionId])
     }
+
+    // --- 5. Safe Audio Gain & Distortion-Free Calibration ---
+
+    @Test
+    fun safeAudioGain_preventsDigitalHardClippingAndScalesSmoothly() {
+        val minGain = WebRtcManager.calculateSafeAudioGain(0f)
+        assertEquals(0.5, minGain, 0.001)
+
+        val midGain = WebRtcManager.calculateSafeAudioGain(50f)
+        assertEquals(1.25, midGain, 0.001)
+
+        val maxGain = WebRtcManager.calculateSafeAudioGain(100f)
+        assertEquals(2.0, maxGain, 0.001)
+
+        val overGain = WebRtcManager.calculateSafeAudioGain(250f)
+        assertEquals(2.0, overGain, 0.001)
+
+        val underGain = WebRtcManager.calculateSafeAudioGain(-50f)
+        assertEquals(0.5, underGain, 0.001)
+    }
 }

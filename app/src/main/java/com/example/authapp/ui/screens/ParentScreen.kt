@@ -65,6 +65,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.example.authapp.recorder.StreamAudioRecorder
 
+fun calculateSafeAudioGain(sensitivityPercent: Float): Double =
+    WebRtcManager.calculateSafeAudioGain(sensitivityPercent)
+
 @Composable
 fun ParentScreen(
     email: String,
@@ -172,7 +175,7 @@ fun ParentScreen(
     }
 
     LaunchedEffect(audioSensitivity, remoteAudioTrack) {
-        remoteAudioTrack?.setVolume((audioSensitivity / 10f).toDouble())
+        remoteAudioTrack?.setVolume(calculateSafeAudioGain(audioSensitivity))
     }
 
     DisposableEffect(activeSessionId) {
@@ -211,7 +214,7 @@ fun ParentScreen(
                         streamStatusText = "Live Audio Streaming 🟢"
                         remoteAudioTrack = track
                         track.setEnabled(true)
-                        track.setVolume((audioSensitivity / 10f).toDouble())
+                        track.setVolume(calculateSafeAudioGain(audioSensitivity))
                         AppAnalytics.logFeatureUsage("audio_cast", "connected")
                     }
                 }
@@ -233,20 +236,20 @@ fun ParentScreen(
             }
 
             onDispose {
+                remoteVideoTrack = null
+                remoteAudioTrack = null
+                webRtcManager = null
                 try {
                     audioManager?.mode = AudioManager.MODE_NORMAL
                     audioManager?.isSpeakerphoneOn = false
                 } catch (e: Exception) {}
                 FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
                 FirebaseRepository.stopStream(childId, sessionId)
-                manager.stopStream()
-                webRtcManager = null
-                remoteVideoTrack = null
-                remoteAudioTrack = null
                 if (streamRecorder.isRecording) {
                     streamRecorder.stopRecording()
                 }
                 isRecording = false
+                manager.stopStream()
             }
         } else {
             onDispose { }
@@ -573,7 +576,11 @@ fun ParentScreen(
 
             AlertDialog(
                 onDismissRequest = disconnectAction,
+                properties = DialogProperties(usePlatformDefaultWidth = false),
                 shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(vertical = 12.dp),
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -635,13 +642,20 @@ fun ParentScreen(
                         // Video Stream Display via SafeSurfaceViewRenderer
                         if (activeStreamType.equals("video", ignoreCase = true)) {
                             if (remoteVideoTrack != null && webRtcManager != null) {
-                                SafeSurfaceViewRenderer(
-                                    videoTrack = remoteVideoTrack,
-                                    eglContext = webRtcManager?.eglBase?.eglBaseContext,
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(260.dp)
-                                )
+                                        .height(280.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.Black),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    SafeSurfaceViewRenderer(
+                                        videoTrack = remoteVideoTrack,
+                                        eglContext = webRtcManager?.eglBase?.eglBaseContext,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             } else {
                                 Box(
                                     modifier = Modifier
@@ -815,9 +829,9 @@ fun LiveAudioMonitorView(
             Spacer(modifier = Modifier.height(4.dp))
 
             val profileText = when {
-                audioSensitivity >= 80f -> "⚡ Whisper Surveillance Mode (10x Far-Field Boost)"
-                audioSensitivity >= 40f -> "🎙️ Balanced Room Mode (Dual-Mic Noise-Suppressed)"
-                else -> "👤 Near-Field Mode (Standard)"
+                audioSensitivity >= 80f -> "⚡ Whisper Surveillance Mode (Clean Boost)"
+                audioSensitivity >= 40f -> "🎙️ Balanced Studio Mode (Anti-Scratch Filter ON)"
+                else -> "👤 Natural Clear Mode (Unity Gain)"
             }
             val profileColor = when {
                 audioSensitivity >= 80f -> Color(0xFFC62828)
@@ -1299,20 +1313,23 @@ fun SafeSurfaceViewRenderer(
     modifier: Modifier = Modifier
 ) {
     var rendererRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    var isInitialized by remember { mutableStateOf(false) }
 
-    DisposableEffect(videoTrack, rendererRef) {
+    DisposableEffect(videoTrack, rendererRef, isInitialized) {
         val renderer = rendererRef
-        if (renderer != null && videoTrack != null) {
+        if (renderer != null && videoTrack != null && isInitialized) {
             try {
                 videoTrack.addSink(renderer)
+                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack attached to SurfaceViewRenderer sink")
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
         }
         onDispose {
-            if (renderer != null && videoTrack != null) {
+            if (renderer != null && videoTrack != null && isInitialized) {
                 try {
                     videoTrack.removeSink(renderer)
+                    FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack detached from SurfaceViewRenderer sink")
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
@@ -1323,12 +1340,21 @@ fun SafeSurfaceViewRenderer(
     AndroidView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
+                setZOrderMediaOverlay(true)
+                setEnableHardwareScaler(true)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                setMirror(false)
                 if (eglContext != null) {
                     try {
-                        init(eglContext, null)
-                        setEnableHardwareScaler(true)
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                        setMirror(false)
+                        init(eglContext, object : RendererCommon.RendererEvents {
+                            override fun onFirstFrameRendered() {
+                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
+                            }
+                            override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
+                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
+                            }
+                        })
+                        isInitialized = true
                     } catch (e: Exception) {
                         FirebaseCrashlytics.getInstance().recordException(e)
                     }
@@ -1338,12 +1364,24 @@ fun SafeSurfaceViewRenderer(
         },
         update = { renderer ->
             rendererRef = renderer
+            if (eglContext != null && !isInitialized) {
+                try {
+                    renderer.init(eglContext, null)
+                    isInitialized = true
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
+                }
+            }
         },
         onRelease = { renderer ->
             try {
+                renderer.clearImage()
                 renderer.release()
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
             rendererRef = null
+            isInitialized = false
         },
         modifier = modifier
     )
