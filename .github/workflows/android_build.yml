@@ -31,7 +31,15 @@ jobs:
 
       # Step 4: Build Debug APK
       - name: 4. Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace 2>&1 | tee build_output.log
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build_output.log
+          retention-days: 7
 
       # Step 5: Upload Generated Debug APK Artifact
       - name: 5. Upload Debug APK Artifact
