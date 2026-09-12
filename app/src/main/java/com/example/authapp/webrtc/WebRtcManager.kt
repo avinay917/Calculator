@@ -1,6 +1,7 @@
 package com.example.authapp.webrtc
 
 import android.content.Context
+import com.google.firebase.perf.FirebasePerformance
 import org.webrtc.*
 
 class WebRtcManager(private val context: Context) {
@@ -37,6 +38,9 @@ class WebRtcManager(private val context: Context) {
         onSdpCreated: (SessionDescription) -> Unit,
         onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {}
     ) {
+        val perfTrace = FirebasePerformance.getInstance().newTrace("webrtc_stream_init_$streamType")
+        perfTrace.start()
+
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
 
@@ -90,7 +94,10 @@ class WebRtcManager(private val context: Context) {
                 desc?.let {
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
-                        override fun onSetSuccess() { onSdpCreated(it) }
+                        override fun onSetSuccess() {
+                            perfTrace.stop()
+                            onSdpCreated(it)
+                        }
                         override fun onCreateFailure(p0: String?) {}
                         override fun onSetFailure(p0: String?) {}
                     }, it)
