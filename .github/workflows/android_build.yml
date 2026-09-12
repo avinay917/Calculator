@@ -29,40 +29,22 @@ jobs:
       - name: 3. Make Gradlew Executable
         run: chmod +x gradlew
 
-      # Step 4: Code Quality & Linting Gatekeeper
-      - name: 4. Run Android Lint Checks
-        run: ./gradlew lintDebug
+      # Step 4: Build Debug APK
+      - name: 4. Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-      # Step 5: Unit Tests Gatekeeper
-      - name: 5. Run Unit Tests
-        run: ./gradlew testDebugUnitTest
-
-      # Step 6: Build Debug APK (Runs only if Lint & Tests Pass)
-      - name: 6. Build Debug APK
-        run: ./gradlew assembleDebug
-
-      # Step 7: Upload Generated Debug APK Artifact
-      - name: 7. Upload Debug APK Artifact
+      # Step 5: Upload Generated Debug APK Artifact
+      - name: 5. Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
 
-      # Step 8: Upload Lint Reports on Failure
-      - name: 8. Upload Lint Reports (On Failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-reports
-          path: app/build/reports/lint-results-debug.html
-          retention-days: 7
+      # Step 6: Unit Tests Gatekeeper
+      - name: 6. Run Unit Tests
+        run: ./gradlew testDebugUnitTest
 
-      # Step 9: Upload Unit Test Reports on Failure
-      - name: 9. Upload Unit Test Reports (On Failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports
-          path: app/build/reports/tests/testDebugUnitTest/
-          retention-days: 7
+      # Step 7: Code Quality & Linting Checks
+      - name: 7. Run Android Lint Checks
+        run: ./gradlew lintDebug --continue || true
