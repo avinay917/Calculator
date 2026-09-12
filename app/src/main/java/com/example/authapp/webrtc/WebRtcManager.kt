@@ -1,6 +1,7 @@
 package com.example.authapp.webrtc
 
 import android.content.Context
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
 import org.webrtc.*
 
@@ -46,7 +47,12 @@ class WebRtcManager(private val context: Context) {
 
         peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] ICE Connection State: $state")
+                if (state == PeerConnection.IceConnectionState.FAILED) {
+                    FirebaseCrashlytics.getInstance().recordException(Exception("WebRTC ICE Connection Failed"))
+                }
+            }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
             override fun onIceCandidate(candidate: IceCandidate?) {
@@ -98,14 +104,26 @@ class WebRtcManager(private val context: Context) {
                             perfTrace.stop()
                             onSdpCreated(it)
                         }
-                        override fun onCreateFailure(p0: String?) {}
-                        override fun onSetFailure(p0: String?) {}
+                        override fun onCreateFailure(p0: String?) {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Create Failure: $p0")
+                            FirebaseCrashlytics.getInstance().recordException(Exception("Local SDP Create Failure: $p0"))
+                        }
+                        override fun onSetFailure(p0: String?) {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Set Failure: $p0")
+                            FirebaseCrashlytics.getInstance().recordException(Exception("Local SDP Set Failure: $p0"))
+                        }
                     }, it)
                 }
             }
             override fun onSetSuccess() {}
-            override fun onCreateFailure(error: String?) {}
-            override fun onSetFailure(error: String?) {}
+            override fun onCreateFailure(error: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Offer Create Failure: $error")
+                FirebaseCrashlytics.getInstance().recordException(Exception("Offer Create Failure: $error"))
+            }
+            override fun onSetFailure(error: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Offer Set Failure: $error")
+                FirebaseCrashlytics.getInstance().recordException(Exception("Offer Set Failure: $error"))
+            }
         }, mediaConstraints)
     }
 

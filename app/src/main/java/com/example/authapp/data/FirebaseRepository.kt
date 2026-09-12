@@ -2,6 +2,7 @@ package com.example.authapp.data
 
 import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -13,8 +14,14 @@ object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance("https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app")
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
+    private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
     val currentUser get() = auth.currentUser
+
+    fun recordNonFatalError(message: String, exception: Throwable? = null) {
+        crashlytics.log("[FeatureHealth] $message")
+        exception?.let { crashlytics.recordException(it) }
+    }
 
     fun signUp(
         fullName: String,

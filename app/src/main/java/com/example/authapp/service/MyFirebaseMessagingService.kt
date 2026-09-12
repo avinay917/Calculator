@@ -3,6 +3,7 @@ package com.example.authapp.service
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.example.authapp.data.FirebaseRepository
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -21,6 +22,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val streamType = data["streamType"] ?: "audio"
         val sessionId = data["sessionId"] ?: ""
 
+        FirebaseCrashlytics.getInstance().log("[FCM] Message received: action=$action, streamType=$streamType, sessionId=$sessionId")
+
         if (action == "START_STREAM") {
             val intent = Intent(this, ChildForegroundService::class.java).apply {
                 this.action = ChildForegroundService.ACTION_START
@@ -30,13 +33,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             try {
                 ContextCompat.startForegroundService(this, intent)
             } catch (e: Exception) {
-                e.printStackTrace()
+                FirebaseCrashlytics.getInstance().log("[FCM] Failed to start foreground service: ${e.localizedMessage}")
+                FirebaseCrashlytics.getInstance().recordException(e)
             }
         } else if (action == "STOP_STREAM") {
             val intent = Intent(this, ChildForegroundService::class.java).apply {
                 this.action = ChildForegroundService.ACTION_STOP
             }
-            startService(intent)
+            try {
+                startService(intent)
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop service: ${e.localizedMessage}")
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 }
