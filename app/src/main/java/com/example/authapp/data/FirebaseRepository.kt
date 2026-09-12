@@ -423,4 +423,39 @@ object FirebaseRepository {
                 override fun onCancelled(error: DatabaseError) {}
             })
     }
+
+    fun updateChildLocation(childId: String, location: UserLocation) {
+        database.reference.child("users").child(childId).child("location").setValue(location)
+    }
+
+    fun requestChildLocation(childId: String) {
+        database.reference.child("users").child(childId).child("locationRequest").setValue(System.currentTimeMillis())
+    }
+
+    fun listenToChildLocation(childId: String, onLocationUpdated: (UserLocation?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("users").child(childId).child("location")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val loc = snapshot.getValue(UserLocation::class.java)
+                onLocationUpdated(loc)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    fun listenToLocationRequests(childId: String, onRequestReceived: () -> Unit): ValueEventListener {
+        val ref = database.reference.child("users").child(childId).child("locationRequest")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    onRequestReceived()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
 }

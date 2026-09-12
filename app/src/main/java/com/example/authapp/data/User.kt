@@ -4,6 +4,15 @@ import com.google.firebase.database.IgnoreExtraProperties
 import com.google.firebase.database.PropertyName
 
 @IgnoreExtraProperties
+data class UserLocation(
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val accuracy: Float = 0f,
+    val timestamp: Long = 0L,
+    val provider: String = ""
+)
+
+@IgnoreExtraProperties
 data class User(
     val uid: String = "",
     val name: String = "",
@@ -12,5 +21,6 @@ data class User(
     val fcmToken: String = "",
     @get:PropertyName("isOnline") @set:PropertyName("isOnline")
     var isOnline: Boolean = false,
-    val lastSeen: Long = 0L
+    val lastSeen: Long = 0L,
+    val location: UserLocation? = null
 )

@@ -1,6 +1,8 @@
 package com.example.authapp.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
@@ -16,13 +18,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,10 +41,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.analytics.AppAnalytics
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.data.User
+import com.example.authapp.data.UserLocation
 import com.example.authapp.theme.AuthAppTheme
 import com.example.authapp.webrtc.WebRtcManager
 import org.webrtc.*
@@ -64,7 +74,28 @@ fun ParentScreen(
     var isFrontCamera by remember { mutableStateOf(true) }
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
+    var audioSensitivity by remember { mutableFloatStateOf(100f) }
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingDurationSeconds by remember { mutableLongStateOf(0L) }
+    var showLocationDialogForChild by remember { mutableStateOf<User?>(null) }
     var streamStatusText by remember { mutableStateOf("Connecting to child device...") }
+
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            recordingDurationSeconds = 0L
+            while (isRecording) {
+                delay(1000L)
+                recordingDurationSeconds++
+            }
+        } else {
+            recordingDurationSeconds = 0L
+        }
+    }
+
+    LaunchedEffect(audioSensitivity, remoteAudioTrack) {
+        remoteAudioTrack?.setVolume((audioSensitivity / 10f).toDouble())
+    }
 
     DisposableEffect(activeSessionId) {
         val sessionId = activeSessionId
@@ -97,9 +128,12 @@ fun ParentScreen(
                         AppAnalytics.logFeatureUsage("video_cast", "connected")
                     }
                 },
-                onRemoteAudioTrack = { _ ->
+                onRemoteAudioTrack = { track ->
                     mainHandler.post {
                         streamStatusText = "Live Audio Streaming 🟢"
+                        remoteAudioTrack = track
+                        track.setEnabled(true)
+                        track.setVolume((audioSensitivity / 10f).toDouble())
                         AppAnalytics.logFeatureUsage("audio_cast", "connected")
                     }
                 }
@@ -130,6 +164,8 @@ fun ParentScreen(
                 manager.stopStream()
                 webRtcManager = null
                 remoteVideoTrack = null
+                remoteAudioTrack = null
+                isRecording = false
             }
         } else {
             onDispose { }
@@ -238,10 +274,169 @@ fun ParentScreen(
                                 activeChildName = child.name.ifEmpty { "Child Device" }
                                 Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
                             }
+                        },
+                        onLocationClick = {
+                            showLocationDialogForChild = child
                         }
                     )
                 }
             }
+        }
+
+        // Live Location Modal Dialog
+        showLocationDialogForChild?.let { childUser ->
+            var childLoc by remember { mutableStateOf<UserLocation?>(null) }
+            var isRefreshingLoc by remember { mutableStateOf(false) }
+
+            DisposableEffect(childUser.uid) {
+                val locListener = FirebaseRepository.listenToChildLocation(childUser.uid) { loc ->
+                    childLoc = loc
+                    isRefreshingLoc = false
+                }
+                onDispose {
+                    FirebaseRepository.removeValueListener("users/${childUser.uid}/location", locListener)
+                }
+            }
+
+            AlertDialog(
+                onDismissRequest = { showLocationDialogForChild = null },
+                shape = RoundedCornerShape(24.dp),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE3F2FD)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color(0xFF1976D2),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Live Location Tracking",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = childUser.name.ifEmpty { "Child Device" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (childLoc != null) {
+                            val loc = childLoc!!
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "📍 GPS Coordinates",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Latitude: ${String.format(Locale.US, "%.6f", loc.latitude)}\nLongitude: ${String.format(Locale.US, "%.6f", loc.longitude)}",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFE8F5E9)
+                                        ) {
+                                            Text(
+                                                text = "Accuracy: ±${loc.accuracy.toInt()}m",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = Color(0xFF2E7D32),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        val timeStr = remember(loc.timestamp) {
+                                            if (loc.timestamp > 0L) {
+                                                SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(loc.timestamp))
+                                            } else "Recent"
+                                        }
+                                        Text(
+                                            text = "Time: $timeStr",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Button(
+                                onClick = {
+                                    val geoUri = Uri.parse("https://maps.google.com/?q=${loc.latitude},${loc.longitude}")
+                                    val mapIntent = Intent(Intent.ACTION_VIEW, geoUri)
+                                    try {
+                                        context.startActivity(mapIntent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Cannot open Maps: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Open in Google Maps 🗺️")
+                            }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Fetching GPS fix from child device...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                isRefreshingLoc = true
+                                FirebaseRepository.requestChildLocation(childUser.uid)
+                                Toast.makeText(context, "Real-time location refresh requested...", Toast.LENGTH_SHORT).show()
+                            },
+                            enabled = !isRefreshingLoc,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isRefreshingLoc) "Refreshing GPS..." else "Refresh GPS Location")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLocationDialogForChild = null }) {
+                        Text("Close")
+                    }
+                }
+            )
         }
 
         // Active Monitor Overlay Dialog
@@ -250,10 +445,22 @@ fun ParentScreen(
                 activeChildId?.let { childId ->
                     FirebaseRepository.stopStream(childId, sessionId)
                 }
+                if (isRecording) {
+                    val childId = activeChildId ?: ""
+                    val streamType = activeStreamType ?: "Audio"
+                    FirebaseRepository.saveRecordingSession(
+                        childId = childId,
+                        streamType = streamType,
+                        durationSeconds = recordingDurationSeconds
+                    ) {}
+                }
                 activeSessionId = null
                 activeStreamType = null
                 activeChildId = null
                 activeChildName = null
+                remoteVideoTrack = null
+                remoteAudioTrack = null
+                isRecording = false
                 AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
             }
 
@@ -318,36 +525,22 @@ fun ParentScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Video Stream Display via SurfaceViewRenderer
+                        // Video Stream Display via SafeSurfaceViewRenderer
                         if (activeStreamType.equals("video", ignoreCase = true)) {
                             if (remoteVideoTrack != null && webRtcManager != null) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        SurfaceViewRenderer(ctx).apply {
-                                            init(webRtcManager?.eglBase?.eglBaseContext, null)
-                                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                                            setEnableHardwareScaler(true)
-                                            setMirror(false)
-                                            setZOrderMediaOverlay(true)
-                                            remoteVideoTrack?.addSink(this)
-                                        }
-                                    },
-                                    update = { view ->
-                                        remoteVideoTrack?.addSink(view)
-                                    },
+                                SafeSurfaceViewRenderer(
+                                    videoTrack = remoteVideoTrack,
+                                    eglContext = webRtcManager?.eglBase?.eglBaseContext,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(260.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color.Black)
                                 )
                             } else {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(200.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -362,27 +555,91 @@ fun ParentScreen(
                                 }
                             }
 
-                            // Live Camera Switch Control (Front/Back)
                             Spacer(modifier = Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    isFrontCamera = !isFrontCamera
-                                    FirebaseRepository.toggleCameraFacing(sessionId, isFrontCamera)
-                                    Toast.makeText(context, "Switching Camera (Front/Back)...", Toast.LENGTH_SHORT).show()
-                                    AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
-                                },
+
+                            // Video Controls: Camera Switch & Record
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(imageVector = Icons.Default.Cameraswitch, contentDescription = "Switch Camera")
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("📷 Flip Camera (${if (isFrontCamera) "Front -> Back" else "Back -> Front"})")
+                                OutlinedButton(
+                                    onClick = {
+                                        isFrontCamera = !isFrontCamera
+                                        FirebaseRepository.toggleCameraFacing(sessionId, isFrontCamera)
+                                        Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
+                                        AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Cameraswitch, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(if (isFrontCamera) "Flip (Back)" else "Flip (Front)", style = MaterialTheme.typography.labelMedium)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (isRecording) {
+                                            val childId = activeChildId ?: ""
+                                            FirebaseRepository.saveRecordingSession(
+                                                childId = childId,
+                                                streamType = "video",
+                                                durationSeconds = recordingDurationSeconds
+                                            ) {
+                                                Toast.makeText(context, "Video recording saved to History!", Toast.LENGTH_SHORT).show()
+                                            }
+                                            isRecording = false
+                                        } else {
+                                            isRecording = true
+                                            Toast.makeText(context, "Video recording started...", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isRecording) Color.Red else MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.onErrorContainer
+                                    ),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    val recTimeStr = remember(recordingDurationSeconds) {
+                                        val m = recordingDurationSeconds / 60
+                                        val s = recordingDurationSeconds % 60
+                                        String.format(Locale.getDefault(), "%02d:%02d", m, s)
+                                    }
+                                    Text(if (isRecording) "Stop ($recTimeStr)" else "Record", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         } else {
-                            // Real-time Live Audio Monitor (Zero Dummy UI)
+                            // Real-time Live Audio Monitor with Whisper Boost & Recording
                             LiveAudioMonitorView(
                                 childName = activeChildName ?: "Child",
-                                statusText = streamStatusText
+                                statusText = streamStatusText,
+                                audioSensitivity = audioSensitivity,
+                                onSensitivityChange = { audioSensitivity = it },
+                                isRecording = isRecording,
+                                recordingDurationSeconds = recordingDurationSeconds,
+                                onToggleRecording = {
+                                    if (isRecording) {
+                                        val childId = activeChildId ?: ""
+                                        FirebaseRepository.saveRecordingSession(
+                                            childId = childId,
+                                            streamType = "audio",
+                                            durationSeconds = recordingDurationSeconds
+                                        ) {
+                                            Toast.makeText(context, "Audio recording saved to History!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        isRecording = false
+                                    } else {
+                                        isRecording = true
+                                        Toast.makeText(context, "Audio recording started...", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             )
                         }
                     }
@@ -404,7 +661,12 @@ fun ParentScreen(
 @Composable
 fun LiveAudioMonitorView(
     childName: String,
-    statusText: String
+    statusText: String,
+    audioSensitivity: Float,
+    onSensitivityChange: (Float) -> Unit,
+    isRecording: Boolean,
+    recordingDurationSeconds: Long,
+    onToggleRecording: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "audioRadar")
     val pulseScale by infiniteTransition.animateFloat(
@@ -436,22 +698,22 @@ fun LiveAudioMonitorView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(100.dp)
+                modifier = Modifier.size(90.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(96.dp * pulseScale)
+                        .size(86.dp * pulseScale)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha))
                 )
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
@@ -460,12 +722,12 @@ fun LiveAudioMonitorView(
                         imageVector = Icons.Default.Mic,
                         contentDescription = "Live Remote Mic",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Listening to $childName",
@@ -473,24 +735,24 @@ fun LiveAudioMonitorView(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Hardware Microphone Active on Child Device",
+                text = "Ultra-Sensitive Far-Field Mic • Fan/AC Filter Active",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = Color(0xFFE8F5E9),
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -498,22 +760,115 @@ fun LiveAudioMonitorView(
                             .clip(CircleShape)
                             .background(Color(0xFF2E7D32))
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "🔊 Loudspeaker Output Active",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        text = "🔊 Loudspeaker Audio Active",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = Color(0xFF1B5E20)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "WebRTC Direct P2P • Opus 48 kHz",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
-            )
+            // Audio Sensitivity & Whisper Boost Slider Card
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Audio Sensitivity / Whisper Boost",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${audioSensitivity.toInt()}%",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Slider(
+                        value = audioSensitivity,
+                        onValueChange = onSensitivityChange,
+                        valueRange = 10f..100f,
+                        steps = 8,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Sensitivity preset chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        AssistChip(
+                            onClick = { onSensitivityChange(30f) },
+                            label = { Text("30% Normal", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        AssistChip(
+                            onClick = { onSensitivityChange(60f) },
+                            label = { Text("60% Boost", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        AssistChip(
+                            onClick = { onSensitivityChange(100f) },
+                            label = { Text("100% Whisper", style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "💡 Slide to 100% to amplify distant room whispers. Hardware noise suppression eliminates ceiling fan & AC humming.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Start / Stop Recording Button
+            Button(
+                onClick = onToggleRecording,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRecording) Color.Red else MaterialTheme.colorScheme.errorContainer,
+                    contentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.onErrorContainer
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                val recTimeStr = remember(recordingDurationSeconds) {
+                    val m = recordingDurationSeconds / 60
+                    val s = recordingDurationSeconds % 60
+                    String.format(Locale.getDefault(), "%02d:%02d", m, s)
+                }
+                Text(
+                    text = if (isRecording) "Stop Recording ($recTimeStr)" else "Start Audio Recording",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            }
         }
     }
 }
@@ -522,7 +877,8 @@ fun LiveAudioMonitorView(
 fun ChildUserCard(
     user: User,
     onAudioClick: () -> Unit,
-    onVideoClick: () -> Unit
+    onVideoClick: () -> Unit,
+    onLocationClick: () -> Unit
 ) {
     var recordings by remember { mutableStateOf<List<RecordingSession>>(emptyList()) }
     var showRecordings by remember { mutableStateOf(false) }
@@ -615,7 +971,10 @@ fun ChildUserCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Button(
                     onClick = {
                         AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
@@ -628,9 +987,9 @@ fun ChildUserCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Audio Cast")
+                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Audio", style = MaterialTheme.typography.labelSmall)
                 }
 
                 FilledTonalButton(
@@ -645,9 +1004,22 @@ fun ChildUserCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Video Cast")
+                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Video", style = MaterialTheme.typography.labelSmall)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
+                        onLocationClick()
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("GPS", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
@@ -786,21 +1158,57 @@ fun ChildUserCard(
 }
 
 @Composable
-fun VideoStreamRenderer(
+fun SafeSurfaceViewRenderer(
     videoTrack: VideoTrack?,
-    eglBaseContext: EglBase.Context,
+    eglContext: EglBase.Context?,
     modifier: Modifier = Modifier
 ) {
+    var rendererRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+
+    DisposableEffect(videoTrack, rendererRef) {
+        val renderer = rendererRef
+        if (renderer != null && videoTrack != null) {
+            try {
+                videoTrack.addSink(renderer)
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        }
+        onDispose {
+            if (renderer != null && videoTrack != null) {
+                try {
+                    videoTrack.removeSink(renderer)
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
+                }
+            }
+        }
+    }
+
     AndroidView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
-                init(eglBaseContext, null)
-                setEnableHardwareScaler(true)
-                setMirror(false)
+                if (eglContext != null) {
+                    try {
+                        init(eglContext, null)
+                        setEnableHardwareScaler(true)
+                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                        setMirror(false)
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().recordException(e)
+                    }
+                }
+                rendererRef = this
             }
         },
         update = { renderer ->
-            videoTrack?.addSink(renderer)
+            rendererRef = renderer
+        },
+        onRelease = { renderer ->
+            try {
+                renderer.release()
+            } catch (e: Exception) {}
+            rendererRef = null
         },
         modifier = modifier
     )

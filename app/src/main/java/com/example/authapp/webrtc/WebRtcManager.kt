@@ -97,8 +97,23 @@ class WebRtcManager(private val context: Context) {
             }
         })
 
-        // Audio Track
-        audioSource = factory?.createAudioSource(MediaConstraints())
+        // Audio Track with Advanced Far-Field Surveillance & Noise Filter
+        val audioConstraints = MediaConstraints().apply {
+            // Multi-band Auto Gain Control boosts soft whispers and distant room voices
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
+            // Noise Suppression eliminates stationary background hum (Fan, AC, buzzing static)
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googExperimentalNoiseSuppression", "true"))
+            // Preserve low-frequency human vocal fundamentals (do NOT cut off whisper voice)
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "false"))
+            // Broadcaster does not play receiver audio, so disable echo cancellation
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "false"))
+        }
+        audioSource = factory?.createAudioSource(audioConstraints)
         audioTrack = factory?.createAudioTrack("ARDAMSa0", audioSource)
         audioTrack?.setEnabled(true)
         peerConnection?.addTrack(audioTrack, listOf("ARDAMS"))

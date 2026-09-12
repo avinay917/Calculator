@@ -49,7 +49,8 @@ fun ChildScreen(
     fun isMicrophoneAndCameraGranted(): Boolean {
         val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        return mic && cam
+        val loc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        return mic && cam && loc
     }
 
     fun startMonitoringService() {
@@ -114,7 +115,9 @@ fun ChildScreen(
         if (!hasStage1Permissions) {
             val perms = mutableListOf(
                 Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.CAMERA
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -206,7 +209,7 @@ fun ChildScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Requires Microphone, Camera, and Notification permissions for streaming.",
+                    text = "Requires Microphone, Camera, Location, and Notification permissions for complete protection.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -222,7 +225,9 @@ fun ChildScreen(
                             onClick = {
                                 val perms = mutableListOf(
                                     Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.CAMERA
+                                    Manifest.permission.CAMERA,
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
                                 )
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     perms.add(Manifest.permission.POST_NOTIFICATIONS)
