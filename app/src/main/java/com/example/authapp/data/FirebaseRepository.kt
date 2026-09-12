@@ -340,6 +340,7 @@ object FirebaseRepository {
         childId: String,
         streamType: String,
         durationSeconds: Long,
+        localFilePath: String = "",
         onSaved: () -> Unit
     ) {
         val parentId = currentUser?.uid ?: return
@@ -351,7 +352,8 @@ object FirebaseRepository {
             streamType = streamType,
             durationSeconds = durationSeconds,
             status = "SAVED",
-            storageUrl = "gs://apnasatthilko.appspot.com/recordings/$childId/$recId.mp4"
+            storageUrl = if (localFilePath.isNotEmpty()) "file://$localFilePath" else "gs://apnasatthilko.appspot.com/recordings/$childId/$recId.mp4",
+            localFilePath = localFilePath
         )
         database.reference.child("recordings").child(childId).child(recId).setValue(session)
             .addOnSuccessListener { onSaved() }

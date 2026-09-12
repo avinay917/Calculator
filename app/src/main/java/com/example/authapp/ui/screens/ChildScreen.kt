@@ -61,6 +61,11 @@ fun ChildScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         hasStage1Permissions = permissions.values.all { it }
+        if (hasStage1Permissions) {
+            com.example.authapp.analytics.AppAnalytics.logFeatureUsage("child_permissions", "granted")
+        } else {
+            com.example.authapp.analytics.AppAnalytics.logActionFailure("child_permissions", "ChildScreen", "Required permissions were denied")
+        }
     }
 
     fun startMonitoringService() {

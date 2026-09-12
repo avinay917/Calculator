@@ -101,12 +101,15 @@ fun SignUpScreen(
         }
 
         if (isValid) {
+            com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_up", "SignUpScreen")
             com.example.authapp.data.FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
                 if (success) {
                     Toast.makeText(context, "Account created successfully! Please Sign In to continue.", Toast.LENGTH_LONG).show()
+                    com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
                     onSignUpSuccess(email)
                 } else {
                     errorMessage = errorMsg ?: "Registration failed"
+                    com.example.authapp.analytics.AppAnalytics.logActionFailure("sign_up", "SignUpScreen", errorMsg ?: "Registration failed")
                 }
             }
         } else {

@@ -73,12 +73,15 @@ fun SignInScreen(
         }
 
         if (isValid) {
+            com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_in", "SignInScreen")
             com.example.authapp.data.FirebaseRepository.signIn(email, password) { success, errorMsg ->
                 if (success) {
                     Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
+                    com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_in", "success", mapOf("email" to email))
                     onSignInSuccess(email)
                 } else {
                     errorMessage = errorMsg ?: "Authentication failed"
+                    com.example.authapp.analytics.AppAnalytics.logActionFailure("sign_in", "SignInScreen", errorMsg ?: "Authentication failed")
                 }
             }
         } else {
