@@ -4,6 +4,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -41,20 +42,34 @@ class ChildForegroundService : Service() {
         startMonitoringStreamRequests()
     }
 
+    private fun getIdleServiceType(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        } else {
+            0
+        }
+    }
+
+    private fun getStreamingServiceType(streamType: String): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (streamType.equals("video", ignoreCase = true)) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        } else {
+            0
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
-                val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    if (streamType.equals("video", ignoreCase = true)) {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-                    } else {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                    }
-                } else {
-                    0
-                }
+                val serviceType = getStreamingServiceType(streamType)
                 try {
                     ServiceCompat.startForeground(
                         this,
@@ -73,7 +88,7 @@ class ChildForegroundService : Service() {
                         this,
                         NOTIFICATION_ID,
                         buildNotification("Background Protection Active"),
-                        0
+                        getIdleServiceType()
                     )
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground idle error: ${e.localizedMessage}")
@@ -90,7 +105,7 @@ class ChildForegroundService : Service() {
                         this,
                         NOTIFICATION_ID,
                         buildNotification("Background Protection Active"),
-                        0
+                        getIdleServiceType()
                     )
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground default error: ${e.localizedMessage}")
@@ -112,15 +127,7 @@ class ChildForegroundService : Service() {
             onRequested = { streamType, sessionId ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Stream request received over RTDB: $streamType, session: $sessionId")
                 if (!isStreaming || currentSessionId != sessionId) {
-                    val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        if (streamType.equals("video", ignoreCase = true)) {
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-                        } else {
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                        }
-                    } else {
-                        0
-                    }
+                    val serviceType = getStreamingServiceType(streamType)
                     try {
                         ServiceCompat.startForeground(
                             this,
@@ -142,7 +149,7 @@ class ChildForegroundService : Service() {
                         this,
                         NOTIFICATION_ID,
                         buildNotification("Background Protection Active"),
-                        0
+                        getIdleServiceType()
                     )
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
@@ -157,6 +164,16 @@ class ChildForegroundService : Service() {
 
         currentSessionId = sessionId
         isStreaming = true
+
+        // Configure hardware microphone routing for WebRTC
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            audioManager?.isMicrophoneMute = false
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] AudioManager mode error: ${e.localizedMessage}")
+        }
+
         webRtcManager = WebRtcManager(applicationContext)
         val iceServers = WebRtcManager.getDefaultIceServers()
 
@@ -201,6 +218,10 @@ class ChildForegroundService : Service() {
     private fun stopStream() {
         isStreaming = false
         currentSessionId = null
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.mode = AudioManager.MODE_NORMAL
+        } catch (e: Exception) {}
         try {
             webRtcManager?.stopStream()
         } catch (e: Exception) {
@@ -253,6 +274,10 @@ class ChildForegroundService : Service() {
 
     override fun onDestroy() {
         stopStream()
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.mode = AudioManager.MODE_NORMAL
+        } catch (e: Exception) {}
         val uid = FirebaseRepository.currentUser?.uid
         if (uid != null && streamRequestListener != null) {
             FirebaseRepository.removeStreamRequestListener(uid, streamRequestListener!!)

@@ -31,9 +31,23 @@ class WebRtcManager(private val context: Context) {
         val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
         val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
 
+        val useAec = JavaAudioDeviceModule.isBuiltInAcousticEchoCancelerSupported()
+        val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
+
         val adm = JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(true)
-            .setUseHardwareNoiseSuppressor(true)
+            .setUseHardwareAcousticEchoCanceler(useAec)
+            .setUseHardwareNoiseSuppressor(useNs)
+            .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
+                }
+                override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode?, errorMessage: String?) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Start Error] $errorCode: $errorMessage")
+                }
+                override fun onWebRtcAudioRecordError(errorMessage: String?) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Error] $errorMessage")
+                }
+            })
             .createAudioDeviceModule()
         audioDeviceModule = adm
 
@@ -86,6 +100,7 @@ class WebRtcManager(private val context: Context) {
         // Audio Track
         audioSource = factory?.createAudioSource(MediaConstraints())
         audioTrack = factory?.createAudioTrack("ARDAMSa0", audioSource)
+        audioTrack?.setEnabled(true)
         peerConnection?.addTrack(audioTrack, listOf("ARDAMS"))
 
         // Video Track (if requested)
@@ -110,16 +125,16 @@ class WebRtcManager(private val context: Context) {
                 }
 
                 videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
+                videoTrack?.setEnabled(true)
                 peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
             }
         }
 
-        // Create SDP Offer
-        val mediaConstraints = MediaConstraints()
-        if (streamType.equals("video", ignoreCase = true)) {
-            mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+        // Create SDP Offer (Broadcaster produces streams for the Parent)
+        val mediaConstraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
         }
-        mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
 
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {

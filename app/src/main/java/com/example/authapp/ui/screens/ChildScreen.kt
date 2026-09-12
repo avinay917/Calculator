@@ -46,7 +46,14 @@ fun ChildScreen(
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
 
+    fun isMicrophoneAndCameraGranted(): Boolean {
+        val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        return mic && cam
+    }
+
     fun checkPermissions() {
+        hasStage1Permissions = isMicrophoneAndCameraGranted()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             hasOverlayPermission = Settings.canDrawOverlays(context)
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -54,6 +61,9 @@ fun ChildScreen(
         } else {
             hasOverlayPermission = true
             isBatteryOptimizationIgnored = true
+        }
+        if (hasStage1Permissions) {
+            startMonitoringService()
         }
     }
 
@@ -63,6 +73,7 @@ fun ChildScreen(
         hasStage1Permissions = permissions.values.all { it }
         if (hasStage1Permissions) {
             com.example.authapp.analytics.AppAnalytics.logFeatureUsage("child_permissions", "granted")
+            startMonitoringService()
         } else {
             com.example.authapp.analytics.AppAnalytics.logActionFailure("child_permissions", "ChildScreen", "Required permissions were denied")
         }
@@ -79,6 +90,19 @@ fun ChildScreen(
         }
     }
 
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                checkPermissions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     LaunchedEffect(hasStage1Permissions) {
         if (hasStage1Permissions) {
             startMonitoringService()
@@ -87,14 +111,16 @@ fun ChildScreen(
 
     LaunchedEffect(Unit) {
         checkPermissions()
-        val perms = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        if (!hasStage1Permissions) {
+            val perms = mutableListOf(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CAMERA
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            stage1Launcher.launch(perms.toTypedArray())
         }
-        stage1Launcher.launch(perms.toTypedArray())
     }
 
     Column(
@@ -187,21 +213,48 @@ fun ChildScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = {
-                        val perms = mutableListOf(
-                            Manifest.permission.RECORD_AUDIO,
-                            Manifest.permission.CAMERA
-                        )
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                if (!hasStage1Permissions) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val perms = mutableListOf(
+                                    Manifest.permission.RECORD_AUDIO,
+                                    Manifest.permission.CAMERA
+                                )
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                stage1Launcher.launch(perms.toTypedArray())
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(text = "Grant Permissions")
                         }
-                        stage1Launcher.launch(perms.toTypedArray())
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(text = if (hasStage1Permissions) "Permissions Granted ✓" else "Grant Stage 1 Permissions")
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(text = "Settings")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { },
+                        enabled = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(text = "Permissions Granted ✓")
+                    }
                 }
             }
         }

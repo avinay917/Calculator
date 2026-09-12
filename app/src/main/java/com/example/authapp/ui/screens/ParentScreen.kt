@@ -1,15 +1,10 @@
 package com.example.authapp.ui.screens
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.media.MediaRecorder
 import android.os.Build
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -39,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import com.example.authapp.analytics.AppAnalytics
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.RecordingSession
@@ -67,102 +61,10 @@ fun ParentScreen(
     var activeChildId by remember { mutableStateOf<String?>(null) }
     var activeChildName by remember { mutableStateOf<String?>(null) }
 
-    var isRecording by remember { mutableStateOf(false) }
-    var recordingSeconds by remember { mutableLongStateOf(0L) }
     var isFrontCamera by remember { mutableStateOf(true) }
-
-    var mediaRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
-    var currentRecordingFile by remember { mutableStateOf<File?>(null) }
-
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var streamStatusText by remember { mutableStateOf("Connecting to child device...") }
-
-    fun startAudioRecordingInternal() {
-        try {
-            val dir = File(context.filesDir, "audio_recordings")
-            if (!dir.exists()) dir.mkdirs()
-            val file = File(dir, "rec_${System.currentTimeMillis()}.m4a")
-            currentRecordingFile = file
-
-            val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
-            }
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            recorder.setAudioSamplingRate(44100)
-            recorder.setAudioEncodingBitRate(128000)
-            recorder.setOutputFile(file.absolutePath)
-            recorder.prepare()
-            recorder.start()
-
-            mediaRecorder = recorder
-            isRecording = true
-            Toast.makeText(context, "🔴 Live audio recording started...", Toast.LENGTH_SHORT).show()
-            AppAnalytics.logButtonClick("start_audio_recording", "ParentScreen")
-            AppAnalytics.logFeatureUsage("audio_recording", "started")
-        } catch (e: Exception) {
-            Toast.makeText(context, "Could not start audio recorder: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-            AppAnalytics.logActionFailure("start_audio_recording", "ParentScreen", e.localizedMessage ?: "Recorder start failed", e)
-        }
-    }
-
-    fun stopAudioRecordingInternal() {
-        try {
-            mediaRecorder?.stop()
-            mediaRecorder?.release()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        mediaRecorder = null
-        isRecording = false
-
-        val savedFile = currentRecordingFile
-        if (savedFile != null && savedFile.exists() && savedFile.length() > 0) {
-            if (activeChildId != null && activeStreamType != null) {
-                FirebaseRepository.saveRecordingSession(
-                    childId = activeChildId!!,
-                    streamType = activeStreamType!!.lowercase(),
-                    durationSeconds = recordingSeconds,
-                    localFilePath = savedFile.absolutePath
-                ) {
-                    Toast.makeText(context, "✅ Audio recording saved (${recordingSeconds}s)! Play below.", Toast.LENGTH_LONG).show()
-                }
-            }
-            AppAnalytics.logButtonClick("stop_audio_recording", "ParentScreen", mapOf("duration" to recordingSeconds))
-            AppAnalytics.logFeatureUsage("audio_recording", "saved", mapOf("duration" to recordingSeconds))
-        } else {
-            Toast.makeText(context, "Audio recording was empty or too short", Toast.LENGTH_SHORT).show()
-        }
-        currentRecordingFile = null
-    }
-
-    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            startAudioRecordingInternal()
-        } else {
-            Toast.makeText(context, "Microphone permission required to record live audio", Toast.LENGTH_SHORT).show()
-            AppAnalytics.logActionFailure("record_audio", "ParentScreen", "Microphone permission denied")
-        }
-    }
-
-    val onToggleRecordingClick = {
-        if (!isRecording) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                startAudioRecordingInternal()
-            } else {
-                recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
-        } else {
-            stopAudioRecordingInternal()
-        }
-    }
 
     DisposableEffect(activeSessionId) {
         val sessionId = activeSessionId
@@ -223,9 +125,6 @@ fun ParentScreen(
                     audioManager?.mode = AudioManager.MODE_NORMAL
                     audioManager?.isSpeakerphoneOn = false
                 } catch (e: Exception) {}
-                if (isRecording) {
-                    stopAudioRecordingInternal()
-                }
                 FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
                 FirebaseRepository.stopStream(childId, sessionId)
                 manager.stopStream()
@@ -240,17 +139,6 @@ fun ParentScreen(
     LaunchedEffect(Unit) {
         FirebaseRepository.listenToChildUsers { list ->
             childUsers = list
-        }
-    }
-
-    // Timer effect for stream recording
-    LaunchedEffect(isRecording) {
-        if (isRecording) {
-            recordingSeconds = 0L
-            while (isRecording) {
-                delay(1000L)
-                recordingSeconds++
-            }
         }
     }
 
@@ -358,11 +246,7 @@ fun ParentScreen(
 
         // Active Monitor Overlay Dialog
         activeSessionId?.let { sessionId ->
-            val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", recordingSeconds / 60, recordingSeconds % 60)
             val disconnectAction = {
-                if (isRecording) {
-                    stopAudioRecordingInternal()
-                }
                 activeChildId?.let { childId ->
                     FirebaseRepository.stopStream(childId, sessionId)
                 }
@@ -403,7 +287,7 @@ fun ParentScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Live ${activeStreamType ?: "Media"} Cast",
+                                text = "Live ${activeStreamType?.replaceFirstChar { it.uppercase() } ?: "Media"} Cast",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
@@ -411,19 +295,6 @@ fun ParentScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                        if (isRecording) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Red.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = "REC $formattedTime",
-                                    color = Color.Red,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
                         }
                     }
                 },
@@ -508,42 +379,11 @@ fun ParentScreen(
                                 Text("📷 Flip Camera (${if (isFrontCamera) "Front -> Back" else "Back -> Front"})")
                             }
                         } else {
-                            // High-tech Live Audio Visualizer
-                            LiveAudioVisualizer(
-                                isRecording = isRecording,
-                                formattedTime = formattedTime
+                            // Real-time Live Audio Monitor (Zero Dummy UI)
+                            LiveAudioMonitorView(
+                                childName = activeChildName ?: "Child",
+                                statusText = streamStatusText
                             )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Record Audio Toggle Button
-                        if (!isRecording) {
-                            Button(
-                                onClick = onToggleRecordingClick,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.FiberManualRecord, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("🔴 Record Live Audio", fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            OutlinedButton(
-                                onClick = onToggleRecordingClick,
-                                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFD32F2F)),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Stop, contentDescription = null, tint = Color(0xFFD32F2F))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("⏹️ Stop & Save Recording ($formattedTime)", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
-                            }
                         }
                     }
                 },
@@ -562,11 +402,11 @@ fun ParentScreen(
 }
 
 @Composable
-fun LiveAudioVisualizer(
-    isRecording: Boolean,
-    formattedTime: String
+fun LiveAudioMonitorView(
+    childName: String,
+    statusText: String
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "audioWave")
+    val infiniteTransition = rememberInfiniteTransition(label = "audioRadar")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
         targetValue = 1.15f,
@@ -577,30 +417,14 @@ fun LiveAudioVisualizer(
         label = "pulseScale"
     )
     val ringAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0.12f,
+        initialValue = 0.45f,
+        targetValue = 0.08f,
         animationSpec = infiniteRepeatable(
             animation = tween(900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "ringAlpha"
     )
-    val recBlink by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "recBlink"
-    )
-
-    // Dynamic Equalizer bars animation
-    val bar1 by infiniteTransition.animateFloat(initialValue = 16f, targetValue = 44f, animationSpec = infiniteRepeatable(tween(450, delayMillis = 40), RepeatMode.Reverse), label = "b1")
-    val bar2 by infiniteTransition.animateFloat(initialValue = 24f, targetValue = 58f, animationSpec = infiniteRepeatable(tween(520, delayMillis = 80), RepeatMode.Reverse), label = "b2")
-    val bar3 by infiniteTransition.animateFloat(initialValue = 14f, targetValue = 50f, animationSpec = infiniteRepeatable(tween(400, delayMillis = 120), RepeatMode.Reverse), label = "b3")
-    val bar4 by infiniteTransition.animateFloat(initialValue = 28f, targetValue = 64f, animationSpec = infiniteRepeatable(tween(600, delayMillis = 60), RepeatMode.Reverse), label = "b4")
-    val bar5 by infiniteTransition.animateFloat(initialValue = 18f, targetValue = 42f, animationSpec = infiniteRepeatable(tween(480, delayMillis = 100), RepeatMode.Reverse), label = "b5")
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -612,22 +436,19 @@ fun LiveAudioVisualizer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Live pulsing microphone avatar
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(96.dp)
+                modifier = Modifier.size(100.dp)
             ) {
-                // Outer glowing pulse ring
                 Box(
                     modifier = Modifier
-                        .size(92.dp * pulseScale)
+                        .size(96.dp * pulseScale)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha))
                 )
-                // Center mic circle
                 Box(
                     modifier = Modifier
                         .size(72.dp)
@@ -637,89 +458,62 @@ fun LiveAudioVisualizer(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Mic,
-                        contentDescription = "Live Mic",
+                        contentDescription = "Live Remote Mic",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(36.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Animated Equalizer wave bars
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.height(68.dp)
-            ) {
-                listOf(bar1, bar2, bar3, bar4, bar5, bar3, bar2, bar1).forEach { heightVal ->
-                    Box(
-                        modifier = Modifier
-                            .width(6.dp)
-                            .height(heightVal.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                if (isRecording) Color.Red else MaterialTheme.colorScheme.primary
-                            )
-                    )
-                }
-            }
+            Text(
+                text = "Listening to $childName",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Hardware Microphone Active on Child Device",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Loudspeaker status badge
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFE8F5E9),
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
+                            .background(Color(0xFF2E7D32))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "LOUDSPEAKER LIVE 🔊",
+                        text = "🔊 Loudspeaker Output Active",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = Color(0xFF1B5E20)
                     )
                 }
             }
 
-            if (isRecording) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.Red.copy(alpha = 0.12f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(Color.Red.copy(alpha = recBlink))
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "RECORDING LIVE AUDIO • $formattedTime",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Red
-                            )
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "WebRTC Direct P2P • Opus 48 kHz",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
         }
     }
 }
