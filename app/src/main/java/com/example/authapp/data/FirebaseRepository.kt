@@ -3,6 +3,7 @@ package com.example.authapp.data
 import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -156,6 +157,46 @@ object FirebaseRepository {
             }
     }
 
+    fun stopStream(childId: String, sessionId: String? = null) {
+        val statusData = mapOf(
+            "status" to "STOPPED",
+            "timestamp" to System.currentTimeMillis()
+        )
+        database.reference.child("streams").child(childId).child("status").setValue(statusData)
+        if (!sessionId.isNullOrEmpty()) {
+            database.reference.child("signaling").child(sessionId).removeValue()
+        }
+    }
+
+    fun listenToStreamRequests(
+        childId: String,
+        onRequested: (streamType: String, sessionId: String) -> Unit,
+        onStopped: () -> Unit
+    ): ValueEventListener {
+        val ref = database.reference.child("streams").child(childId).child("status")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java)
+                if (status == "REQUESTED") {
+                    val streamType = snapshot.child("streamType").getValue(String::class.java)
+                        ?: snapshot.child("type").getValue(String::class.java) ?: "audio"
+                    val sessionId = snapshot.child("sessionId").getValue(String::class.java)
+                        ?: "session_${childId}"
+                    onRequested(streamType, sessionId)
+                } else if (status == "STOPPED" || status == "DISCONNECTED") {
+                    onStopped()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    fun removeStreamRequestListener(childId: String, listener: ValueEventListener) {
+        database.reference.child("streams").child(childId).child("status").removeEventListener(listener)
+    }
+
     fun sendSdpOffer(sessionId: String, sdp: String) {
         database.reference.child("signaling").child(sessionId).child("sdpOffer").setValue(sdp)
     }
@@ -169,28 +210,59 @@ object FirebaseRepository {
         database.reference.child("signaling").child(sessionId).child(targetNode).push().setValue(candidate)
     }
 
-    fun listenToSignaling(
-        sessionId: String,
-        onOfferReceived: (String) -> Unit,
-        onAnswerReceived: (String) -> Unit,
-        onIceCandidateReceived: (Map<String, Any>) -> Unit
-    ) {
-        val ref = database.reference.child("signaling").child(sessionId)
-        ref.child("sdpOffer").addValueEventListener(object : ValueEventListener {
+    fun listenToSdpOffer(sessionId: String, onOfferReceived: (String) -> Unit): ValueEventListener {
+        val ref = database.reference.child("signaling").child(sessionId).child("sdpOffer")
+        val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val sdp = snapshot.getValue(String::class.java)
                 if (!sdp.isNullOrEmpty()) onOfferReceived(sdp)
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
 
-        ref.child("sdpAnswer").addValueEventListener(object : ValueEventListener {
+    fun listenToSdpAnswer(sessionId: String, onAnswerReceived: (String) -> Unit): ValueEventListener {
+        val ref = database.reference.child("signaling").child(sessionId).child("sdpAnswer")
+        val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val sdp = snapshot.getValue(String::class.java)
                 if (!sdp.isNullOrEmpty()) onAnswerReceived(sdp)
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    fun listenToCandidates(
+        sessionId: String,
+        listenToParentCandidates: Boolean,
+        onCandidateReceived: (sdpMid: String, sdpMLineIndex: Int, sdp: String) -> Unit
+    ): ChildEventListener {
+        val targetNode = if (listenToParentCandidates) "parentCandidates" else "childCandidates"
+        val ref = database.reference.child("signaling").child(sessionId).child(targetNode)
+        val listener = object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val sdpMid = snapshot.child("sdpMid").getValue(String::class.java) ?: ""
+                val sdpMLineIndex = (snapshot.child("sdpMLineIndex").getValue(Long::class.java) ?: 0L).toInt()
+                val sdp = snapshot.child("sdp").getValue(String::class.java) ?: ""
+                if (sdp.isNotEmpty()) {
+                    onCandidateReceived(sdpMid, sdpMLineIndex, sdp)
+                }
+            }
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addChildEventListener(listener)
+        return listener
+    }
+
+    fun removeValueListener(path: String, listener: ValueEventListener) {
+        database.reference.child(path).removeEventListener(listener)
     }
 
     fun saveRecordingSession(

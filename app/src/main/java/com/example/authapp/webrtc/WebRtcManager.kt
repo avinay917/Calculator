@@ -32,6 +32,8 @@ class WebRtcManager(private val context: Context) {
             .createPeerConnectionFactory()
     }
 
+    // --- Broadcaster Mode (Child Device) ---
+
     fun startStream(
         streamType: String, // "audio" or "video"
         iceServers: List<PeerConnection.IceServer>,
@@ -48,7 +50,7 @@ class WebRtcManager(private val context: Context) {
         peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
-                FirebaseCrashlytics.getInstance().log("[WebRTC] ICE Connection State: $state")
+                FirebaseCrashlytics.getInstance().log("[WebRTC Broadcaster] ICE Connection State: $state")
                 if (state == PeerConnection.IceConnectionState.FAILED) {
                     FirebaseCrashlytics.getInstance().recordException(Exception("WebRTC ICE Connection Failed"))
                 }
@@ -127,12 +129,105 @@ class WebRtcManager(private val context: Context) {
         }, mediaConstraints)
     }
 
-    fun startAudioStream(
+    fun setRemoteAnswer(sdpString: String, onSetSuccess: (() -> Unit)? = null) {
+        val sdp = SessionDescription(SessionDescription.Type.ANSWER, sdpString)
+        peerConnection?.setRemoteDescription(object : SdpObserver {
+            override fun onCreateSuccess(p0: SessionDescription?) {}
+            override fun onSetSuccess() {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Remote Answer set successfully.")
+                onSetSuccess?.invoke()
+            }
+            override fun onCreateFailure(p0: String?) {}
+            override fun onSetFailure(p0: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Remote Answer set failure: $p0")
+            }
+        }, sdp)
+    }
+
+    // --- Receiver Mode (Parent Device) ---
+
+    fun startReceiver(
         iceServers: List<PeerConnection.IceServer>,
         onIceCandidate: (IceCandidate) -> Unit,
-        onSdpCreated: (SessionDescription) -> Unit
+        onRemoteVideoTrack: (VideoTrack) -> Unit,
+        onRemoteAudioTrack: (AudioTrack) -> Unit = {}
     ) {
-        startStream("audio", iceServers, onIceCandidate, onSdpCreated)
+        val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
+        rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+
+        peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
+            override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] ICE Connection State: $state")
+            }
+            override fun onIceConnectionReceivingChange(receiving: Boolean) {}
+            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
+            override fun onIceCandidate(candidate: IceCandidate?) {
+                candidate?.let { onIceCandidate(it) }
+            }
+            override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
+            override fun onAddStream(stream: MediaStream?) {}
+            override fun onRemoveStream(stream: MediaStream?) {}
+            override fun onDataChannel(channel: DataChannel?) {}
+            override fun onRenegotiationNeeded() {}
+            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
+                val track = receiver?.track()
+                if (track is VideoTrack) {
+                    onRemoteVideoTrack(track)
+                } else if (track is AudioTrack) {
+                    track.setEnabled(true)
+                    onRemoteAudioTrack(track)
+                }
+            }
+        })
+    }
+
+    fun setRemoteOfferAndCreateAnswer(
+        offerSdpString: String,
+        onAnswerCreated: (SessionDescription) -> Unit
+    ) {
+        val offerDesc = SessionDescription(SessionDescription.Type.OFFER, offerSdpString)
+        peerConnection?.setRemoteDescription(object : SdpObserver {
+            override fun onCreateSuccess(p0: SessionDescription?) {}
+            override fun onSetSuccess() {
+                val mediaConstraints = MediaConstraints().apply {
+                    mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+                    mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+                }
+                peerConnection?.createAnswer(object : SdpObserver {
+                    override fun onCreateSuccess(answerDesc: SessionDescription?) {
+                        answerDesc?.let { answer ->
+                            peerConnection?.setLocalDescription(object : SdpObserver {
+                                override fun onCreateSuccess(p0: SessionDescription?) {}
+                                override fun onSetSuccess() {
+                                    onAnswerCreated(answer)
+                                }
+                                override fun onCreateFailure(p0: String?) {}
+                                override fun onSetFailure(p0: String?) {}
+                            }, answer)
+                        }
+                    }
+                    override fun onSetSuccess() {}
+                    override fun onCreateFailure(p0: String?) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Create Answer Failure: $p0")
+                    }
+                    override fun onSetFailure(p0: String?) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Set Answer Failure: $p0")
+                    }
+                }, mediaConstraints)
+            }
+            override fun onCreateFailure(p0: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote Offer Set Failure: $p0")
+            }
+            override fun onSetFailure(p0: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote Offer Set Failure: $p0")
+            }
+        }, offerDesc)
+    }
+
+    fun addRemoteCandidate(sdpMid: String, sdpMLineIndex: Int, sdp: String) {
+        val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
+        peerConnection?.addIceCandidate(iceCandidate)
     }
 
     private fun createVideoCapturer(): VideoCapturer? {
@@ -190,9 +285,13 @@ class WebRtcManager(private val context: Context) {
             e.printStackTrace()
         }
         videoCapturer?.dispose()
+        videoCapturer = null
         surfaceTextureHelper?.dispose()
+        surfaceTextureHelper = null
         peerConnection?.close()
+        peerConnection = null
         factory?.dispose()
+        factory = null
         eglBase.release()
     }
 }

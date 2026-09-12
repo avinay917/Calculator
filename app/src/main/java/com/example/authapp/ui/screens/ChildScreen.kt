@@ -9,6 +9,8 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.authapp.service.ChildForegroundService
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -59,6 +61,23 @@ fun ChildScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         hasStage1Permissions = permissions.values.all { it }
+    }
+
+    fun startMonitoringService() {
+        val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
+            action = ChildForegroundService.ACTION_START_MONITORING
+        }
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    LaunchedEffect(hasStage1Permissions) {
+        if (hasStage1Permissions) {
+            startMonitoringService()
+        }
     }
 
     LaunchedEffect(Unit) {

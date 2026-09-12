@@ -25,13 +25,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
+import android.content.Context
+import android.media.AudioManager
 import org.webrtc.EglBase
+import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.data.User
 import com.example.authapp.theme.AuthAppTheme
+import com.example.authapp.webrtc.WebRtcManager
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,6 +62,71 @@ fun ParentScreen(
     var isRecording by remember { mutableStateOf(false) }
     var recordingSeconds by remember { mutableLongStateOf(0L) }
     var isFrontCamera by remember { mutableStateOf(true) }
+
+    var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
+    var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var streamStatusText by remember { mutableStateOf("Connecting to child device...") }
+
+    DisposableEffect(activeSessionId) {
+        val sessionId = activeSessionId
+        val childId = activeChildId
+        if (sessionId != null && childId != null) {
+            streamStatusText = "Connecting to child device..."
+            val manager = WebRtcManager(context)
+            webRtcManager = manager
+
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            audioManager?.isSpeakerphoneOn = true
+
+            val iceServers = WebRtcManager.getDefaultIceServers()
+            manager.startReceiver(
+                iceServers = iceServers,
+                onIceCandidate = { candidate ->
+                    val candMap = mapOf(
+                        "sdpMid" to candidate.sdpMid,
+                        "sdpMLineIndex" to candidate.sdpMLineIndex,
+                        "sdp" to candidate.sdp
+                    )
+                    FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = true)
+                },
+                onRemoteVideoTrack = { track ->
+                    streamStatusText = "Live Video Streaming 🟢"
+                    remoteVideoTrack = track
+                },
+                onRemoteAudioTrack = { _ ->
+                    streamStatusText = "Live Audio Streaming 🟢"
+                }
+            )
+
+            // Listen for SDP Offer from Child
+            val sdpOfferListener = FirebaseRepository.listenToSdpOffer(sessionId) { sdpOffer ->
+                streamStatusText = "Child Offer Received, establishing connection..."
+                manager.setRemoteOfferAndCreateAnswer(sdpOffer) { sdpAnswer ->
+                    FirebaseRepository.sendSdpAnswer(sessionId, sdpAnswer.description)
+                }
+            }
+
+            // Listen for ICE Candidates from Child
+            val candidateListener = FirebaseRepository.listenToCandidates(sessionId, listenToParentCandidates = false) { sdpMid, sdpMLineIndex, sdp ->
+                manager.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
+            }
+
+            onDispose {
+                try {
+                    audioManager?.mode = AudioManager.MODE_NORMAL
+                    audioManager?.isSpeakerphoneOn = false
+                } catch (e: Exception) {}
+                FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
+                FirebaseRepository.stopStream(childId, sessionId)
+                manager.stopStream()
+                webRtcManager = null
+                remoteVideoTrack = null
+            }
+        } else {
+            onDispose { }
+        }
+    }
 
     LaunchedEffect(Unit) {
         FirebaseRepository.listenToChildUsers { list ->
@@ -180,20 +250,24 @@ fun ParentScreen(
         // Active Monitor Overlay Dialog
         activeSessionId?.let { sessionId ->
             val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", recordingSeconds / 60, recordingSeconds % 60)
+            val disconnectAction = {
+                if (isRecording && activeChildId != null && activeStreamType != null) {
+                    FirebaseRepository.saveRecordingSession(activeChildId!!, activeStreamType!!.lowercase(), recordingSeconds) {
+                        Toast.makeText(context, "Recording saved (${recordingSeconds}s)!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                isRecording = false
+                activeChildId?.let { childId ->
+                    FirebaseRepository.stopStream(childId, sessionId)
+                }
+                activeSessionId = null
+                activeStreamType = null
+                activeChildId = null
+                activeChildName = null
+            }
 
             AlertDialog(
-                onDismissRequest = {
-                    if (isRecording && activeChildId != null && activeStreamType != null) {
-                        FirebaseRepository.saveRecordingSession(activeChildId!!, activeStreamType!!.lowercase(), recordingSeconds) {
-                            Toast.makeText(context, "Recording saved (${recordingSeconds}s)!", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    isRecording = false
-                    activeSessionId = null
-                    activeStreamType = null
-                    activeChildId = null
-                    activeChildName = null
-                },
+                onDismissRequest = disconnectAction,
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = "Live ${activeStreamType ?: "Media"} Stream")
@@ -215,15 +289,106 @@ fun ParentScreen(
                 },
                 text = {
                     Column {
-                        Text("Device: ${activeChildName ?: "Child"}")
-                        Text("Session ID: $sessionId", style = MaterialTheme.typography.bodySmall)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Device: ${activeChildName ?: "Child"}", fontWeight = FontWeight.SemiBold)
                         Text(
-                            text = "Listening/Viewing remote stream from child device in real-time...",
+                            text = streamStatusText,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Video Stream Display via SurfaceViewRenderer
+                        if (activeStreamType.equals("video", ignoreCase = true)) {
+                            if (remoteVideoTrack != null && webRtcManager != null) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        SurfaceViewRenderer(ctx).apply {
+                                            init(webRtcManager?.eglBase?.eglBaseContext, null)
+                                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                                            setEnableHardwareScaler(true)
+                                            setMirror(false)
+                                            remoteVideoTrack?.addSink(this)
+                                        }
+                                    },
+                                    update = { view ->
+                                        remoteVideoTrack?.addSink(view)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(260.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.Black)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Connecting to child camera...",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Live Camera Switch Control (Front/Back)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    isFrontCamera = !isFrontCamera
+                                    FirebaseRepository.toggleCameraFacing(sessionId, isFrontCamera)
+                                    Toast.makeText(context, "Switching Camera (Front/Back)...", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Cameraswitch, contentDescription = "Switch Camera")
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("📷 Flip Camera (${if (isFrontCamera) "Front -> Back" else "Back -> Front"})")
+                            }
+                        } else {
+                            // Audio Stream Visualizer Card
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Live Microphone Active",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = "Sound playing through loudspeaker",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Record Toggle Button
                         if (!isRecording) {
@@ -253,40 +418,11 @@ fun ParentScreen(
                                 Text("⏹️ Stop Recording ($formattedTime)")
                             }
                         }
-
-                        // Live Camera Switch Control (Front/Back)
-                        if (activeStreamType.equals("video", ignoreCase = true)) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    isFrontCamera = !isFrontCamera
-                                    FirebaseRepository.toggleCameraFacing(sessionId, isFrontCamera)
-                                    Toast.makeText(context, "Switching Camera (Front/Back)...", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Cameraswitch, contentDescription = "Switch Camera")
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("📷 Flip Camera (${if (isFrontCamera) "Front -> Back" else "Back -> Front"})")
-                            }
-                        }
                     }
                 },
                 confirmButton = {
                     Button(
-                        onClick = {
-                            if (isRecording && activeChildId != null && activeStreamType != null) {
-                                FirebaseRepository.saveRecordingSession(activeChildId!!, activeStreamType!!.lowercase(), recordingSeconds) {
-                                    Toast.makeText(context, "Stream recording saved to Cloud!", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            isRecording = false
-                            activeSessionId = null
-                            activeStreamType = null
-                            activeChildId = null
-                            activeChildName = null
-                        },
+                        onClick = disconnectAction,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("Disconnect Stream")
