@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.authapp">
 
     <!-- Network & Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -31,7 +32,7 @@
         android:theme="@style/Theme.AuthApp">
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.authapp.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -41,7 +42,7 @@
 
         <!-- FCM Service for Waking Up Device -->
         <service
-            android:name=".service.MyFirebaseMessagingService"
+            android:name="com.example.authapp.service.MyFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -50,7 +51,7 @@
 
         <!-- Child Background Capture & WebRTC Service -->
         <service
-            android:name=".service.ChildForegroundService"
+            android:name="com.example.authapp.service.ChildForegroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone|camera" />
