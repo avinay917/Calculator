@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.authapp.theme.AuthAppTheme
+import com.example.authapp.data.FirebaseRepository
 
 @Composable
 fun SignInScreen(
@@ -49,6 +50,11 @@ fun SignInScreen(
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetEmail by remember { mutableStateOf("") }
+    var resetLoading by remember { mutableStateOf(false) }
+    var resetError by remember { mutableStateOf<String?>(null) }
 
     fun validateAndSubmit() {
         var isValid = true
@@ -247,7 +253,11 @@ fun SignInScreen(
 
             TextButton(
                 onClick = {
-                    Toast.makeText(context, "Password reset link sent!", Toast.LENGTH_SHORT).show()
+                    if (email.isNotBlank() && resetEmail.isBlank()) {
+                        resetEmail = email.trim()
+                    }
+                    resetError = null
+                    showResetDialog = true
                 }
             ) {
                 Text(
@@ -319,6 +329,113 @@ fun SignInScreen(
                 )
             }
         }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!resetLoading) {
+                    showResetDialog = false
+                    resetError = null
+                }
+            },
+            title = {
+                Text(text = "Reset Password", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your registered email address. We will send an email with a link to reset your password.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = {
+                            resetEmail = it
+                            resetError = null
+                        },
+                        label = { Text("Email Address") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Email,
+                                contentDescription = "Email Icon"
+                            )
+                        },
+                        singleLine = true,
+                        isError = resetError != null,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Done
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (resetError != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = resetError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = resetEmail.trim()
+                        if (trimmed.isBlank()) {
+                            resetError = "Email is required"
+                            return@Button
+                        }
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()) {
+                            resetError = "Please enter a valid email address"
+                            return@Button
+                        }
+                        resetLoading = true
+                        resetError = null
+                        FirebaseRepository.sendPasswordResetEmail(trimmed) { success, err ->
+                            resetLoading = false
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    "Password reset link sent to $trimmed! Please check your inbox.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                showResetDialog = false
+                            } else {
+                                resetError = err ?: "Failed to send reset email. Please try again."
+                            }
+                        }
+                    },
+                    enabled = !resetLoading,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (resetLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Send Link")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showResetDialog = false
+                        resetError = null
+                    },
+                    enabled = !resetLoading
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }
 

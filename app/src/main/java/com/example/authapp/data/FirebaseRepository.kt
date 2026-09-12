@@ -124,6 +124,25 @@ object FirebaseRepository {
             }
     }
 
+    fun sendPasswordResetEmail(
+        email: String,
+        onResult: (success: Boolean, errorMessage: String?) -> Unit
+    ) {
+        val trimmedEmail = email.trim()
+        if (trimmedEmail.isBlank()) {
+            onResult(false, "Please enter your email address")
+            return
+        }
+        auth.sendPasswordResetEmail(trimmedEmail)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    onResult(true, null)
+                } else {
+                    onResult(false, task.exception?.localizedMessage ?: "Failed to send reset email")
+                }
+            }
+    }
+
     fun signOut() {
         val uid = currentUser?.uid
         if (uid != null) {

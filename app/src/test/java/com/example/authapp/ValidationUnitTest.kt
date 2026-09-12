@@ -36,4 +36,11 @@ class ValidationUnitTest {
     fun passwordMatch_returnsFalseWhenMismatched() {
         assertFalse(doPasswordsMatch("secret123", "secret456"))
     }
+
+    @Test
+    fun resetPasswordEmailValidation_validAndInvalidCases() {
+        assertTrue(isValidEmail("parent.reset@example.com"))
+        assertFalse(isValidEmail("   "))
+        assertFalse(isValidEmail("not-an-email"))
+    }
 }
