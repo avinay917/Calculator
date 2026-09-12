@@ -28,6 +28,13 @@ fun MainNavigation() {
         }
     }
 
+    LaunchedEffect(Unit) {
+        val user = FirebaseRepository.currentUser
+        if (user != null && !user.email.isNullOrEmpty()) {
+            navigateBasedOnRole(user.email!!)
+        }
+    }
+
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
