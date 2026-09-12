@@ -1,5 +1,4 @@
 {
-  "vapidKey": "BOWC1dt6Whljt30J85Munu1AGuND0RfByTdiJseAWjUFpun1fYY0SFf91Afqo8ocCqxBA98O8QpQm-Y1gMi5aoo",
   "fcmEndpoint": "https://fcm.googleapis.com/fcm/send",
   "projectId": "apnasatthilko",
   "messagingSenderId": "247813001651"

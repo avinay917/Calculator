@@ -18,7 +18,7 @@ fun MainNavigation() {
 
     fun navigateBasedOnRole(email: String) {
         val uid = FirebaseRepository.currentUser?.uid ?: return
-        FirebaseRepository.listenToUserRole(uid) { role ->
+        FirebaseRepository.getUserRoleOnce(uid) { role ->
             backStack.clear()
             if (role == "parent") {
                 backStack.add(ParentNavKey(email = email))

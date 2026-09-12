@@ -105,6 +105,21 @@ object FirebaseRepository {
             })
     }
 
+    // One-shot role fetch — no persistent listener, prevents memory leak
+    fun getUserRoleOnce(uid: String, onRoleFetched: (String) -> Unit) {
+        database.reference.child("users").child(uid).child("role")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val role = snapshot.getValue(String::class.java) ?: "child"
+                    onRoleFetched(role)
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    onRoleFetched("child") // Default fallback
+                }
+            })
+    }
+
     fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit) {
         database.reference.child("users")
             .addValueEventListener(object : ValueEventListener {

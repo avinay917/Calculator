@@ -98,7 +98,7 @@ class ChildForegroundService : Service() {
     private fun acquireWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuthApp:ChildStreamWakeLock")
-        wakeLock?.acquire(10 * 60 * 1000L /* 10 minutes timeout */)
+        wakeLock?.acquire(2 * 60 * 60 * 1000L /* 2 hours timeout */)
     }
 
     private fun releaseWakeLock() {
