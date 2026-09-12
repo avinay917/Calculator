@@ -42,31 +42,42 @@ class ChildForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-        } else {
-            0
-        }
-
         when (intent?.action) {
             ACTION_START -> {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    buildNotification("Active Remote Stream ($streamType)"),
-                    serviceType
-                )
+                val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    if (streamType.equals("video", ignoreCase = true)) {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    } else {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
+                } else {
+                    0
+                }
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Active Remote Stream ($streamType)"),
+                        serviceType
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground error: ${e.localizedMessage}")
+                }
                 startWebRtcStream(sessionId, streamType)
             }
             ACTION_START_MONITORING -> {
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    buildNotification("Background Protection Active"),
-                    serviceType
-                )
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        0
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground idle error: ${e.localizedMessage}")
+                }
                 startMonitoringStreamRequests()
             }
             ACTION_STOP -> {
@@ -74,12 +85,16 @@ class ChildForegroundService : Service() {
                 stopSelf()
             }
             else -> {
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    buildNotification("Background Protection Active"),
-                    serviceType
-                )
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        0
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground default error: ${e.localizedMessage}")
+                }
                 startMonitoringStreamRequests()
             }
         }
@@ -97,33 +112,40 @@ class ChildForegroundService : Service() {
                 FirebaseCrashlytics.getInstance().log("[ChildService] Stream request received over RTDB: $streamType, session: $sessionId")
                 if (!isStreaming || currentSessionId != sessionId) {
                     val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                        if (streamType.equals("video", ignoreCase = true)) {
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                        } else {
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                        }
                     } else {
                         0
                     }
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Active Remote Stream ($streamType)"),
-                        serviceType
-                    )
+                    try {
+                        ServiceCompat.startForeground(
+                            this,
+                            NOTIFICATION_ID,
+                            buildNotification("Active Remote Stream ($streamType)"),
+                            serviceType
+                        )
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] startForeground stream error: ${e.localizedMessage}")
+                    }
                     startWebRtcStream(sessionId, streamType)
                 }
             },
             onStopped = {
                 FirebaseCrashlytics.getInstance().log("[ChildService] Remote stream stopped by Parent")
                 stopStream()
-                val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-                } else {
-                    0
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        0
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
                 }
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    buildNotification("Background Protection Active"),
-                    serviceType
-                )
             }
         )
     }

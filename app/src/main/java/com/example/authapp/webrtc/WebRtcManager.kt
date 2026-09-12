@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
 import org.webrtc.*
+import org.webrtc.audio.JavaAudioDeviceModule
 
 class WebRtcManager(private val context: Context) {
     val eglBase: EglBase = EglBase.create()
@@ -15,6 +16,11 @@ class WebRtcManager(private val context: Context) {
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
+    private var audioDeviceModule: JavaAudioDeviceModule? = null
+
+    private val pendingCandidates = mutableListOf<IceCandidate>()
+    @Volatile
+    private var isRemoteDescriptionSet = false
 
     init {
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
@@ -25,7 +31,14 @@ class WebRtcManager(private val context: Context) {
         val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
         val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
 
+        val adm = JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .createAudioDeviceModule()
+        audioDeviceModule = adm
+
         factory = PeerConnectionFactory.builder()
+            .setAudioDeviceModule(adm)
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .setOptions(PeerConnectionFactory.Options())
@@ -83,7 +96,18 @@ class WebRtcManager(private val context: Context) {
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
                 videoSource = factory?.createVideoSource(capturer.isScreencast)
                 capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
-                capturer.startCapture(1280, 720, 30)
+                try {
+                    capturer.startCapture(640, 480, 30)
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera capture started: 640x480@30")
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera 640x480 failed, trying 480x360: ${e.localizedMessage}")
+                    try {
+                        capturer.startCapture(480, 360, 24)
+                    } catch (e2: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera startCapture failed: ${e2.localizedMessage}")
+                        FirebaseCrashlytics.getInstance().recordException(e2)
+                    }
+                }
 
                 videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
                 peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
@@ -135,6 +159,7 @@ class WebRtcManager(private val context: Context) {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Remote Answer set successfully.")
+                drainPendingCandidates()
                 onSetSuccess?.invoke()
             }
             override fun onCreateFailure(p0: String?) {}
@@ -173,13 +198,29 @@ class WebRtcManager(private val context: Context) {
             override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
                 val track = receiver?.track()
                 if (track is VideoTrack) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote VideoTrack received")
                     onRemoteVideoTrack(track)
                 } else if (track is AudioTrack) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote AudioTrack received")
                     track.setEnabled(true)
+                    track.setVolume(10.0)
                     onRemoteAudioTrack(track)
                 }
             }
         })
+
+        try {
+            peerConnection?.addTransceiver(
+                MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
+            )
+            peerConnection?.addTransceiver(
+                MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
+            )
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Add transceiver exception: ${e.localizedMessage}")
+        }
     }
 
     fun setRemoteOfferAndCreateAnswer(
@@ -190,6 +231,7 @@ class WebRtcManager(private val context: Context) {
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
+                drainPendingCandidates()
                 val mediaConstraints = MediaConstraints().apply {
                     mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
                     mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -226,8 +268,27 @@ class WebRtcManager(private val context: Context) {
     }
 
     fun addRemoteCandidate(sdpMid: String, sdpMLineIndex: Int, sdp: String) {
-        val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
-        peerConnection?.addIceCandidate(iceCandidate)
+        val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
+        synchronized(pendingCandidates) {
+            if (isRemoteDescriptionSet && peerConnection?.remoteDescription != null) {
+                val added = peerConnection?.addIceCandidate(candidate)
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Added remote ICE candidate: $added")
+            } else {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Queued remote ICE candidate (pending remote description)")
+                pendingCandidates.add(candidate)
+            }
+        }
+    }
+
+    private fun drainPendingCandidates() {
+        synchronized(pendingCandidates) {
+            isRemoteDescriptionSet = true
+            FirebaseCrashlytics.getInstance().log("[WebRTC] Draining ${pendingCandidates.size} queued ICE candidates")
+            for (candidate in pendingCandidates) {
+                peerConnection?.addIceCandidate(candidate)
+            }
+            pendingCandidates.clear()
+        }
     }
 
     private fun createVideoCapturer(): VideoCapturer? {
@@ -290,8 +351,14 @@ class WebRtcManager(private val context: Context) {
         surfaceTextureHelper = null
         peerConnection?.close()
         peerConnection = null
+        audioDeviceModule?.release()
+        audioDeviceModule = null
         factory?.dispose()
         factory = null
         eglBase.release()
+        synchronized(pendingCandidates) {
+            pendingCandidates.clear()
+            isRemoteDescriptionSet = false
+        }
     }
 }

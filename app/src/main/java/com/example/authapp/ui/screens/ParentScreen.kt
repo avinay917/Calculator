@@ -71,6 +71,7 @@ fun ParentScreen(
         val sessionId = activeSessionId
         val childId = activeChildId
         if (sessionId != null && childId != null) {
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
             streamStatusText = "Connecting to child device..."
             val manager = WebRtcManager(context)
             webRtcManager = manager
@@ -91,17 +92,23 @@ fun ParentScreen(
                     FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = true)
                 },
                 onRemoteVideoTrack = { track ->
-                    streamStatusText = "Live Video Streaming 🟢"
-                    remoteVideoTrack = track
+                    mainHandler.post {
+                        streamStatusText = "Live Video Streaming 🟢"
+                        remoteVideoTrack = track
+                    }
                 },
                 onRemoteAudioTrack = { _ ->
-                    streamStatusText = "Live Audio Streaming 🟢"
+                    mainHandler.post {
+                        streamStatusText = "Live Audio Streaming 🟢"
+                    }
                 }
             )
 
             // Listen for SDP Offer from Child
             val sdpOfferListener = FirebaseRepository.listenToSdpOffer(sessionId) { sdpOffer ->
-                streamStatusText = "Child Offer Received, establishing connection..."
+                mainHandler.post {
+                    streamStatusText = "Child Offer Received, establishing connection..."
+                }
                 manager.setRemoteOfferAndCreateAnswer(sdpOffer) { sdpAnswer ->
                     FirebaseRepository.sendSdpAnswer(sessionId, sdpAnswer.description)
                 }
@@ -308,6 +315,7 @@ fun ParentScreen(
                                             setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                                             setEnableHardwareScaler(true)
                                             setMirror(false)
+                                            setZOrderMediaOverlay(true)
                                             remoteVideoTrack?.addSink(this)
                                         }
                                     },
