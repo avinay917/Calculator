@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -622,7 +624,9 @@ fun ParentScreen(
                 text = {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                     ) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -860,7 +864,7 @@ fun LiveAudioMonitorView(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Dual-Mic Beamforming Active • 80Hz Rumble & Fan Filter ON",
+                text = "✨ Studio Voice Filter ON",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1045,11 +1049,11 @@ fun ChildUserCard(
                 Spacer(modifier = Modifier.weight(1f))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface,
+                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.padding(start = 4.dp)
                 ) {
                     Text(
-                        text = if (user.isOnline) "ONLINE 🟢" else "OFFLINE ⚪",
+                        text = if (user.isOnline) "🟢 Online" else "⚪ Offline",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = if (user.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1064,29 +1068,15 @@ fun ChildUserCard(
                 modifier = Modifier.padding(start = 20.dp, top = 2.dp)
             )
 
-            if (user.isOnline) {
-                Text(
-                    text = "Internet Connected • Ready for streaming",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF2E7D32),
-                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
-                )
-            } else if (user.lastSeen > 0L) {
+            if (!user.isOnline && user.lastSeen > 0L) {
                 val lastSeenText = remember(user.lastSeen) {
                     val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
                     sdf.format(Date(user.lastSeen))
                 }
                 Text(
-                    text = "Internet Disconnected • Last seen: $lastSeenText",
+                    text = "Last seen: $lastSeenText",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
-                )
-            } else {
-                Text(
-                    text = "Internet Disconnected",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 20.dp, top = 2.dp)
                 )
             }
