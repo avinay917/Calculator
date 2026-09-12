@@ -103,7 +103,7 @@ fun SignUpScreen(
         if (isValid) {
             com.example.authapp.data.FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
                 if (success) {
-                    Toast.makeText(context, "Account created successfully with default CHILD role!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Account created successfully! Please Sign In to continue.", Toast.LENGTH_LONG).show()
                     onSignUpSuccess(email)
                 } else {
                     errorMessage = errorMsg ?: "Registration failed"

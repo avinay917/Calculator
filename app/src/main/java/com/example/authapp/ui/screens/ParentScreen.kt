@@ -468,7 +468,7 @@ fun ChildUserCard(
                     modifier = Modifier
                         .size(12.dp)
                         .clip(CircleShape)
-                        .background(if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        .background(if (user.isOnline) Color(0xFF4CAF50) else Color(0xFF9E9E9E))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -476,11 +476,18 @@ fun ChildUserCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = if (user.isOnline) "ONLINE" else "OFFLINE",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.padding(start = 4.dp)
+                ) {
+                    Text(
+                        text = if (user.isOnline) "ONLINE 🟢" else "OFFLINE ⚪",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (user.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             Text(
@@ -490,11 +497,43 @@ fun ChildUserCard(
                 modifier = Modifier.padding(start = 20.dp, top = 2.dp)
             )
 
+            if (user.isOnline) {
+                Text(
+                    text = "Internet Connected • Ready for streaming",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2E7D32),
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                )
+            } else if (user.lastSeen > 0L) {
+                val lastSeenText = remember(user.lastSeen) {
+                    val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+                    sdf.format(Date(user.lastSeen))
+                }
+                Text(
+                    text = "Internet Disconnected • Last seen: $lastSeenText",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                )
+            } else {
+                Text(
+                    text = "Internet Disconnected",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
-                    onClick = onAudioClick,
+                    onClick = {
+                        if (!user.isOnline) {
+                            Toast.makeText(context, "Child device is offline (No Internet). Wake-up request sent.", Toast.LENGTH_SHORT).show()
+                        }
+                        onAudioClick()
+                    },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -504,7 +543,12 @@ fun ChildUserCard(
                 }
 
                 FilledTonalButton(
-                    onClick = onVideoClick,
+                    onClick = {
+                        if (!user.isOnline) {
+                            Toast.makeText(context, "Child device is offline (No Internet). Wake-up request sent.", Toast.LENGTH_SHORT).show()
+                        }
+                        onVideoClick()
+                    },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {

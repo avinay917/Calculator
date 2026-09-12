@@ -7,6 +7,7 @@ import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
@@ -17,11 +18,53 @@ object FirebaseRepository {
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
+    private var presenceConnectedListener: ValueEventListener? = null
+    private var currentPresenceUid: String? = null
+
     val currentUser get() = auth.currentUser
 
     fun recordNonFatalError(message: String, exception: Throwable? = null) {
         crashlytics.log("[FeatureHealth] $message")
         exception?.let { crashlytics.recordException(it) }
+    }
+
+    fun setupPresenceSystem(uid: String) {
+        if (currentPresenceUid == uid && presenceConnectedListener != null) {
+            return
+        }
+        presenceConnectedListener?.let {
+            database.reference.child(".info/connected").removeEventListener(it)
+            presenceConnectedListener = null
+        }
+        currentPresenceUid = uid
+
+        val userRef = database.reference.child("users").child(uid)
+        val connectedRef = database.reference.child(".info/connected")
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val connected = snapshot.getValue(Boolean::class.java) ?: false
+                if (connected) {
+                    // When connection is lost (mobile data off, wifi off, app killed),
+                    // Firebase server will automatically set isOnline to false & update lastSeen.
+                    userRef.child("isOnline").onDisconnect().setValue(false)
+                    userRef.child("online").onDisconnect().setValue(false)
+                    userRef.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
+
+                    // Mark user as actively connected now
+                    userRef.child("isOnline").setValue(true)
+                    userRef.child("online").setValue(true)
+                    userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                recordNonFatalError("Presence listener cancelled: ${error.message}", error.toException())
+            }
+        }
+
+        connectedRef.addValueEventListener(listener)
+        presenceConnectedListener = listener
     }
 
     fun signUp(
@@ -39,12 +82,14 @@ object FirebaseRepository {
                         name = fullName,
                         email = email,
                         role = "child", // Default role assigned to all newly created accounts
-                        isOnline = true
+                        isOnline = false
                     )
                     database.reference.child("users").child(uid).setValue(user)
                         .addOnCompleteListener { dbTask ->
                             if (dbTask.isSuccessful) {
-                                updateFcmToken()
+                                database.reference.child("users").child(uid).child("online").setValue(false)
+                                // Crucial: sign out immediately so new user must log in with email and password first
+                                auth.signOut()
                                 onResult(true, null)
                             } else {
                                 onResult(false, dbTask.exception?.localizedMessage)
@@ -64,8 +109,11 @@ object FirebaseRepository {
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
+                    val uid = task.result?.user?.uid ?: auth.currentUser?.uid
+                    if (uid != null) {
+                        setupPresenceSystem(uid)
+                    }
                     updateFcmToken()
-                    setOnlineStatus(true)
                     onResult(true, null)
                 } else {
                     onResult(false, task.exception?.localizedMessage)
@@ -74,14 +122,33 @@ object FirebaseRepository {
     }
 
     fun signOut() {
-        setOnlineStatus(false)
+        val uid = currentUser?.uid
+        if (uid != null) {
+            val userRef = database.reference.child("users").child(uid)
+            userRef.child("isOnline").setValue(false)
+            userRef.child("online").setValue(false)
+            userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+            userRef.child("isOnline").onDisconnect().cancel()
+            userRef.child("online").onDisconnect().cancel()
+            userRef.child("lastSeen").onDisconnect().cancel()
+        }
+        presenceConnectedListener?.let {
+            database.reference.child(".info/connected").removeEventListener(it)
+            presenceConnectedListener = null
+        }
+        currentPresenceUid = null
         auth.signOut()
     }
 
     fun setOnlineStatus(isOnline: Boolean) {
         val uid = currentUser?.uid ?: return
-        database.reference.child("users").child(uid).child("isOnline").setValue(isOnline)
-        database.reference.child("users").child(uid).child("lastSeen").setValue(System.currentTimeMillis())
+        val userRef = database.reference.child("users").child(uid)
+        userRef.child("isOnline").setValue(isOnline)
+        userRef.child("online").setValue(isOnline)
+        userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+        if (isOnline) {
+            setupPresenceSystem(uid)
+        }
     }
 
     fun updateFcmToken() {
@@ -129,7 +196,11 @@ object FirebaseRepository {
                     for (child in snapshot.children) {
                         val user = child.getValue(User::class.java)
                         if (user != null && user.role == "child") {
-                            list.add(user)
+                            val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java)
+                                ?: child.child("online").getValue(Boolean::class.java)
+                                ?: user.isOnline
+                            val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
+                            list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
                         }
                     }
                     onUsersUpdated(list)

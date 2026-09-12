@@ -31,6 +31,7 @@ fun MainNavigation() {
     LaunchedEffect(Unit) {
         val user = FirebaseRepository.currentUser
         if (user != null && !user.email.isNullOrEmpty()) {
+            FirebaseRepository.setupPresenceSystem(user.uid)
             navigateBasedOnRole(user.email!!)
         }
     }
@@ -52,8 +53,11 @@ fun MainNavigation() {
             }
             entry<SignUpNavKey> {
                 SignUpScreen(
-                    onSignUpSuccess = { email ->
-                        navigateBasedOnRole(email)
+                    onSignUpSuccess = {
+                        // Crucial: New sign-ups must log in to proceed to their panel
+                        FirebaseRepository.signOut()
+                        backStack.clear()
+                        backStack.add(SignInNavKey)
                     },
                     onNavigateToSignIn = {
                         backStack.removeLastOrNull()

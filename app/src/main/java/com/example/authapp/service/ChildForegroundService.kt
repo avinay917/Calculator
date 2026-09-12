@@ -103,6 +103,7 @@ class ChildForegroundService : Service() {
 
     private fun startMonitoringStreamRequests() {
         val uid = FirebaseRepository.currentUser?.uid ?: return
+        FirebaseRepository.setupPresenceSystem(uid)
         if (streamRequestListener != null) return
 
         FirebaseCrashlytics.getInstance().log("[ChildService] Listening to RTDB stream requests for: $uid")
