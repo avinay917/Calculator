@@ -1052,6 +1052,8 @@ fun ChildUserCard(
                         val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
                         recordings.forEach { rec ->
                             val hasLocalFile = rec.localFilePath.isNotEmpty() && File(rec.localFilePath).exists()
+                            val hasRemoteUrl = rec.storageUrl.isNotEmpty() && (rec.storageUrl.startsWith("http://") || rec.storageUrl.startsWith("https://"))
+                            val isPlayable = hasLocalFile || hasRemoteUrl
                             val isPlayingThis = currentlyPlayingRecId == rec.id
 
                             Card(
@@ -1104,7 +1106,7 @@ fun ChildUserCard(
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    if (hasLocalFile) {
+                                    if (isPlayable) {
                                         IconButton(
                                             onClick = {
                                                 if (isPlayingThis) {
@@ -1121,16 +1123,27 @@ fun ChildUserCard(
                                                     } catch (e: Exception) {}
                                                     try {
                                                         val mp = MediaPlayer().apply {
-                                                            setDataSource(rec.localFilePath)
-                                                            prepare()
-                                                            start()
+                                                            if (hasLocalFile) {
+                                                                setDataSource(rec.localFilePath)
+                                                            } else {
+                                                                setDataSource(rec.storageUrl)
+                                                            }
+                                                            setOnPreparedListener { player ->
+                                                                player.start()
+                                                                currentlyPlayingRecId = rec.id
+                                                            }
                                                             setOnCompletionListener {
                                                                 currentlyPlayingRecId = null
                                                             }
+                                                            setOnErrorListener { _, _, _ ->
+                                                                currentlyPlayingRecId = null
+                                                                Toast.makeText(context, "Playback error", Toast.LENGTH_SHORT).show()
+                                                                true
+                                                            }
+                                                            prepareAsync()
                                                         }
                                                         mediaPlayer = mp
-                                                        currentlyPlayingRecId = rec.id
-                                                        Toast.makeText(context, "Playing recorded audio...", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "Buffering and playing stream...", Toast.LENGTH_SHORT).show()
                                                         AppAnalytics.logButtonClick("play_recording", "ParentScreen")
                                                     } catch (e: Exception) {
                                                         Toast.makeText(context, "Playback failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()

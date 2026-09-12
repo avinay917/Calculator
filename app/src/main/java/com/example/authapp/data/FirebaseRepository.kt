@@ -45,16 +45,19 @@ object FirebaseRepository {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val connected = snapshot.getValue(Boolean::class.java) ?: false
                 if (connected) {
-                    // When connection is lost (mobile data off, wifi off, app killed),
-                    // Firebase server will automatically set isOnline to false & update lastSeen.
-                    userRef.child("isOnline").onDisconnect().setValue(false)
-                    userRef.child("online").onDisconnect().setValue(false)
-                    userRef.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
+                    val disconnectMap = mapOf<String, Any>(
+                        "isOnline" to false,
+                        "online" to false,
+                        "lastSeen" to ServerValue.TIMESTAMP
+                    )
+                    userRef.onDisconnect().updateChildren(disconnectMap)
 
-                    // Mark user as actively connected now
-                    userRef.child("isOnline").setValue(true)
-                    userRef.child("online").setValue(true)
-                    userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+                    val onlineMap = mapOf<String, Any>(
+                        "isOnline" to true,
+                        "online" to true,
+                        "lastSeen" to ServerValue.TIMESTAMP
+                    )
+                    userRef.updateChildren(onlineMap)
                 }
             }
 
@@ -125,12 +128,13 @@ object FirebaseRepository {
         val uid = currentUser?.uid
         if (uid != null) {
             val userRef = database.reference.child("users").child(uid)
-            userRef.child("isOnline").setValue(false)
-            userRef.child("online").setValue(false)
-            userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
-            userRef.child("isOnline").onDisconnect().cancel()
-            userRef.child("online").onDisconnect().cancel()
-            userRef.child("lastSeen").onDisconnect().cancel()
+            val offlineMap = mapOf<String, Any>(
+                "isOnline" to false,
+                "online" to false,
+                "lastSeen" to ServerValue.TIMESTAMP
+            )
+            userRef.updateChildren(offlineMap)
+            userRef.onDisconnect().cancel()
         }
         presenceConnectedListener?.let {
             database.reference.child(".info/connected").removeEventListener(it)
@@ -143,9 +147,12 @@ object FirebaseRepository {
     fun setOnlineStatus(isOnline: Boolean) {
         val uid = currentUser?.uid ?: return
         val userRef = database.reference.child("users").child(uid)
-        userRef.child("isOnline").setValue(isOnline)
-        userRef.child("online").setValue(isOnline)
-        userRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+        val statusMap = mapOf<String, Any>(
+            "isOnline" to isOnline,
+            "online" to isOnline,
+            "lastSeen" to ServerValue.TIMESTAMP
+        )
+        userRef.updateChildren(statusMap)
         if (isOnline) {
             setupPresenceSystem(uid)
         }
@@ -224,6 +231,7 @@ object FirebaseRepository {
         )
         database.reference.child("streams").child(childId).child("status").setValue(requestData)
             .addOnSuccessListener {
+                database.reference.child("users").child(childId).child("streamWakeup").setValue(System.currentTimeMillis())
                 onComplete(sessionId)
             }
     }
@@ -449,8 +457,10 @@ object FirebaseRepository {
         val ref = database.reference.child("users").child(childId).child("locationRequest")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
+                val reqTime = snapshot.getValue(Long::class.java)
+                if (reqTime != null && reqTime > 0L) {
                     onRequestReceived()
+                    ref.removeValue()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}

@@ -46,6 +46,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop service: ${e.localizedMessage}")
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
+        } else if (action == "REFRESH_LOCATION" || action == "WAKEUP") {
+            val intent = Intent(this, ChildForegroundService::class.java).apply {
+                this.action = ChildForegroundService.ACTION_START_MONITORING
+            }
+            try {
+                ContextCompat.startForegroundService(this, intent)
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[FCM] Failed to start service for wake-up: ${e.localizedMessage}")
+            }
         }
     }
 }
