@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
                         downloadError = err
                       }
                     )
+                    isDownloading = false
                   }
                 }
               },

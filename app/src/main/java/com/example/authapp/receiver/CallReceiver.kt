@@ -124,7 +124,7 @@ class CallReceiver : BroadcastReceiver() {
                         action = ChildForegroundService.ACTION_STOP_CALL_RECORDING
                     }
                     try {
-                        context.startService(serviceIntent)
+                        ContextCompat.startForegroundService(context, serviceIntent)
                     } catch (e: Exception) {
                         val recordedFile = getRecorder(context).stopCallRecording()
                         if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {

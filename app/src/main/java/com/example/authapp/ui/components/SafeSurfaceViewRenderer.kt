@@ -12,47 +12,50 @@ fun SafeSurfaceViewRenderer(
     eglContext: EglBase.Context?,
     modifier: Modifier = Modifier
 ) {
+    if (eglContext == null) return
+
     AndroidView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
                 setEnableHardwareScaler(true)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
-                setZOrderMediaOverlay(true)
-                if (eglContext != null) {
-                    try {
-                        init(eglContext, object : RendererCommon.RendererEvents {
-                            override fun onFirstFrameRendered() {
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
-                            }
-                            override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
-                            }
-                        })
-                    } catch (t: Throwable) {
-                        FirebaseCrashlytics.getInstance().recordException(t)
-                    }
+                try {
+                    init(eglContext, object : RendererCommon.RendererEvents {
+                        override fun onFirstFrameRendered() {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
+                        }
+                        override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
+                        }
+                    })
+                    tag = "INITIALIZED"
+                } catch (t: Throwable) {
+                    FirebaseCrashlytics.getInstance().recordException(t)
                 }
             }
         },
         update = { renderer ->
-            val oldTrack = renderer.tag as? VideoTrack
-            if (oldTrack != videoTrack) {
-                oldTrack?.let {
-                    try {
-                        it.removeSink(renderer)
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] Old videoTrack detached from sink")
-                    } catch (t: Throwable) {
-                        FirebaseCrashlytics.getInstance().recordException(t)
+            // Only attach track if renderer was successfully initialized
+            if (renderer.tag == "INITIALIZED" || renderer.tag is VideoTrack) {
+                val currentTrack = renderer.tag as? VideoTrack
+                if (currentTrack != videoTrack) {
+                    currentTrack?.let {
+                        try {
+                            it.removeSink(renderer)
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] Old videoTrack detached from sink")
+                        } catch (t: Throwable) {
+                            FirebaseCrashlytics.getInstance().recordException(t)
+                        }
                     }
-                }
-                renderer.tag = videoTrack
-                videoTrack?.let { newTrack ->
-                    try {
-                        newTrack.addSink(renderer)
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] New videoTrack attached to sink")
-                    } catch (t: Throwable) {
-                        FirebaseCrashlytics.getInstance().recordException(t)
+                    renderer.tag = videoTrack ?: "INITIALIZED"
+                    videoTrack?.let { newTrack ->
+                        try {
+                            newTrack.addSink(renderer)
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] New videoTrack attached to sink")
+                        } catch (t: Throwable) {
+                            FirebaseCrashlytics.getInstance().recordException(t)
+                        }
                     }
                 }
             }

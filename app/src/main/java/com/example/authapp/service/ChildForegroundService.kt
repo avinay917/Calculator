@@ -667,6 +667,11 @@ class ChildForegroundService : Service() {
         val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
         if (uid.isNotEmpty() && streamRequestListener != null) {
             FirebaseRepository.removeStreamRequestListener(uid, streamRequestListener!!)
+            streamRequestListener = null
+        }
+        if (uid.isNotEmpty() && streamRecordingListener != null) {
+            FirebaseRepository.removeValueListener("streams/$uid/recordCommand", streamRecordingListener!!)
+            streamRecordingListener = null
         }
         if (locationListener != null && locationManager != null) {
             try {

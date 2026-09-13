@@ -95,7 +95,8 @@ object FirebaseRepository {
                                 auth.signOut()
                                 onResult(true, null)
                             } else {
-                                onResult(false, dbTask.exception?.localizedMessage)
+                                auth.currentUser?.delete()
+                                onResult(false, dbTask.exception?.localizedMessage ?: "Failed to save user profile")
                             }
                         }
                 } else {
@@ -214,26 +215,29 @@ object FirebaseRepository {
             })
     }
 
-    fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit) {
-        database.reference.child("users")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<User>()
-                    for (child in snapshot.children) {
-                        val user = child.getValue(User::class.java)
-                        if (user != null && user.role == "child") {
-                            val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java)
-                                ?: child.child("online").getValue(Boolean::class.java)
-                                ?: user.isOnline
-                            val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
-                            list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
-                        }
+    fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit): ValueEventListener {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<User>()
+                for (child in snapshot.children) {
+                    val user = child.getValue(User::class.java)
+                    if (user != null && user.role == "child") {
+                        val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java)
+                            ?: child.child("online").getValue(Boolean::class.java)
+                            ?: user.isOnline
+                        val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
+                        list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
                     }
-                    onUsersUpdated(list)
                 }
+                onUsersUpdated(list)
+            }
 
-                override fun onCancelled(error: DatabaseError) {}
-            })
+            override fun onCancelled(error: DatabaseError) {
+                recordNonFatalError("listenToChildUsers cancelled: ${error.message}", error.toException())
+            }
+        }
+        database.reference.child("users").addValueEventListener(listener)
+        return listener
     }
 
     fun requestStream(childId: String, streamType: String, onComplete: (String) -> Unit) {

@@ -19,10 +19,13 @@ class ParentViewModel : ViewModel() {
 
     private var recordingTimerJob: Job? = null
     private val healthListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
+    private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
     fun loadChildUsers() {
+        if (childUsersListener != null) return
         try {
-            FirebaseRepository.listenToChildUsers { list ->
+            childUsersListener = FirebaseRepository.listenToChildUsers { list ->
                 _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
                 list.forEach { child ->
                     if (child.uid.isNotEmpty() && !healthListeners.containsKey(child.uid)) {
@@ -184,9 +187,10 @@ class ParentViewModel : ViewModel() {
     }
 
     fun loadAllRecordings() {
+        if (recordingsListener != null) return
         _uiState.update { it.copy(isLoadingRecordings = true) }
         try {
-            FirebaseRepository.listenToAllRecordings { list ->
+            recordingsListener = FirebaseRepository.listenToAllRecordings { list ->
                 _uiState.update { it.copy(allRecordings = list, isLoadingRecordings = false) }
             }
         } catch (e: Exception) {
@@ -206,5 +210,13 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("device_health/$childId", listener)
         }
         healthListeners.clear()
+        childUsersListener?.let {
+            FirebaseRepository.removeValueListener("users", it)
+            childUsersListener = null
+        }
+        recordingsListener?.let {
+            FirebaseRepository.removeValueListener("recordings", it)
+            recordingsListener = null
+        }
     }
 }

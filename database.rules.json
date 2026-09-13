@@ -36,7 +36,7 @@
     },
     "app_update": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'parent'"
     },
     "device_health": {
       ".read": "auth != null",

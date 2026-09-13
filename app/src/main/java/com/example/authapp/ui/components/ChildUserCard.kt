@@ -197,8 +197,9 @@ fun ChildUserCard(
                     onClick = {
                         AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
                         if (!user.isOnline) {
-                            Toast.makeText(context, "Child device is offline (No Internet). Wake-up request sent.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline. Waiting for device to connect...", Toast.LENGTH_SHORT).show()
                             AppAnalytics.logActionFailure("audio_cast", "ParentScreen", "Child device is offline")
+                            return@FilledTonalButton
                         }
                         onAudioClick()
                     },
@@ -206,7 +207,7 @@ fun ChildUserCard(
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(imageVector = Icons.Default.Mic, contentDescription = "Audio Stream", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Audio", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
                 }
@@ -215,8 +216,9 @@ fun ChildUserCard(
                     onClick = {
                         AppAnalytics.logButtonClick("video_cast", "ParentScreen", mapOf("childId" to user.uid))
                         if (!user.isOnline) {
-                            Toast.makeText(context, "Child device is offline (No Internet). Wake-up request sent.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline. Waiting for device to connect...", Toast.LENGTH_SHORT).show()
                             AppAnalytics.logActionFailure("video_cast", "ParentScreen", "Child device is offline")
+                            return@FilledTonalButton
                         }
                         onVideoClick()
                     },

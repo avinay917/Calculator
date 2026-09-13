@@ -70,11 +70,13 @@ fun LiveStreamDialog(
                 // Video Mode: Edge-to-edge SafeSurfaceViewRenderer with floating HUD
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (remoteVideoTrack != null && webRtcManager != null) {
-                        SafeSurfaceViewRenderer(
-                            videoTrack = remoteVideoTrack,
-                            eglContext = webRtcManager.eglBase.eglBaseContext,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        key(remoteVideoTrack) {
+                            SafeSurfaceViewRenderer(
+                                videoTrack = remoteVideoTrack,
+                                eglContext = webRtcManager.eglBase.eglBaseContext,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     } else {
                         Box(
                             modifier = Modifier.fillMaxSize(),

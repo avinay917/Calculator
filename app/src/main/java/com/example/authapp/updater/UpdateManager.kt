@@ -73,7 +73,12 @@ object UpdateManager {
         onError: (String) -> Unit
     ) {
         withContext(Dispatchers.IO) {
+            var activeConn: HttpURLConnection? = null
             try {
+                if (!apkUrl.startsWith("https://", ignoreCase = true)) {
+                    throw IllegalArgumentException("Only secure HTTPS APK URLs are supported")
+                }
+
                 val updatesDir = File(context.cacheDir, "updates").apply {
                     if (!exists()) mkdirs()
                 }
@@ -81,7 +86,6 @@ object UpdateManager {
                 if (apkFile.exists()) apkFile.delete()
 
                 var currentUrl = apkUrl
-                var connection: HttpURLConnection? = null
                 var redirects = 0
                 val maxRedirects = 5
 
@@ -102,41 +106,38 @@ object UpdateManager {
                             continue
                         }
                     }
-                    connection = conn
+                    activeConn = conn
                     break
                 }
 
-                val activeConn = connection ?: throw IllegalStateException("Failed to establish connection")
-                if (activeConn.responseCode !in 200..299) {
+                val conn = activeConn ?: throw IllegalStateException("Failed to establish connection")
+                if (conn.responseCode !in 200..299) {
                     withContext(Dispatchers.Main) {
-                        onError("Server returned HTTP ${activeConn.responseCode}")
+                        onError("Server returned HTTP ${conn.responseCode}")
                     }
                     return@withContext
                 }
 
-                val totalBytes = activeConn.contentLength.toFloat()
-                val inputStream = activeConn.inputStream
-                val outputStream = FileOutputStream(apkFile)
+                val totalBytes = conn.contentLength.toFloat()
+                conn.inputStream.use { input ->
+                    FileOutputStream(apkFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        var downloadedBytes = 0L
 
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var downloadedBytes = 0L
-
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-                    if (totalBytes > 0) {
-                        val progress = downloadedBytes / totalBytes
-                        withContext(Dispatchers.Main) {
-                            onProgress(progress.coerceIn(0f, 1f))
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            if (totalBytes > 0) {
+                                val progress = downloadedBytes / totalBytes
+                                withContext(Dispatchers.Main) {
+                                    onProgress(progress.coerceIn(0f, 1f))
+                                }
+                            }
                         }
+                        output.flush()
                     }
                 }
-
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-                activeConn.disconnect()
 
                 withContext(Dispatchers.Main) {
                     installApk(context, apkFile)
@@ -146,6 +147,8 @@ object UpdateManager {
                 withContext(Dispatchers.Main) {
                     onError("Download failed: ${e.localizedMessage}")
                 }
+            } finally {
+                activeConn?.disconnect()
             }
         }
     }

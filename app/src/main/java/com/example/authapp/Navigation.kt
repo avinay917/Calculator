@@ -15,7 +15,16 @@ import com.example.authapp.ui.screens.SignUpScreen
 @Composable
 fun MainNavigation() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val backStack = rememberNavBackStack(SignInNavKey)
+    val currentUser = FirebaseRepository.currentUser
+    val cachedRole = remember(context) { com.example.authapp.data.AppPreferences.getUserRole(context) }
+    val initialNavKey: Any = remember {
+        if (currentUser != null && !currentUser.email.isNullOrEmpty()) {
+            if (cachedRole == "parent") ParentNavKey(email = currentUser.email!!) else ChildNavKey(email = currentUser.email!!)
+        } else {
+            SignInNavKey
+        }
+    }
+    val backStack = rememberNavBackStack(initialNavKey)
 
     fun navigateBasedOnRole(email: String) {
         val uid = FirebaseRepository.currentUser?.uid ?: return
@@ -46,6 +55,9 @@ fun MainNavigation() {
             entry<SignInNavKey> {
                 SignInScreen(
                     onSignInSuccess = { email ->
+                        FirebaseRepository.currentUser?.let {
+                            FirebaseRepository.setupPresenceSystem(it.uid)
+                        }
                         navigateBasedOnRole(email)
                     },
                     onNavigateToSignUp = {

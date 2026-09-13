@@ -27,6 +27,8 @@ class WebRtcManager(
     private var isRemoteDescriptionSet = false
     @Volatile
     private var isCameraRunning = false
+    @Volatile
+    private var isStopped = false
 
     init {
         try {
@@ -39,7 +41,7 @@ class WebRtcManager(
             val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
 
             val adm = if (isReceiverOnly) {
-                // Receiver only needs audio output/playback, no recording hardware access
+                // Receiver only needs audio output/playback — no mic hardware access
                 JavaAudioDeviceModule.builder(context)
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
@@ -89,6 +91,7 @@ class WebRtcManager(
         onSdpCreated: (SessionDescription) -> Unit,
         onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {}
     ) {
+        if (isStopped) return
         val perfTrace = FirebasePerformance.getInstance().newTrace("webrtc_stream_init_$streamType")
         perfTrace.start()
 
@@ -109,7 +112,7 @@ class WebRtcManager(
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
             override fun onIceCandidate(candidate: IceCandidate?) {
-                candidate?.let { onIceCandidate(it) }
+                if (!isStopped) candidate?.let { onIceCandidate(it) }
             }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
             override fun onAddStream(stream: MediaStream?) {}
@@ -117,19 +120,15 @@ class WebRtcManager(
             override fun onDataChannel(channel: DataChannel?) {}
             override fun onRenegotiationNeeded() {}
             override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
-                receiver?.track()?.let { onRemoteTrackAdded(it) }
+                if (!isStopped) receiver?.track()?.let { onRemoteTrackAdded(it) }
             }
         })
 
         // Audio Track with Clean Studio Surveillance & Vibration Filter
         val audioConstraints = MediaConstraints().apply {
-            // Standard Automatic Gain Control boosts soft speech cleanly
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            // Noise Suppression eliminates stationary background hum (Fan, AC, humming noise)
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            // High-pass filter cuts sub-80Hz low rumble, table vibrations, and motor hum
             mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            // Broadcaster does not play receiver audio, so disable echo cancellation
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "false"))
             mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "false"))
@@ -167,15 +166,11 @@ class WebRtcManager(
                     }
                 }
 
-                // If preferred camera failed to startCapture, try fallback to back camera!
                 if (!started) {
-                    try {
-                        capturer.dispose()
-                    } catch (e: Exception) {}
-                    try {
-                        surfaceTextureHelper?.dispose()
-                    } catch (e: Exception) {}
+                    try { capturer.dispose() } catch (e: Exception) {}
+                    try { surfaceTextureHelper?.dispose() } catch (e: Exception) {}
                     surfaceTextureHelper = null
+                    videoCapturer = null
 
                     val fallbackCapturer = createVideoCapturer(preferFront = false)
                     if (fallbackCapturer != null) {
@@ -211,7 +206,6 @@ class WebRtcManager(
             }
         }
 
-        // Create SDP Offer (Broadcaster produces streams for the Parent)
         val mediaConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
@@ -219,21 +213,22 @@ class WebRtcManager(
 
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
+                if (isStopped) return
                 desc?.let { originalOffer ->
                     val optimizedOffer = SessionDescription(originalOffer.type, optimizeOpusSdp(originalOffer.description))
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
-                            perfTrace.stop()
-                            onSdpCreated(optimizedOffer)
+                            if (!isStopped) {
+                                perfTrace.stop()
+                                onSdpCreated(optimizedOffer)
+                            }
                         }
                         override fun onCreateFailure(p0: String?) {
                             FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Create Failure: $p0")
-                            FirebaseCrashlytics.getInstance().recordException(Exception("Local SDP Create Failure: $p0"))
                         }
                         override fun onSetFailure(p0: String?) {
                             FirebaseCrashlytics.getInstance().log("[WebRTC] Local SDP Set Failure: $p0")
-                            FirebaseCrashlytics.getInstance().recordException(Exception("Local SDP Set Failure: $p0"))
                         }
                     }, optimizedOffer)
                 }
@@ -241,23 +236,22 @@ class WebRtcManager(
             override fun onSetSuccess() {}
             override fun onCreateFailure(error: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Offer Create Failure: $error")
-                FirebaseCrashlytics.getInstance().recordException(Exception("Offer Create Failure: $error"))
             }
             override fun onSetFailure(error: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Offer Set Failure: $error")
-                FirebaseCrashlytics.getInstance().recordException(Exception("Offer Set Failure: $error"))
             }
         }, mediaConstraints)
     }
 
     fun setRemoteAnswer(sdpString: String, onSetSuccess: (() -> Unit)? = null) {
+        if (isStopped) return
         val sdp = SessionDescription(SessionDescription.Type.ANSWER, sdpString)
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Remote Answer set successfully.")
                 drainPendingCandidates()
-                onSetSuccess?.invoke()
+                if (!isStopped) onSetSuccess?.invoke()
             }
             override fun onCreateFailure(p0: String?) {}
             override fun onSetFailure(p0: String?) {
@@ -274,18 +268,30 @@ class WebRtcManager(
         onRemoteVideoTrack: (VideoTrack) -> Unit,
         onRemoteAudioTrack: (AudioTrack) -> Unit = {}
     ) {
+        if (isStopped) return
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
 
         peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
-            override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
+            override fun onSignalingChange(state: PeerConnection.SignalingState?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Signaling State: $state")
+            }
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] ICE Connection State: $state")
+                when (state) {
+                    PeerConnection.IceConnectionState.FAILED ->
+                        AppHealthTelemetry.logDiagnostic(context, "WEBRTC_RECEIVER", "FAILED", "Receiver ICE connection failed")
+                    PeerConnection.IceConnectionState.CONNECTED ->
+                        AppHealthTelemetry.logDiagnostic(context, "WEBRTC_RECEIVER", "SUCCESS", "Receiver ICE connected")
+                    PeerConnection.IceConnectionState.DISCONNECTED ->
+                        FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] ICE disconnected")
+                    else -> {}
+                }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
             override fun onIceCandidate(candidate: IceCandidate?) {
-                candidate?.let { onIceCandidate(it) }
+                if (!isStopped) candidate?.let { onIceCandidate(it) }
             }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
             override fun onAddStream(stream: MediaStream?) {}
@@ -293,19 +299,26 @@ class WebRtcManager(
             override fun onDataChannel(channel: DataChannel?) {}
             override fun onRenegotiationNeeded() {}
             override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
+                if (isStopped) return
                 val track = receiver?.track()
-                if (track is VideoTrack) {
-                    FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote VideoTrack received")
-                    onRemoteVideoTrack(track)
-                } else if (track is AudioTrack) {
-                    FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote AudioTrack received")
-                    track.setEnabled(true)
-                    track.setVolume(1.0)
-                    onRemoteAudioTrack(track)
+                when (track) {
+                    is VideoTrack -> {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote VideoTrack received")
+                        track.setEnabled(true)
+                        onRemoteVideoTrack(track)
+                    }
+                    is AudioTrack -> {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote AudioTrack received")
+                        track.setEnabled(true)
+                        track.setVolume(1.0)
+                        onRemoteAudioTrack(track)
+                    }
+                    else -> {}
                 }
             }
         })
 
+        // Add RECV_ONLY transceivers so SDP answer includes audio + video slots
         try {
             peerConnection?.addTransceiver(
                 MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
@@ -324,10 +337,12 @@ class WebRtcManager(
         offerSdpString: String,
         onAnswerCreated: (SessionDescription) -> Unit
     ) {
+        if (isStopped) return
         val offerDesc = SessionDescription(SessionDescription.Type.OFFER, offerSdpString)
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
+                if (isStopped) return
                 drainPendingCandidates()
                 val mediaConstraints = MediaConstraints().apply {
                     mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
@@ -335,12 +350,13 @@ class WebRtcManager(
                 }
                 peerConnection?.createAnswer(object : SdpObserver {
                     override fun onCreateSuccess(answerDesc: SessionDescription?) {
+                        if (isStopped) return
                         answerDesc?.let { originalAnswer ->
                             val optimizedAnswer = SessionDescription(originalAnswer.type, optimizeOpusSdp(originalAnswer.description))
                             peerConnection?.setLocalDescription(object : SdpObserver {
                                 override fun onCreateSuccess(p0: SessionDescription?) {}
                                 override fun onSetSuccess() {
-                                    onAnswerCreated(optimizedAnswer)
+                                    if (!isStopped) onAnswerCreated(optimizedAnswer)
                                 }
                                 override fun onCreateFailure(p0: String?) {}
                                 override fun onSetFailure(p0: String?) {}
@@ -366,11 +382,13 @@ class WebRtcManager(
     }
 
     fun addRemoteCandidate(sdpMid: String, sdpMLineIndex: Int, sdp: String) {
+        if (isStopped) return
         val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
         synchronized(pendingCandidates) {
-            if (isRemoteDescriptionSet && peerConnection?.remoteDescription != null) {
+            // Gate on actual remote description being set, not just the flag
+            if (peerConnection?.remoteDescription != null) {
                 val added = peerConnection?.addIceCandidate(candidate)
-                FirebaseCrashlytics.getInstance().log("[WebRTC] Added remote ICE candidate: $added")
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Added remote ICE candidate directly: $added")
             } else {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Queued remote ICE candidate (pending remote description)")
                 pendingCandidates.add(candidate)
@@ -383,7 +401,7 @@ class WebRtcManager(
             isRemoteDescriptionSet = true
             FirebaseCrashlytics.getInstance().log("[WebRTC] Draining ${pendingCandidates.size} queued ICE candidates")
             for (candidate in pendingCandidates) {
-                peerConnection?.addIceCandidate(candidate)
+                if (!isStopped) peerConnection?.addIceCandidate(candidate)
             }
             pendingCandidates.clear()
         }
@@ -492,24 +510,15 @@ class WebRtcManager(
             return sdpDescription.lines().joinToString("\r\n") { line ->
                 if (line.startsWith("a=fmtp:111") || (line.startsWith("a=fmtp:") && line.contains("opus", ignoreCase = true))) {
                     var modified = line
-                    if (!modified.contains("maxaveragebitrate=")) {
-                        modified += ";maxaveragebitrate=64000"
-                    }
-                    if (!modified.contains("sprop-maxcapturerate=")) {
-                        modified += ";sprop-maxcapturerate=48000"
-                    }
-                    if (!modified.contains("usedtx=")) {
-                        modified += ";usedtx=1"
-                    }
-                    if (!modified.contains("useinbandfec=")) {
-                        modified += ";useinbandfec=1"
-                    }
-                    if (!modified.contains("stereo=")) {
-                        modified += ";stereo=0"
-                    }
+                    if (!modified.contains("maxaveragebitrate=")) modified += ";maxaveragebitrate=64000"
+                    if (!modified.contains("sprop-maxcapturerate=")) modified += ";sprop-maxcapturerate=48000"
+                    if (!modified.contains("usedtx=")) modified += ";usedtx=1"
+                    if (!modified.contains("useinbandfec=")) modified += ";useinbandfec=1"
+                    if (!modified.contains("stereo=")) modified += ";stereo=0"
                     modified
                 } else if (!hasFmtp && line.startsWith("a=rtpmap:111 opus/48000")) {
-                    "$line\r\na=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0"
+                    // FIX: do NOT add \r\n inside the line — joinToString already adds \r\n between lines
+                    "$line\na=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0"
                 } else {
                     line
                 }
@@ -523,6 +532,7 @@ class WebRtcManager(
     }
 
     fun switchCamera(onSwitched: ((Boolean) -> Unit)? = null) {
+        if (isStopped) return
         val capturer = videoCapturer as? CameraVideoCapturer
         if (capturer == null || !isCameraRunning) {
             FirebaseCrashlytics.getInstance().log("[WebRTC] switchCamera ignored: camera is not running")
@@ -540,50 +550,53 @@ class WebRtcManager(
     }
 
     fun stopStream() {
+        if (isStopped) return
+        isStopped = true
         isCameraRunning = false
-        try {
-            videoCapturer?.stopCapture()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        try {
-            videoCapturer?.dispose()
-        } catch (_: Exception) {}
+
+        // Stop and dispose camera capturer
+        try { videoCapturer?.stopCapture() } catch (_: Throwable) {}
+        try { videoCapturer?.dispose() } catch (_: Throwable) {}
         videoCapturer = null
-        try {
-            surfaceTextureHelper?.dispose()
-        } catch (_: Exception) {}
+
+        // Dispose surface texture helper
+        try { surfaceTextureHelper?.dispose() } catch (_: Throwable) {}
         surfaceTextureHelper = null
-        try {
-            videoTrack?.setEnabled(false)
-            videoTrack?.dispose()
-        } catch (_: Exception) {}
+
+        // Dispose video track & source (FIX: videoSource was never disposed before)
+        try { videoTrack?.setEnabled(false); videoTrack?.dispose() } catch (_: Throwable) {}
         videoTrack = null
-        try {
-            audioTrack?.setEnabled(false)
-            audioTrack?.dispose()
-        } catch (_: Exception) {}
+        try { videoSource?.dispose() } catch (_: Throwable) {}
+        videoSource = null
+
+        // Dispose audio track & source (FIX: audioSource was never disposed before)
+        try { audioTrack?.setEnabled(false); audioTrack?.dispose() } catch (_: Throwable) {}
         audioTrack = null
-        try {
-            peerConnection?.close()
-        } catch (_: Throwable) {}
+        try { audioSource?.dispose() } catch (_: Throwable) {}
+        audioSource = null
+
+        // Close peer connection
+        try { peerConnection?.close() } catch (_: Throwable) {}
         peerConnection = null
-        try {
-            audioDeviceModule?.release()
-        } catch (_: Throwable) {}
+
+        // Release audio device module
+        try { audioDeviceModule?.release() } catch (_: Throwable) {}
         audioDeviceModule = null
-        try {
-            factory?.dispose()
-        } catch (_: Throwable) {}
+
+        // Dispose factory
+        try { factory?.dispose() } catch (_: Throwable) {}
         factory = null
-        try {
-            eglBase.release()
-        } catch (t: Throwable) {
+
+        // Release EGL context last
+        try { eglBase.release() } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${t.localizedMessage}")
         }
+
         synchronized(pendingCandidates) {
             pendingCandidates.clear()
             isRemoteDescriptionSet = false
         }
+
+        FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() complete — all resources released")
     }
 }

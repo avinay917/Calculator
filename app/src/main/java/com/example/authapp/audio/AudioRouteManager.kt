@@ -1,9 +1,11 @@
 package com.example.authapp.audio
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -15,13 +17,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AudioOutputRoute {
-    SPEAKER,   // Neeche waala main speaker (Loudspeaker)
-    EARPIECE,  // Upar waala phone receiver (Private ear listening)
+    SPEAKER,   // Main loudspeaker
+    EARPIECE,  // Phone earpiece receiver
     BLUETOOTH  // Wireless Bluetooth headset / earbuds
 }
 
-class AudioRouteManager(private val context: Context) {
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+class AudioRouteManager(context: Context) {
+    private val appContext = context.applicationContext
+    private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     private val _currentRoute = MutableStateFlow(AudioOutputRoute.SPEAKER)
     val currentRoute: StateFlow<AudioOutputRoute> = _currentRoute.asStateFlow()
@@ -38,8 +41,19 @@ class AudioRouteManager(private val context: Context) {
             setRoute(AudioOutputRoute.SPEAKER)
             registerListeners()
             checkAndHandleBluetooth()
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] Init error: ${e.localizedMessage}")
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] Init error: ${t.localizedMessage}")
+        }
+    }
+
+    private fun hasBluetoothPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(
+                appContext,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
         }
     }
 
@@ -55,8 +69,8 @@ class AudioRouteManager(private val context: Context) {
             }
             try {
                 audioManager?.registerAudioDeviceCallback(audioDeviceCallback, null)
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerAudioDeviceCallback error: ${e.localizedMessage}")
+            } catch (t: Throwable) {
+                FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerAudioDeviceCallback error: ${t.localizedMessage}")
             }
         }
 
@@ -73,42 +87,45 @@ class AudioRouteManager(private val context: Context) {
                 }
             }
             ContextCompat.registerReceiver(
-                context,
-                bluetoothReceiver,
+                appContext,
+                bluetoothReceiver!!,
                 filter,
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerReceiver error: ${e.localizedMessage}")
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerReceiver error: ${t.localizedMessage}")
         }
     }
 
     fun checkAndHandleBluetooth() {
-        val am = audioManager ?: return
-        val hasBt: Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            am.availableCommunicationDevices.any {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+        try {
+            val am = audioManager ?: return
+            val hasBt: Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (hasBluetoothPermission()) {
+                    am.availableCommunicationDevices.any {
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                    }
+                } else false
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+            } else {
+                false
             }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+
+            val wasConnected = _isBluetoothConnected.value
+            _isBluetoothConnected.value = hasBt
+
+            // Auto-switch to Bluetooth when newly connected
+            if (hasBt && !wasConnected) {
+                setRoute(AudioOutputRoute.BLUETOOTH)
+            } else if (!hasBt && _currentRoute.value == AudioOutputRoute.BLUETOOTH) {
+                setRoute(AudioOutputRoute.SPEAKER)
             }
-        } else {
-            false
-        }
-
-        val wasConnected = _isBluetoothConnected.value
-        _isBluetoothConnected.value = hasBt
-
-        // Auto-switch to Bluetooth when newly connected!
-        if (hasBt && !wasConnected) {
-            setRoute(AudioOutputRoute.BLUETOOTH)
-        } else if (!hasBt && _currentRoute.value == AudioOutputRoute.BLUETOOTH) {
-            // Fall back to Speaker if Bluetooth disconnected
-            setRoute(AudioOutputRoute.SPEAKER)
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] checkAndHandleBluetooth error: ${t.localizedMessage}")
         }
     }
 
@@ -142,14 +159,17 @@ class AudioRouteManager(private val context: Context) {
                         _currentRoute.value = AudioOutputRoute.EARPIECE
                     }
                     AudioOutputRoute.BLUETOOTH -> {
-                        val bt = am.availableCommunicationDevices.firstOrNull {
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                            it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
-                        }
-                        if (bt != null) {
-                            am.setCommunicationDevice(bt)
-                            _currentRoute.value = AudioOutputRoute.BLUETOOTH
+                        if (hasBluetoothPermission()) {
+                            val bt = am.availableCommunicationDevices.firstOrNull {
+                                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                            }
+                            if (bt != null) {
+                                am.setCommunicationDevice(bt)
+                                _currentRoute.value = AudioOutputRoute.BLUETOOTH
+                            } else {
+                                setRoute(AudioOutputRoute.SPEAKER)
+                            }
                         } else {
                             setRoute(AudioOutputRoute.SPEAKER)
                         }
@@ -161,7 +181,7 @@ class AudioRouteManager(private val context: Context) {
                         try {
                             am.stopBluetoothSco()
                             am.isBluetoothScoOn = false
-                        } catch (e: Exception) {}
+                        } catch (_: Exception) {}
                         am.isSpeakerphoneOn = true
                         _currentRoute.value = AudioOutputRoute.SPEAKER
                     }
@@ -169,7 +189,7 @@ class AudioRouteManager(private val context: Context) {
                         try {
                             am.stopBluetoothSco()
                             am.isBluetoothScoOn = false
-                        } catch (e: Exception) {}
+                        } catch (_: Exception) {}
                         am.isSpeakerphoneOn = false
                         _currentRoute.value = AudioOutputRoute.EARPIECE
                     }
@@ -179,14 +199,14 @@ class AudioRouteManager(private val context: Context) {
                             am.startBluetoothSco()
                             am.isBluetoothScoOn = true
                             _currentRoute.value = AudioOutputRoute.BLUETOOTH
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             setRoute(AudioOutputRoute.SPEAKER)
                         }
                     }
                 }
             }
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] setRoute error: ${e.localizedMessage}")
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] setRoute error: ${t.localizedMessage}")
         }
     }
 
@@ -216,17 +236,17 @@ class AudioRouteManager(private val context: Context) {
             }
             if (bluetoothReceiver != null) {
                 try {
-                    context.unregisterReceiver(bluetoothReceiver)
-                } catch (e: Exception) {}
+                    appContext.unregisterReceiver(bluetoothReceiver)
+                } catch (_: Exception) {}
             }
             audioManager?.mode = AudioManager.MODE_NORMAL
             audioManager?.isSpeakerphoneOn = false
             try {
                 audioManager?.stopBluetoothSco()
                 audioManager?.isBluetoothScoOn = false
-            } catch (e: Exception) {}
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] release error: ${e.localizedMessage}")
+            } catch (_: Exception) {}
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[AudioRouteManager] release error: ${t.localizedMessage}")
         }
     }
 }
