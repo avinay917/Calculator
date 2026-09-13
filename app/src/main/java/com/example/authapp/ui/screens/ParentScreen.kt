@@ -187,18 +187,18 @@ fun ParentScreen(
                     FirebaseCrashlytics.getInstance().log("[ParentScreen] AudioManager init error: ${e.localizedMessage}")
                 }
 
-                val iceServers = WebRtcManager.getDefaultIceServers()
-                try {
-                    audioRouteManager.checkAndHandleBluetooth()
-                    if (!isBluetoothConnected) {
-                        audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+                FirebaseRepository.fetchIceServers { iceServers ->
+                    try {
+                        audioRouteManager.checkAndHandleBluetooth()
+                        if (!isBluetoothConnected) {
+                            audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+                        }
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ParentScreen] audioRouteManager error: ${e.localizedMessage}")
                     }
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ParentScreen] audioRouteManager error: ${e.localizedMessage}")
-                }
 
-                manager.startReceiver(
-                    iceServers = iceServers,
+                    manager.startReceiver(
+                        iceServers = iceServers,
                     onIceCandidate = { candidate ->
                         try {
                             val candMap = mapOf(
@@ -264,6 +264,7 @@ fun ParentScreen(
                         FirebaseCrashlytics.getInstance().recordException(e)
                     }
                 }
+                } // end fetchIceServers
             } catch (t: Throwable) {
                 FirebaseCrashlytics.getInstance().recordException(t)
                 AppHealthTelemetry.logDiagnostic(context, "LIVE_STREAM_RECEIVER", "FAILED", "Receiver initialization failed: ${t.localizedMessage}", t.message)

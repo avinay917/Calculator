@@ -642,4 +642,35 @@ object FirebaseRepository {
         ref.addValueEventListener(listener)
         return listener
     }
+
+    fun fetchIceServers(onResult: (List<org.webrtc.PeerConnection.IceServer>) -> Unit) {
+        database.reference.child("ice_servers").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<org.webrtc.PeerConnection.IceServer>()
+                for (item in snapshot.children) {
+                    val uri = item.child("uri").getValue(String::class.java)
+                        ?: item.child("url").getValue(String::class.java)
+                    val username = item.child("username").getValue(String::class.java)
+                    val credential = item.child("credential").getValue(String::class.java)
+                        ?: item.child("password").getValue(String::class.java)
+
+                    if (!uri.isNullOrEmpty()) {
+                        val builder = org.webrtc.PeerConnection.IceServer.builder(uri)
+                        if (!username.isNullOrEmpty()) builder.setUsername(username)
+                        if (!credential.isNullOrEmpty()) builder.setPassword(credential)
+                        list.add(builder.createIceServer())
+                    }
+                }
+                if (list.isNotEmpty()) {
+                    onResult(list)
+                } else {
+                    onResult(com.example.authapp.webrtc.WebRtcManager.getDefaultIceServers())
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                onResult(com.example.authapp.webrtc.WebRtcManager.getDefaultIceServers())
+            }
+        })
+    }
 }

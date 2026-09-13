@@ -401,14 +401,13 @@ class ChildForegroundService : Service() {
             }
 
             webRtcManager = WebRtcManager(applicationContext)
-            val iceServers = WebRtcManager.getDefaultIceServers()
+            FirebaseRepository.fetchIceServers { iceServers ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) with ${iceServers.size} ICE servers for session: $sessionId")
 
-            FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) for session: $sessionId")
-
-            webRtcManager?.startStream(
-                streamType = streamType,
-                iceServers = iceServers,
-                onIceCandidate = { candidate ->
+                webRtcManager?.startStream(
+                    streamType = streamType,
+                    iceServers = iceServers,
+                    onIceCandidate = { candidate ->
                     val candMap = mapOf(
                         "sdpMid" to candidate.sdpMid,
                         "sdpMLineIndex" to candidate.sdpMLineIndex,
@@ -439,6 +438,7 @@ class ChildForegroundService : Service() {
                 FirebaseCrashlytics.getInstance().log("[ChildService] Camera flip toggled: isFront=$isFront")
                 webRtcManager?.switchCamera()
             }
+            } // end fetchIceServers
         } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().recordException(t)
             AppHealthTelemetry.logDiagnostic(applicationContext, "WEBRTC_STREAM", "FAILED", "Failed to start WebRTC stream on child: ${t.localizedMessage}", t.message)

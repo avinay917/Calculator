@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <cache-path name="internal_cache" path="." />
-    <files-path name="internal_files" path="." />
-    <external-cache-path name="external_cache" path="." />
-    <external-files-path name="external_files" path="." />
+    <!-- Limit exposure strictly to APK updates directory and app recordings directory -->
+    <cache-path name="app_updates" path="updates" />
+    <files-path name="call_recordings" path="call_recordings" />
+    <files-path name="stream_recordings" path="recordings" />
 </paths>
