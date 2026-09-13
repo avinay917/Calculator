@@ -36,7 +36,9 @@ jobs:
       - name: 4. Build Debug APK
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee build_output.log
+          VERSION_CODE=${{ github.run_number }}
+          TAG_NAME="v2.${VERSION_CODE}"
+          ./gradlew assembleDebug -PversionCode=$VERSION_CODE -PversionName="$TAG_NAME" --stacktrace 2>&1 | tee build_output.log
 
       - name: Upload Build Log
         if: always()

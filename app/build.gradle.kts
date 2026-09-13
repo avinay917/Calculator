@@ -15,8 +15,10 @@ android {
         applicationId = "com.example.authapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        val buildVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 1
+        val buildVersionName = (project.findProperty("versionName") as? String) ?: "1.0"
+        versionCode = buildVersionCode
+        versionName = buildVersionName
     }
 
     lint {
