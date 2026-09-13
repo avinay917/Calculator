@@ -43,13 +43,15 @@ fun ChildScreen(
 ) {
     val context = LocalContext.current
     var hasStage1Permissions by remember { mutableStateOf(false) }
+    var hasCallPermissions by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
 
     fun isMicrophoneAndCameraGranted(): Boolean {
         val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val loc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val loc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         return mic && cam && loc
     }
 
@@ -66,6 +68,8 @@ fun ChildScreen(
 
     fun checkPermissions() {
         hasStage1Permissions = isMicrophoneAndCameraGranted()
+        hasCallPermissions = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             hasOverlayPermission = Settings.canDrawOverlays(context)
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -74,6 +78,10 @@ fun ChildScreen(
             hasOverlayPermission = true
             isBatteryOptimizationIgnored = true
         }
+
+        // Synchronize full real-time device health to Firebase Realtime Database
+        com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
+
         if (hasStage1Permissions) {
             startMonitoringService()
         }
@@ -82,12 +90,21 @@ fun ChildScreen(
     val stage1Launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        hasStage1Permissions = permissions.values.all { it }
+        hasStage1Permissions = isMicrophoneAndCameraGranted()
+        hasCallPermissions = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
+
         if (hasStage1Permissions) {
-            com.example.authapp.analytics.AppAnalytics.logFeatureUsage("child_permissions", "granted")
+            com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                context, "PERMISSIONS", "SUCCESS", "Required media permissions granted by child user"
+            )
             startMonitoringService()
         } else {
-            com.example.authapp.analytics.AppAnalytics.logActionFailure("child_permissions", "ChildScreen", "Required permissions were denied")
+            val deniedList = permissions.filter { !it.value }.keys.joinToString(", ")
+            com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                context, "PERMISSIONS", "FAILED", "Permissions denied by child user: $deniedList"
+            )
         }
     }
 
@@ -112,12 +129,14 @@ fun ChildScreen(
 
     LaunchedEffect(Unit) {
         checkPermissions()
-        if (!hasStage1Permissions) {
+        if (!hasStage1Permissions || !hasCallPermissions) {
             val perms = mutableListOf(
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.CAMERA,
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.READ_CALL_LOG
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -195,13 +214,13 @@ fun ChildScreen(
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = if (hasStage1Permissions) Icons.Default.Check else Icons.Default.Warning,
+                        imageVector = if (hasStage1Permissions && hasCallPermissions) Icons.Default.Check else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (hasStage1Permissions) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        tint = if (hasStage1Permissions && hasCallPermissions) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Stage 1: Media Permissions",
+                        text = "Stage 1: Media & Call Permissions",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
@@ -209,14 +228,14 @@ fun ChildScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Requires Microphone, Camera, Location, and Notification permissions for complete protection.",
+                    text = "Requires Microphone, Camera, Location, Phone Calls, and Notification permissions for complete live stream and call monitoring.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (!hasStage1Permissions) {
+                if (!hasStage1Permissions || !hasCallPermissions) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -227,7 +246,9 @@ fun ChildScreen(
                                     Manifest.permission.RECORD_AUDIO,
                                     Manifest.permission.CAMERA,
                                     Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    Manifest.permission.READ_PHONE_STATE,
+                                    Manifest.permission.READ_CALL_LOG
                                 )
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     perms.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -258,7 +279,7 @@ fun ChildScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(text = "Permissions Granted ✓")
+                        Text(text = "All Core Permissions Granted ✓")
                     }
                 }
             }

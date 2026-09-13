@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
+import com.example.authapp.analytics.AppHealthTelemetry
+import com.example.authapp.data.AppPreferences
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.recorder.CallRecorder
 import com.example.authapp.service.ChildForegroundService
@@ -44,7 +46,12 @@ class CallReceiver : BroadcastReceiver() {
             if (outNumber.isNotEmpty()) {
                 incomingNumber = outNumber
                 isIncoming = false
-                FirebaseCrashlytics.getInstance().log("[CallReceiver] Outgoing call dialed to: $outNumber")
+                AppHealthTelemetry.logDiagnostic(
+                    context,
+                    "CALL_MONITORING",
+                    "OUTGOING_DIAL",
+                    "Outgoing phone call dialed to: $outNumber"
+                )
             }
             return
         }
@@ -61,14 +68,24 @@ class CallReceiver : BroadcastReceiver() {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 isIncoming = true
                 lastState = TelephonyManager.EXTRA_STATE_RINGING
-                FirebaseCrashlytics.getInstance().log("[CallReceiver] Phone RINGING from: $incomingNumber")
+                AppHealthTelemetry.logDiagnostic(
+                    context,
+                    "CALL_MONITORING",
+                    "RINGING",
+                    "Phone ringing: $incomingNumber"
+                )
             }
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 // Call answered or outgoing dialed
                 if (lastState != TelephonyManager.EXTRA_STATE_OFFHOOK) {
                     lastState = TelephonyManager.EXTRA_STATE_OFFHOOK
                     callStartTime = System.currentTimeMillis()
-                    FirebaseCrashlytics.getInstance().log("[CallReceiver] Call OFFHOOK (Active). Starting recording for: $incomingNumber")
+                    AppHealthTelemetry.logDiagnostic(
+                        context,
+                        "CALL_MONITORING",
+                        "OFFHOOK",
+                        "Call active (connected) for: $incomingNumber"
+                    )
 
                     val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
                         action = ChildForegroundService.ACTION_START_CALL_RECORDING
@@ -77,7 +94,13 @@ class CallReceiver : BroadcastReceiver() {
                     try {
                         ContextCompat.startForegroundService(context, serviceIntent)
                     } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().log("[CallReceiver] Foreground service start error: ${e.localizedMessage}")
+                        AppHealthTelemetry.logDiagnostic(
+                            context,
+                            "CALL_MONITORING",
+                            "FAILED",
+                            "Foreground service start error, fallback to direct recorder: ${e.localizedMessage}",
+                            e.localizedMessage
+                        )
                         getRecorder(context).startCallRecording(incomingNumber)
                     }
                 }
@@ -90,7 +113,12 @@ class CallReceiver : BroadcastReceiver() {
                         (System.currentTimeMillis() - callStartTime) / 1000
                     } else 0L
 
-                    FirebaseCrashlytics.getInstance().log("[CallReceiver] Call IDLE (Ended). Duration: ${durationSeconds}s")
+                    AppHealthTelemetry.logDiagnostic(
+                        context,
+                        "CALL_MONITORING",
+                        "ENDED",
+                        "Call finished with duration: ${durationSeconds}s"
+                    )
 
                     val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
                         action = ChildForegroundService.ACTION_STOP_CALL_RECORDING
@@ -100,8 +128,8 @@ class CallReceiver : BroadcastReceiver() {
                     } catch (e: Exception) {
                         val recordedFile = getRecorder(context).stopCallRecording()
                         if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                            val currentUid = FirebaseRepository.currentUser?.uid
-                            if (currentUid != null) {
+                            val currentUid = AppHealthTelemetry.getEffectiveUserId(context)
+                            if (currentUid.isNotEmpty()) {
                                 CoroutineScope(Dispatchers.IO).launch {
                                     try {
                                         val fileUri = Uri.fromFile(recordedFile)
@@ -113,7 +141,13 @@ class CallReceiver : BroadcastReceiver() {
                                             localFilePath = recordedFile.absolutePath
                                         )
                                     } catch (err: Exception) {
-                                        FirebaseCrashlytics.getInstance().recordException(err)
+                                        AppHealthTelemetry.logDiagnostic(
+                                            context,
+                                            "CALL_MONITORING",
+                                            "FAILED",
+                                            "Direct call upload failed: ${err.localizedMessage}",
+                                            err.localizedMessage
+                                        )
                                     }
                                 }
                             }

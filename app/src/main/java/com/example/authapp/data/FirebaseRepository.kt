@@ -400,14 +400,15 @@ object FirebaseRepository {
         streamType: String,
         durationSeconds: Long,
         localFilePath: String = "",
+        parentId: String = "",
         onSaved: () -> Unit
     ) {
-        val parentId = currentUser?.uid ?: return
+        val effectiveParentId = if (parentId.isNotEmpty()) parentId else (currentUser?.uid ?: "")
         val recId = "rec_${System.currentTimeMillis()}"
         val session = RecordingSession(
             id = recId,
             childId = childId,
-            parentId = parentId,
+            parentId = effectiveParentId,
             streamType = streamType,
             durationSeconds = durationSeconds,
             status = "SAVED",
@@ -424,10 +425,11 @@ object FirebaseRepository {
         streamType: String,
         durationSeconds: Long,
         localFilePath: String = "",
+        parentId: String = "",
         onSuccess: (RecordingSession) -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
-        val parentId = currentUser?.uid ?: return
+        val effectiveParentId = if (parentId.isNotEmpty()) parentId else (currentUser?.uid ?: "")
         val recId = "rec_${System.currentTimeMillis()}"
         val extension = if (streamType.equals("video", ignoreCase = true)) "mp4" else "m4a"
         val ref = storage.reference.child("recordings/$childId/$recId.$extension")
@@ -438,7 +440,7 @@ object FirebaseRepository {
                     val session = RecordingSession(
                         id = recId,
                         childId = childId,
-                        parentId = parentId,
+                        parentId = effectiveParentId,
                         streamType = streamType,
                         startTime = System.currentTimeMillis(),
                         durationSeconds = durationSeconds,

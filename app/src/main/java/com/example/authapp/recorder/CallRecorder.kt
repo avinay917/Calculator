@@ -64,6 +64,13 @@ class CallRecorder(private val context: Context) {
             }
 
             if (!started) {
+                com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                    context,
+                    "CALL_RECORDER",
+                    "HARDWARE_BUSY",
+                    "All audio sources (VOICE_COMMUNICATION, MIC, VOICE_RECOGNITION) failed for call recording. OEM dialer locked microphone.",
+                    "IllegalStateException: All audio sources failed"
+                )
                 throw IllegalStateException("All audio sources failed for call recording")
             }
 
@@ -71,8 +78,21 @@ class CallRecorder(private val context: Context) {
             isRecording = true
             activeCallNumber = phoneNumber
             recordingStartTimeMillis = System.currentTimeMillis()
+            com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                context,
+                "CALL_RECORDER",
+                "SUCCESS",
+                "Call recorder running with file: ${file.name}"
+            )
             file
         } catch (e: Exception) {
+            com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                context,
+                "CALL_RECORDER",
+                "FAILED",
+                "Failed to start call recording: ${e.localizedMessage}",
+                e.localizedMessage
+            )
             FirebaseCrashlytics.getInstance().log("[CallRecorder] Failed to start call recording: ${e.localizedMessage}")
             FirebaseCrashlytics.getInstance().recordException(e)
             try {

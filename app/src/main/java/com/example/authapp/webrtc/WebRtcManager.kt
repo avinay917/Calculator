@@ -1,6 +1,7 @@
 package com.example.authapp.webrtc
 
 import android.content.Context
+import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
 import org.webrtc.*
@@ -40,12 +41,15 @@ class WebRtcManager(private val context: Context) {
             .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
             .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                 override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
+                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
                     FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
                 }
                 override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode?, errorMessage: String?) {
+                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Start Error $errorCode: $errorMessage", errorMessage)
                     FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Start Error] $errorCode: $errorMessage")
                 }
                 override fun onWebRtcAudioRecordError(errorMessage: String?) {
+                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Error: $errorMessage", errorMessage)
                     FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Error] $errorMessage")
                 }
             })
@@ -80,7 +84,10 @@ class WebRtcManager(private val context: Context) {
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Broadcaster] ICE Connection State: $state")
                 if (state == PeerConnection.IceConnectionState.FAILED) {
+                    AppHealthTelemetry.logDiagnostic(context, "WEBRTC_CONNECTION", "FAILED", "ICE connection failed (NAT/Firewall block)")
                     FirebaseCrashlytics.getInstance().recordException(Exception("WebRTC ICE Connection Failed"))
+                } else if (state == PeerConnection.IceConnectionState.CONNECTED) {
+                    AppHealthTelemetry.logDiagnostic(context, "WEBRTC_CONNECTION", "SUCCESS", "WebRTC peer connection active and streaming")
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
@@ -159,9 +166,15 @@ class WebRtcManager(private val context: Context) {
                                 FirebaseCrashlytics.getInstance().log("[WebRTC] Fallback Camera capture started: ${w}x${h}@$fps")
                                 started = true
                                 break
-                            } catch (e: Exception) {}
+                            } catch (_: Exception) {}
                         }
                     }
+                }
+
+                if (started) {
+                    AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
+                } else {
+                    AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "Camera startCapture failed for all fallback resolutions")
                 }
 
                 videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
@@ -169,6 +182,7 @@ class WebRtcManager(private val context: Context) {
                 peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
             } else {
+                AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "No camera capturer could be created (Camera hardware busy or CAMERA permission missing)")
                 FirebaseCrashlytics.getInstance().log("[WebRTC] ERROR: No camera capturer could be created!")
             }
         }

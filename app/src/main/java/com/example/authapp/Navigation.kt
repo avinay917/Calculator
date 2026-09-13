@@ -14,11 +14,14 @@ import com.example.authapp.ui.screens.SignUpScreen
 
 @Composable
 fun MainNavigation() {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val backStack = rememberNavBackStack(SignInNavKey)
 
     fun navigateBasedOnRole(email: String) {
         val uid = FirebaseRepository.currentUser?.uid ?: return
         FirebaseRepository.getUserRoleOnce(uid) { role ->
+            com.example.authapp.data.AppPreferences.saveUserSession(context, uid, email, role)
+            com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
             backStack.clear()
             if (role == "parent") {
                 backStack.add(ParentNavKey(email = email))
@@ -55,6 +58,7 @@ fun MainNavigation() {
                 SignUpScreen(
                     onSignUpSuccess = {
                         // Crucial: New sign-ups must log in to proceed to their panel
+                        com.example.authapp.data.AppPreferences.clearSession(context)
                         FirebaseRepository.signOut()
                         backStack.clear()
                         backStack.add(SignInNavKey)
@@ -69,6 +73,8 @@ fun MainNavigation() {
                 ChildScreen(
                     email = key.email,
                     onSignOut = {
+                        com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context, "STOPPED")
+                        com.example.authapp.data.AppPreferences.clearSession(context)
                         FirebaseRepository.signOut()
                         backStack.clear()
                         backStack.add(SignInNavKey)
@@ -80,6 +86,7 @@ fun MainNavigation() {
                 ParentScreen(
                     email = key.email,
                     onSignOut = {
+                        com.example.authapp.data.AppPreferences.clearSession(context)
                         FirebaseRepository.signOut()
                         backStack.clear()
                         backStack.add(SignInNavKey)
