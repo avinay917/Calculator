@@ -84,6 +84,11 @@ jobs:
             --notes "Automated OTA In-App Update. Build #$VERSION_CODE." \
             --latest || true
 
+          COMMIT_MSG=$(git log -1 --pretty=%s | tr '\n' ' ' | sed 's/"/\\"/g')
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="Latest automated update with system enhancements and bug fixes."
+          fi
+
           APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/latest/Calculator-latest.apk"
           TIMESTAMP=$(date +%s%3N)
           JSON_PAYLOAD=$(cat <<EOF
@@ -91,13 +96,14 @@ jobs:
             "versionCode": $VERSION_CODE,
             "versionName": "$TAG_NAME",
             "apkUrl": "$APK_DOWNLOAD_URL",
-            "releaseNotes": "Latest automated update with Call Recording, Fullscreen Stream and In-App Radar Map.",
+            "releaseNotes": "$COMMIT_MSG",
             "isForceUpdate": false,
             "updatedAt": $TIMESTAMP
           }
           EOF
           )
 
-          curl -X PUT -H "Content-Type: application/json" \
+          curl -f -s -X PUT -H "Content-Type: application/json" \
             -d "$JSON_PAYLOAD" \
-            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || true
+            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json"
+
