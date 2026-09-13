@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.authapp.analytics.AppAnalytics
+import com.example.authapp.data.DeviceHealth
 import com.example.authapp.data.User
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -29,12 +30,14 @@ import java.util.Locale
 @Composable
 fun ChildUserCard(
     user: User,
+    deviceHealth: DeviceHealth? = null,
     onAudioClick: () -> Unit,
     onVideoClick: () -> Unit,
     onLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showHealthDialog by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -106,7 +109,84 @@ fun ChildUserCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Device Health Quick Bar (Battery, Service, Permissions)
+            if (deviceHealth != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val serviceHealth = deviceHealth.serviceHealth
+                val battery = serviceHealth?.batteryPercent ?: -1
+                val isCharging = serviceHealth?.isCharging == true
+                val isServiceRunning = serviceHealth?.isForegroundServiceRunning == true
+                val perms = deviceHealth.permissions
+                val allPermsGranted = perms.isNotEmpty() && perms.values.none { !it }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Battery Pill
+                        if (battery >= 0) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                val batColor = if (battery > 30) Color(0xFF2E7D32) else if (battery > 15) Color(0xFFEF6C00) else Color(0xFFC62828)
+                                Text(
+                                    text = if (isCharging) "⚡ $battery%" else "🔋 $battery%",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = batColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Protection Service Pill
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isServiceRunning) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                        ) {
+                            Text(
+                                text = if (isServiceRunning) "🛡️ Active" else "⚠️ Off",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        // Permission Warning (if any denied)
+                        if (!allPermsGranted && perms.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFFF3E0)
+                            ) {
+                                Text(
+                                    text = "⚠️ Perms",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFE65100),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Clickable Details Info Button
+                    TextButton(
+                        onClick = { showHealthDialog = true },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = "Status ❯",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Quick Actions: Audio, Video, GPS (all styled consistently with safe padding)
             Row(
@@ -164,5 +244,13 @@ fun ChildUserCard(
                 }
             }
         }
+    }
+
+    if (showHealthDialog) {
+        ChildHealthDialog(
+            user = user,
+            health = deviceHealth,
+            onDismiss = { showHealthDialog = false }
+        )
     }
 }

@@ -35,5 +35,8 @@ data class ParentUiState(
     // Cloud Recordings Tab state
     val allRecordings: List<RecordingSession> = emptyList(),
     val isLoadingRecordings: Boolean = false,
-    val recordingFilter: String = "ALL" // "ALL", "AUDIO", "VIDEO"
+    val recordingFilter: String = "ALL", // "ALL", "AUDIO", "VIDEO"
+
+    // Real-time Device Health & Telemetry for each child
+    val deviceHealthMap: Map<String, com.example.authapp.data.DeviceHealth> = emptyMap()
 )

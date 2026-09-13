@@ -32,11 +32,13 @@ class WebRtcManager(private val context: Context) {
         val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
         val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
 
-        val useAec = JavaAudioDeviceModule.isBuiltInAcousticEchoCancelerSupported()
+        // Hardware AEC causes Android's audio HAL to switch into VoIP/Communication mode,
+        // which ducks/mutes the child device's speaker when playing YouTube or media.
+        // Broadcaster never plays remote audio, so hardware AEC is not needed.
         val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
 
         val adm = JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(useAec)
+            .setUseHardwareAcousticEchoCanceler(false)
             .setUseHardwareNoiseSuppressor(useNs)
             .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
             .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {

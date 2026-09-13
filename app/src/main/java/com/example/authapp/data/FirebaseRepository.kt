@@ -575,4 +575,24 @@ object FirebaseRepository {
                 }
             }
     }
+
+    fun listenToDeviceHealth(childUid: String, onHealthUpdate: (DeviceHealth?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("device_health").child(childUid)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                try {
+                    val health = snapshot.getValue(DeviceHealth::class.java)
+                    onHealthUpdate(health)
+                } catch (e: Exception) {
+                    recordNonFatalError("Failed to parse DeviceHealth: ${e.localizedMessage}", e)
+                    onHealthUpdate(null)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                recordNonFatalError("Device health listener cancelled: ${error.message}", error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
 }

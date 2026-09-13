@@ -18,11 +18,26 @@ class ParentViewModel : ViewModel() {
     val uiState: StateFlow<ParentUiState> = _uiState.asStateFlow()
 
     private var recordingTimerJob: Job? = null
+    private val healthListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
 
     fun loadChildUsers() {
         try {
             FirebaseRepository.listenToChildUsers { list ->
                 _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
+                list.forEach { child ->
+                    if (child.uid.isNotEmpty() && !healthListeners.containsKey(child.uid)) {
+                        val listener = FirebaseRepository.listenToDeviceHealth(child.uid) { health ->
+                            if (health != null) {
+                                _uiState.update { current ->
+                                    val updated = current.deviceHealthMap.toMutableMap()
+                                    updated[child.uid] = health
+                                    current.copy(deviceHealthMap = updated)
+                                }
+                            }
+                        }
+                        healthListeners[child.uid] = listener
+                    }
+                }
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoadingChildren = false) }
@@ -176,5 +191,9 @@ class ParentViewModel : ViewModel() {
         super.onCleared()
         recordingTimerJob?.cancel()
         recordingTimerJob = null
+        healthListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("device_health/$childId", listener)
+        }
+        healthListeners.clear()
     }
 }

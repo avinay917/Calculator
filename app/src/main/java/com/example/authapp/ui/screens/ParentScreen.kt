@@ -376,6 +376,7 @@ fun ParentScreen(
                             items(uiState.childUsers) { child ->
                                 ChildUserCard(
                                     user = child,
+                                    deviceHealth = uiState.deviceHealthMap[child.uid],
                                     onAudioClick = {
                                         viewModel.startStream(child, "audio")
                                         Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
