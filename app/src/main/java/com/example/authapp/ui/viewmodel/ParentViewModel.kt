@@ -150,6 +150,28 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(currentlyPlayingRecId = recId) }
     }
 
+    fun selectTab(tabIndex: Int) {
+        _uiState.update { it.copy(selectedTab = tabIndex) }
+        if (tabIndex == 1) {
+            loadAllRecordings()
+        }
+    }
+
+    fun loadAllRecordings() {
+        _uiState.update { it.copy(isLoadingRecordings = true) }
+        try {
+            FirebaseRepository.listenToAllRecordings { list ->
+                _uiState.update { it.copy(allRecordings = list, isLoadingRecordings = false) }
+            }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isLoadingRecordings = false) }
+        }
+    }
+
+    fun setRecordingFilter(filter: String) {
+        _uiState.update { it.copy(recordingFilter = filter) }
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()

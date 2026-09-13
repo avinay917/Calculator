@@ -458,6 +458,27 @@ object FirebaseRepository {
     fun listenToRecordingSessions(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener =
         listenToRecordings(childId, onRecordingsUpdated)
 
+    fun listenToAllRecordings(onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<RecordingSession>()
+                for (childFolder in snapshot.children) {
+                    for (recSnapshot in childFolder.children) {
+                        val session = recSnapshot.getValue(RecordingSession::class.java)
+                        if (session != null) {
+                            list.add(session)
+                        }
+                    }
+                }
+                onRecordingsUpdated(list.sortedByDescending { it.startTime })
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        database.reference.child("recordings").addValueEventListener(listener)
+        return listener
+    }
+
     fun updateChildLocation(childId: String, location: UserLocation) {
         database.reference.child("users").child(childId).child("location").setValue(location)
     }

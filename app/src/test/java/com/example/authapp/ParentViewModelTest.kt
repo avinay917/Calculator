@@ -26,6 +26,10 @@ class ParentViewModelTest {
         assertNull(state.childLocation)
         assertFalse(state.isRefreshingLocation)
         assertNull(state.currentlyPlayingRecId)
+        assertEquals(0, state.selectedTab)
+        assertTrue(state.allRecordings.isEmpty())
+        assertFalse(state.isLoadingRecordings)
+        assertEquals("ALL", state.recordingFilter)
     }
 
     @Test

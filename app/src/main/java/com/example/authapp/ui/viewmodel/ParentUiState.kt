@@ -5,6 +5,9 @@ import com.example.authapp.data.User
 import com.example.authapp.data.UserLocation
 
 data class ParentUiState(
+    // Bottom Navigation Tab (0 = Live Monitor, 1 = Cloud History)
+    val selectedTab: Int = 0,
+
     val childUsers: List<User> = emptyList(),
     val isLoadingChildren: Boolean = true,
 
@@ -27,5 +30,10 @@ data class ParentUiState(
     val isRefreshingLocation: Boolean = false,
 
     // Playback state for recordings
-    val currentlyPlayingRecId: String? = null
+    val currentlyPlayingRecId: String? = null,
+
+    // Cloud Recordings Tab state
+    val allRecordings: List<RecordingSession> = emptyList(),
+    val isLoadingRecordings: Boolean = false,
+    val recordingFilter: String = "ALL" // "ALL", "AUDIO", "VIDEO"
 )

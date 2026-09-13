@@ -33,11 +33,19 @@ import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.recorder.StreamAudioRecorder
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Sensors
+import com.example.authapp.data.RecordingSession
 import com.example.authapp.ui.components.ChildLocationDialog
 import com.example.authapp.ui.components.ChildUserCard
+import com.example.authapp.ui.components.CloudRecordingsView
 import com.example.authapp.ui.components.LiveStreamDialog
 import com.example.authapp.ui.viewmodel.ParentViewModel
 import com.example.authapp.webrtc.WebRtcManager
+import java.io.File
+import java.io.FileInputStream
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
@@ -134,8 +142,75 @@ fun ParentScreen(
         }
     }
 
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    fun stopPlayback() {
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: Exception) {}
+        mediaPlayer = null
+        viewModel.setCurrentlyPlayingRecId(null)
+    }
+
+    fun playRecording(session: RecordingSession) {
+        stopPlayback()
+        val localFile = if (session.localFilePath.isNotEmpty()) File(session.localFilePath) else null
+        val mp = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .build()
+            )
+            setOnCompletionListener {
+                viewModel.setCurrentlyPlayingRecId(null)
+            }
+            setOnErrorListener { _, _, _ ->
+                viewModel.setCurrentlyPlayingRecId(null)
+                true
+            }
+        }
+
+        try {
+            if (localFile != null && localFile.exists()) {
+                val fis = FileInputStream(localFile)
+                mp.setDataSource(fis.fd)
+                fis.close()
+                mp.prepare()
+                mp.start()
+                viewModel.setCurrentlyPlayingRecId(session.id)
+                mediaPlayer = mp
+            } else if (session.storageUrl.isNotEmpty()) {
+                mp.setDataSource(session.storageUrl)
+                mp.prepareAsync()
+                mp.setOnPreparedListener {
+                    it.start()
+                    viewModel.setCurrentlyPlayingRecId(session.id)
+                }
+                mediaPlayer = mp
+            } else {
+                Toast.makeText(context, "No playable file or storage URL found", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Playback error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            viewModel.setCurrentlyPlayingRecId(null)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+            } catch (e: Exception) {}
+            mediaPlayer = null
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.loadChildUsers()
+        viewModel.loadAllRecordings()
     }
 
     LaunchedEffect(uiState.audioSensitivity, remoteAudioTrack) {
@@ -220,188 +295,228 @@ fun ParentScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(20.dp)
-    ) {
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.selectTab(0) },
+                    icon = { Icon(Icons.Default.Sensors, contentDescription = "Live Monitor") },
+                    label = { Text("Live Monitor") }
+                )
+                NavigationBarItem(
+                    selected = uiState.selectedTab == 1,
+                    onClick = { viewModel.selectTab(1) },
+                    icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
+                    label = { Text("Cloud History") }
+                )
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SupervisorAccount,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Parent Dashboard",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer
+            if (uiState.selectedTab == 0) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp)
+                ) {
+                    // Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "PARENT",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            IconButton(onClick = onSignOut) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Sign Out",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = "Connected Child Devices (${uiState.childUsers.size})",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (uiState.isLoadingChildren) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Checking connected child devices...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else if (uiState.childUsers.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No child accounts registered yet.\nNew accounts will automatically show here as 'child' role.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                items(uiState.childUsers) { child ->
-                    ChildUserCard(
-                        user = child,
-                        onAudioClick = {
-                            viewModel.startStream(child, "audio")
-                            Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
-                        },
-                        onVideoClick = {
-                            viewModel.startStream(child, "video")
-                            Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
-                        },
-                        onLocationClick = {
-                            viewModel.openLocationDialog(child)
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SupervisorAccount,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
-                    )
-                }
-            }
-        }
 
-        // Live Location Modal Dialog
-        uiState.locationDialogChild?.let { childUser ->
-            DisposableEffect(childUser.uid) {
-                val locListener = FirebaseRepository.listenToChildLocation(childUser.uid) { loc ->
-                    viewModel.updateChildLocation(loc)
-                }
-                onDispose {
-                    FirebaseRepository.removeValueListener("users/${childUser.uid}/location", locListener)
-                }
-            }
+                        Spacer(modifier = Modifier.width(16.dp))
 
-            ChildLocationDialog(
-                childUser = childUser,
-                childLocation = uiState.childLocation,
-                isRefreshingLocation = uiState.isRefreshingLocation,
-                onDismiss = { viewModel.closeLocationDialog() },
-                onRefreshLocation = {
-                    viewModel.requestLocationRefresh(childUser.uid)
-                    Toast.makeText(context, "Real-time location refresh requested...", Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Parent Dashboard",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = "PARENT",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = email,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
-        // Active Stream Modal Dialog
-        uiState.activeSessionId?.let {
-            LiveStreamDialog(
-                activeStreamType = uiState.activeStreamType,
-                activeChildName = uiState.activeChildName,
-                streamStatusText = uiState.streamStatusText,
-                isFrontCamera = uiState.isFrontCamera,
-                isRecording = uiState.isRecording,
-                recordingDurationSeconds = uiState.recordingDurationSeconds,
-                audioSensitivity = uiState.audioSensitivity,
-                remoteVideoTrack = remoteVideoTrack,
-                webRtcManager = webRtcManager,
-                onDismiss = {
-                    if (uiState.isRecording) {
-                        toggleRecording(uiState.activeStreamType ?: "audio")
+                        IconButton(onClick = onSignOut) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Sign Out",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
-                    viewModel.stopStream()
-                    AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
-                },
-                onFlipCamera = {
-                    viewModel.toggleCameraFacing()
-                    Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
-                    AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
-                },
-                onToggleRecording = { type -> toggleRecording(type) },
-                onSensitivityChange = { viewModel.setAudioSensitivity(it) },
-                currentAudioRoute = currentAudioRoute,
-                isBluetoothConnected = isBluetoothConnected,
-                onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
-            )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "Connected Child Devices (${uiState.childUsers.size})",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (uiState.isLoadingChildren) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Checking connected child devices...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else if (uiState.childUsers.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No child accounts registered yet.\nNew accounts will automatically show here as 'child' role.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(uiState.childUsers) { child ->
+                                ChildUserCard(
+                                    user = child,
+                                    onAudioClick = {
+                                        viewModel.startStream(child, "audio")
+                                        Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onVideoClick = {
+                                        viewModel.startStream(child, "video")
+                                        Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onLocationClick = {
+                                        viewModel.openLocationDialog(child)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                CloudRecordingsView(
+                    recordings = uiState.allRecordings,
+                    childUsers = uiState.childUsers,
+                    isLoading = uiState.isLoadingRecordings,
+                    currentFilter = uiState.recordingFilter,
+                    onFilterChange = { viewModel.setRecordingFilter(it) },
+                    currentlyPlayingRecId = uiState.currentlyPlayingRecId,
+                    onPlayRecording = { playRecording(it) },
+                    onStopPlayback = { stopPlayback() },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Live Location Modal Dialog
+            uiState.locationDialogChild?.let { childUser ->
+                DisposableEffect(childUser.uid) {
+                    val locListener = FirebaseRepository.listenToChildLocation(childUser.uid) { loc ->
+                        viewModel.updateChildLocation(loc)
+                    }
+                    onDispose {
+                        FirebaseRepository.removeValueListener("users/${childUser.uid}/location", locListener)
+                    }
+                }
+
+                ChildLocationDialog(
+                    childUser = childUser,
+                    childLocation = uiState.childLocation,
+                    isRefreshingLocation = uiState.isRefreshingLocation,
+                    onDismiss = { viewModel.closeLocationDialog() },
+                    onRefreshLocation = {
+                        viewModel.requestLocationRefresh(childUser.uid)
+                        Toast.makeText(context, "Real-time location refresh requested...", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+
+            // Active Stream Modal Dialog
+            uiState.activeSessionId?.let {
+                LiveStreamDialog(
+                    activeStreamType = uiState.activeStreamType,
+                    activeChildName = uiState.activeChildName,
+                    streamStatusText = uiState.streamStatusText,
+                    isFrontCamera = uiState.isFrontCamera,
+                    isRecording = uiState.isRecording,
+                    recordingDurationSeconds = uiState.recordingDurationSeconds,
+                    audioSensitivity = uiState.audioSensitivity,
+                    remoteVideoTrack = remoteVideoTrack,
+                    webRtcManager = webRtcManager,
+                    onDismiss = {
+                        if (uiState.isRecording) {
+                            toggleRecording(uiState.activeStreamType ?: "audio")
+                        }
+                        viewModel.stopStream()
+                        AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
+                    },
+                    onFlipCamera = {
+                        viewModel.toggleCameraFacing()
+                        Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
+                        AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
+                    },
+                    onToggleRecording = { type -> toggleRecording(type) },
+                    onSensitivityChange = { viewModel.setAudioSensitivity(it) },
+                    currentAudioRoute = currentAudioRoute,
+                    isBluetoothConnected = isBluetoothConnected,
+                    onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
+                )
+            }
         }
     }
 }
