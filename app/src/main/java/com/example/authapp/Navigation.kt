@@ -3,6 +3,7 @@ package com.example.authapp
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
@@ -17,7 +18,7 @@ fun MainNavigation() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val currentUser = FirebaseRepository.currentUser
     val cachedRole = remember(context) { com.example.authapp.data.AppPreferences.getUserRole(context) }
-    val initialNavKey: Any = remember {
+    val initialNavKey: NavKey = remember {
         if (currentUser != null && !currentUser.email.isNullOrEmpty()) {
             if (cachedRole == "parent") ParentNavKey(email = currentUser.email!!) else ChildNavKey(email = currentUser.email!!)
         } else {
