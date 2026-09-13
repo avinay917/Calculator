@@ -58,6 +58,12 @@ class CallReceiver : BroadcastReceiver() {
 
         if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
 
+        // Do NOT record calls or touch mic if no user is logged in
+        val currentUid = AppPreferences.getUserId(context)
+        if (FirebaseRepository.currentUser == null && currentUid.isEmpty()) {
+            return
+        }
+
         val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
         val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
         if (number.isNotEmpty()) {

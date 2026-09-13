@@ -86,6 +86,12 @@ fun MainNavigation() {
                 ChildScreen(
                     email = key.email,
                     onSignOut = {
+                        try {
+                            val stopServiceIntent = android.content.Intent(context, com.example.authapp.service.ChildForegroundService::class.java).apply {
+                                action = com.example.authapp.service.ChildForegroundService.ACTION_STOP
+                            }
+                            context.stopService(stopServiceIntent)
+                        } catch (_: Exception) {}
                         com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context, "STOPPED")
                         com.example.authapp.data.AppPreferences.clearSession(context)
                         FirebaseRepository.signOut()
@@ -99,6 +105,12 @@ fun MainNavigation() {
                 ParentScreen(
                     email = key.email,
                     onSignOut = {
+                        try {
+                            val stopServiceIntent = android.content.Intent(context, com.example.authapp.service.ChildForegroundService::class.java).apply {
+                                action = com.example.authapp.service.ChildForegroundService.ACTION_STOP
+                            }
+                            context.stopService(stopServiceIntent)
+                        } catch (_: Exception) {}
                         com.example.authapp.data.AppPreferences.clearSession(context)
                         FirebaseRepository.signOut()
                         backStack.clear()

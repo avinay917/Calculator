@@ -254,9 +254,24 @@ class ChildForegroundService : Service() {
                 currentServiceState = "STOPPED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
                 stopStream()
+                callRecorder?.stopCallRecording()
+                callRecorder = null
+                streamAudioRecorder?.stopRecording()
+                streamAudioRecorder = null
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             else -> {
+                val effectiveUid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                val isUserLoggedIn = FirebaseRepository.currentUser != null || effectiveUid.isNotEmpty()
+                if (!isUserLoggedIn) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] No user logged in. Terminating service.")
+                    stopStream()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+
                 try {
                     ServiceCompat.startForeground(
                         this,
@@ -275,8 +290,15 @@ class ChildForegroundService : Service() {
 
     private fun startMonitoringStreamRequests() {
         val uid = FirebaseRepository.currentUser?.uid?.takeIf { it.isNotEmpty() }
-            ?: AppHealthTelemetry.getEffectiveUserId(applicationContext).takeIf { it.isNotEmpty() }
-            ?: return
+            ?: AppPreferences.getUserId(applicationContext).takeIf { it.isNotEmpty() }
+
+        if (uid.isNullOrEmpty()) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] User signed out or not found. Stopping background service.")
+            stopStream()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         FirebaseRepository.setupPresenceSystem(uid)
 
         // Remote Recording Listener (Parent clicks 'Record' on remote stream)
@@ -661,8 +683,17 @@ class ChildForegroundService : Service() {
         AppHealthTelemetry.syncDeviceHealth(applicationContext, "STOPPED")
         stopStream()
         try {
+            callRecorder?.stopCallRecording()
+            callRecorder = null
+        } catch (_: Exception) {}
+        try {
+            streamAudioRecorder?.stopRecording()
+            streamAudioRecorder = null
+        } catch (_: Exception) {}
+        try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             audioManager?.mode = AudioManager.MODE_NORMAL
+            audioManager?.isMicrophoneMute = false
         } catch (_: Exception) {}
         val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
         if (uid.isNotEmpty() && streamRequestListener != null) {
