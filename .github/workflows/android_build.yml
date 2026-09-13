@@ -75,19 +75,20 @@ jobs:
           APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
           cp "$APK_PATH" "Calculator-latest.apk"
 
-          gh release delete "latest" --yes 2>/dev/null || true
-          git tag -d "latest" 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-
-          gh release create "latest" "Calculator-latest.apk" \
-            --title "Calculator OTA Release $TAG_NAME" \
-            --notes "Automated OTA In-App Update. Build #$VERSION_CODE." \
-            --latest || true
-
           COMMIT_MSG=$(git log -1 --pretty=%s | tr '\n' ' ' | sed 's/"/\\"/g')
           if [ -z "$COMMIT_MSG" ]; then
             COMMIT_MSG="Latest automated update with system enhancements and bug fixes."
           fi
+
+          # Cleanly remove old 'latest' release and its associated git tag
+          gh release delete "latest" --cleanup-tag --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+          # Create public release with latest tag and APK asset
+          gh release create "latest" "Calculator-latest.apk" \
+            --title "Calculator OTA Release $TAG_NAME" \
+            --notes "$COMMIT_MSG" \
+            --latest
 
           APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/latest/Calculator-latest.apk"
           TIMESTAMP=$(date +%s%3N)

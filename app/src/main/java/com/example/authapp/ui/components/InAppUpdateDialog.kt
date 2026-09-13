@@ -62,8 +62,10 @@ fun InAppUpdateDialog(
                         text = "New Update Available!",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
+                    val displayCurrent = if (currentVersionName.startsWith("v", ignoreCase = true)) currentVersionName else "v$currentVersionName"
+                    val displayNew = if (updateInfo.versionName.startsWith("v", ignoreCase = true)) updateInfo.versionName else "v${updateInfo.versionName}"
                     Text(
-                        text = "v$currentVersionName → ${updateInfo.versionName}",
+                        text = "$displayCurrent → $displayNew",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold

@@ -80,22 +80,42 @@ object UpdateManager {
                 val apkFile = File(updatesDir, "update.apk")
                 if (apkFile.exists()) apkFile.delete()
 
-                val url = URL(apkUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 30000
-                connection.instanceFollowRedirects = true
-                connection.connect()
+                var currentUrl = apkUrl
+                var connection: HttpURLConnection? = null
+                var redirects = 0
+                val maxRedirects = 5
 
-                if (connection.responseCode !in 200..299) {
+                while (redirects < maxRedirects) {
+                    val url = URL(currentUrl)
+                    val conn = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        instanceFollowRedirects = true
+                    }
+                    val code = conn.responseCode
+                    if (code in 300..399) {
+                        val location = conn.getHeaderField("Location")
+                        conn.disconnect()
+                        if (!location.isNullOrBlank()) {
+                            currentUrl = location
+                            redirects++
+                            continue
+                        }
+                    }
+                    connection = conn
+                    break
+                }
+
+                val activeConn = connection ?: throw IllegalStateException("Failed to establish connection")
+                if (activeConn.responseCode !in 200..299) {
                     withContext(Dispatchers.Main) {
-                        onError("Server returned HTTP ${connection.responseCode}")
+                        onError("Server returned HTTP ${activeConn.responseCode}")
                     }
                     return@withContext
                 }
 
-                val totalBytes = connection.contentLength.toFloat()
-                val inputStream = connection.inputStream
+                val totalBytes = activeConn.contentLength.toFloat()
+                val inputStream = activeConn.inputStream
                 val outputStream = FileOutputStream(apkFile)
 
                 val buffer = ByteArray(8192)
@@ -116,7 +136,7 @@ object UpdateManager {
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
-                connection.disconnect()
+                activeConn.disconnect()
 
                 withContext(Dispatchers.Main) {
                     installApk(context, apkFile)
