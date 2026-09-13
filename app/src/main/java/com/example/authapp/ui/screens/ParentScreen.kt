@@ -497,8 +497,9 @@ fun ParentScreen(
                 )
             }
         }
+    }
 
-        // Active Stream Fullscreen Screen (Overlay directly in Activity Window)
+    // Active Stream Fullscreen Screen (Overlay directly in Activity Window)
         uiState.activeSessionId?.let {
             LiveStreamDialog(
                 activeStreamType = uiState.activeStreamType,
