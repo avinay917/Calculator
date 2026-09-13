@@ -30,6 +30,22 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "app_update": {
+      ".read": true,
+      ".write": true
+    },
+    "device_health": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null"
+      }
+    },
+    "feature_diagnostics": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null"
+      }
     }
   }
 }
