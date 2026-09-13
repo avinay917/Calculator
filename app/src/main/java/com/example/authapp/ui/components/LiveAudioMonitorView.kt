@@ -98,11 +98,11 @@ fun LiveAudioMonitorView(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             val profileText = when {
                 audioSensitivity >= 80f -> "⚡ Whisper Surveillance Mode (Clean Boost)"
-                audioSensitivity >= 40f -> "🎙️ Balanced Studio Mode (Anti-Scratch Filter ON)"
+                audioSensitivity >= 40f -> "🎙️ Balanced Studio Mode (Noise Reduced)"
                 else -> "👤 Natural Clear Mode (Unity Gain)"
             }
             val profileColor = when {
@@ -129,36 +129,30 @@ fun LiveAudioMonitorView(
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "✨ Studio Voice Filter ON",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
+            // Unified Status Strip: Studio Filter + Loudspeaker
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFFE8F5E9),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2E7D32))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "🔊 Loudspeaker Audio Active",
+                        text = "✨ Studio Voice Filter ON",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("•", color = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "🔊 Loudspeaker Active",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF1B5E20)
+                        color = Color(0xFF2E7D32)
                     )
                 }
             }
@@ -206,22 +200,25 @@ fun LiveAudioMonitorView(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Sensitivity preset chips
+                    // Sensitivity preset chips evenly distributed
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         AssistChip(
                             onClick = { onSensitivityChange(30f) },
-                            label = { Text("30% Normal", style = MaterialTheme.typography.labelSmall) }
+                            label = { Text("30% Normal", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f)
                         )
                         AssistChip(
                             onClick = { onSensitivityChange(60f) },
-                            label = { Text("60% Boost", style = MaterialTheme.typography.labelSmall) }
+                            label = { Text("60% Boost", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f)
                         )
                         AssistChip(
                             onClick = { onSensitivityChange(100f) },
-                            label = { Text("100% Whisper", style = MaterialTheme.typography.labelSmall) }
+                            label = { Text("100% Whisper", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
 

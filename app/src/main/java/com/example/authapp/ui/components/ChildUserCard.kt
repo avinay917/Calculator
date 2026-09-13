@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.authapp.analytics.AppAnalytics
 import com.example.authapp.data.FirebaseRepository
@@ -75,20 +77,40 @@ fun ChildUserCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(if (user.isOnline) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline)
-                )
+                        .background(
+                            if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Smartphone,
+                        contentDescription = null,
+                        tint = if (user.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = user.name.ifEmpty { "Child Device" },
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = user.email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = user.name.ifEmpty { "Child Device" },
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.weight(1f))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(start = 4.dp)
+                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
                     Text(
                         text = if (user.isOnline) "🟢 Online" else "⚪ Offline",
@@ -99,13 +121,6 @@ fun ChildUserCard(
                 }
             }
 
-            Text(
-                text = user.email,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 20.dp, top = 2.dp)
-            )
-
             if (!user.isOnline && user.lastSeen > 0L) {
                 val lastSeenText = remember(user.lastSeen) {
                     val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
@@ -115,13 +130,13 @@ fun ChildUserCard(
                     text = "Last seen: $lastSeenText",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                    modifier = Modifier.padding(start = 46.dp, top = 2.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Quick Actions: Audio, Video, GPS
+            // Quick Actions: Audio, Video, GPS (all styled consistently with safe padding)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -136,11 +151,12 @@ fun ChildUserCard(
                         onAudioClick()
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Audio", style = MaterialTheme.typography.labelSmall)
+                    Text("Audio", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
                 FilledTonalButton(
@@ -153,24 +169,26 @@ fun ChildUserCard(
                         onVideoClick()
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Video", style = MaterialTheme.typography.labelSmall)
+                    Text("Video", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = {
                         AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
                         onLocationClick()
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("GPS", style = MaterialTheme.typography.labelSmall)
+                    Text("GPS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
             }
 

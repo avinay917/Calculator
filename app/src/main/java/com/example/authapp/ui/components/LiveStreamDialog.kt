@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.webrtc.WebRtcManager
@@ -76,12 +78,16 @@ fun LiveStreamDialog(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Live ${activeStreamType?.replaceFirstChar { it.uppercase() } ?: "Media"} Cast",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Device: ${activeChildName ?: "Child"}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -182,7 +188,7 @@ fun LiveStreamDialog(
                                 val s = recordingDurationSeconds % 60
                                 String.format(Locale.getDefault(), "%02d:%02d", m, s)
                             }
-                            Text(if (isRecording) "Stop ($recTimeStr)" else "Record", style = MaterialTheme.typography.labelMedium)
+                            Text(if (isRecording) "Stop $recTimeStr" else "Record", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 } else {
@@ -205,7 +211,9 @@ fun LiveStreamDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Disconnect Stream")
+                Icon(imageVector = Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Disconnect Stream", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
             }
         }
     )
