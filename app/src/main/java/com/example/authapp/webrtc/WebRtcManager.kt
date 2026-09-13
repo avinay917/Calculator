@@ -549,10 +549,57 @@ class WebRtcManager(
         })
     }
 
+    private var audioLevelHandler: android.os.Handler? = null
+    private var audioLevelRunnable: Runnable? = null
+    @Volatile
+    private var currentAudioLevel: Float = 0f
+
+    fun startAudioLevelMonitoring(onLevel: (Float) -> Unit) {
+        if (isStopped) return
+        stopAudioLevelMonitoring()
+        audioLevelHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        audioLevelRunnable = object : Runnable {
+            override fun run() {
+                if (isStopped || peerConnection == null) return
+                try {
+                    peerConnection?.getStats { report ->
+                        for (stats in report.statsMap.values) {
+                            if (stats.type == "inbound-rtp") {
+                                val kind = stats.members["kind"] ?: stats.members["mediaType"]
+                                if (kind == "audio" || stats.id.contains("audio", ignoreCase = true)) {
+                                    val levelObj = stats.members["audioLevel"]
+                                    if (levelObj != null) {
+                                        val rawLevel = when (levelObj) {
+                                            is Number -> levelObj.toFloat()
+                                            else -> levelObj.toString().toFloatOrNull() ?: 0f
+                                        }
+                                        currentAudioLevel = rawLevel.coerceIn(0f, 1f)
+                                        onLevel(currentAudioLevel)
+                                        return@getStats
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Throwable) {}
+                audioLevelHandler?.postDelayed(this, 100L)
+            }
+        }
+        audioLevelHandler?.post(audioLevelRunnable!!)
+    }
+
+    fun stopAudioLevelMonitoring() {
+        audioLevelHandler?.removeCallbacksAndMessages(null)
+        audioLevelHandler = null
+        audioLevelRunnable = null
+        currentAudioLevel = 0f
+    }
+
     fun stopStream() {
         if (isStopped) return
         isStopped = true
         isCameraRunning = false
+        stopAudioLevelMonitoring()
 
         // Stop and dispose camera capturer
         try { videoCapturer?.stopCapture() } catch (_: Throwable) {}

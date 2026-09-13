@@ -1,5 +1,6 @@
 package com.example.authapp.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Mic
@@ -34,28 +36,31 @@ fun LiveAudioMonitorView(
     isRecording: Boolean,
     recordingDurationSeconds: Long,
     onToggleRecording: () -> Unit,
+    audioLevel: Float = 0f,
     currentAudioRoute: AudioOutputRoute = AudioOutputRoute.SPEAKER,
     isBluetoothConnected: Boolean = false,
     onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "audioRadar")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+    // Dynamic spring-based pulse responding to actual WebRTC audio volume
+    val animatedScale by animateFloatAsState(
+        targetValue = 1.0f + (audioLevel.coerceIn(0f, 1f) * 0.45f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
         ),
-        label = "pulseScale"
+        label = "animatedScale"
     )
-    val ringAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ringAlpha"
+
+    val animatedAlpha by animateFloatAsState(
+        targetValue = (0.25f + audioLevel.coerceIn(0f, 1f) * 0.7f).coerceIn(0.15f, 0.95f),
+        animationSpec = tween(120),
+        label = "animatedAlpha"
+    )
+
+    val micColor by animateColorAsState(
+        targetValue = if (audioLevel > 0.08f) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+        animationSpec = tween(200),
+        label = "micColor"
     )
 
     Card(
@@ -71,33 +76,43 @@ fun LiveAudioMonitorView(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Live Reactive Microphone Radar Box
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(90.dp)
+                modifier = Modifier.size(105.dp)
             ) {
+                // Outermost dynamic sound energy ring
                 Box(
                     modifier = Modifier
-                        .size(86.dp * pulseScale)
+                        .size(100.dp * animatedScale)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha))
+                        .background(micColor.copy(alpha = animatedAlpha * 0.35f))
                 )
+                // Mid energy ring
+                Box(
+                    modifier = Modifier
+                        .size(80.dp * animatedScale)
+                        .clip(CircleShape)
+                        .background(micColor.copy(alpha = animatedAlpha * 0.6f))
+                )
+                // Core Mic Button
                 Box(
                     modifier = Modifier
                         .size(64.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .background(micColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Mic,
                         contentDescription = "Live Remote Mic",
-                        tint = MaterialTheme.colorScheme.onPrimary,
+                        tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = "Listening to $childName",
@@ -105,7 +120,84 @@ fun LiveAudioMonitorView(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Render live status text with connection badge
+            if (statusText.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = if (statusText.contains("🟢") || statusText.contains("Streaming")) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Real-Time Live Audio Energy VU Meter Bar
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = micColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Live Mic Volume",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val percent = (audioLevel.coerceIn(0f, 1f) * 100).toInt()
+                        Text(
+                            text = if (percent > 0) "$percent%" else "Quiet",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = if (percent > 50) Color(0xFFEF4444) else if (percent > 10) Color(0xFF10B981) else MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 12-segment real-time LED volume meter
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val activeSegments = (audioLevel.coerceIn(0f, 1f) * 12).toInt()
+                        for (i in 0 until 12) {
+                            val isLit = i <= activeSegments && activeSegments > 0
+                            val segmentColor = when {
+                                i >= 10 -> Color(0xFFEF4444) // Red for loud
+                                i >= 7 -> Color(0xFFF59E0B)  // Orange/Amber for medium
+                                else -> Color(0xFF10B981)    // Green for normal
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (isLit) segmentColor else MaterialTheme.colorScheme.surfaceVariant)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Audio Output Switcher (Speaker / Earpiece / Bluetooth)
             Card(
@@ -124,7 +216,7 @@ fun LiveAudioMonitorView(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 1. Loudspeaker (Neeche waala)
+                        // 1. Loudspeaker
                         FilterChip(
                             selected = currentAudioRoute == AudioOutputRoute.SPEAKER,
                             onClick = { onAudioRouteSelect(AudioOutputRoute.SPEAKER) },
@@ -135,7 +227,7 @@ fun LiveAudioMonitorView(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // 2. Earpiece (Upar waala speaker)
+                        // 2. Earpiece
                         FilterChip(
                             selected = currentAudioRoute == AudioOutputRoute.EARPIECE,
                             onClick = { onAudioRouteSelect(AudioOutputRoute.EARPIECE) },
@@ -146,7 +238,7 @@ fun LiveAudioMonitorView(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // 3. Bluetooth (Wireless - automatically available / selected if connected)
+                        // 3. Bluetooth
                         if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
                             FilterChip(
                                 selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,

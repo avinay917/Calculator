@@ -47,14 +47,12 @@ object FirebaseRepository {
                 if (connected) {
                     val disconnectMap = mapOf<String, Any>(
                         "isOnline" to false,
-                        "online" to false,
                         "lastSeen" to ServerValue.TIMESTAMP
                     )
                     userRef.onDisconnect().updateChildren(disconnectMap)
 
                     val onlineMap = mapOf<String, Any>(
                         "isOnline" to true,
-                        "online" to true,
                         "lastSeen" to ServerValue.TIMESTAMP
                     )
                     userRef.updateChildren(onlineMap)
@@ -90,7 +88,6 @@ object FirebaseRepository {
                     database.reference.child("users").child(uid).setValue(user)
                         .addOnCompleteListener { dbTask ->
                             if (dbTask.isSuccessful) {
-                                database.reference.child("users").child(uid).child("online").setValue(false)
                                 // Crucial: sign out immediately so new user must log in with email and password first
                                 auth.signOut()
                                 onResult(true, null)
@@ -222,9 +219,7 @@ object FirebaseRepository {
                 for (child in snapshot.children) {
                     val user = child.getValue(User::class.java)
                     if (user != null && user.role == "child") {
-                        val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java)
-                            ?: child.child("online").getValue(Boolean::class.java)
-                            ?: user.isOnline
+                        val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
                         val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
                         list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
                     }
@@ -262,7 +257,6 @@ object FirebaseRepository {
             "childId" to childId,
             "parentId" to parentId,
             "streamType" to streamType, // "audio" or "video"
-            "type" to streamType,
             "sessionId" to sessionId,
             "status" to "REQUESTED",
             "timestamp" to timestamp
@@ -334,8 +328,7 @@ object FirebaseRepository {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val status = snapshot.child("status").getValue(String::class.java)
                 if (status == "REQUESTED") {
-                    val streamType = snapshot.child("streamType").getValue(String::class.java)
-                        ?: snapshot.child("type").getValue(String::class.java) ?: "audio"
+                    val streamType = snapshot.child("streamType").getValue(String::class.java) ?: "audio"
                     val sessionId = snapshot.child("sessionId").getValue(String::class.java)
                         ?: "session_${childId}"
                     onRequested(streamType, sessionId)

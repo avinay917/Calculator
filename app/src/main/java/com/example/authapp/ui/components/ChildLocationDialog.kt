@@ -143,55 +143,67 @@ fun ChildLocationDialog(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Stylized Visual Map Radar Tile
+                            // Real Interactive In-App OpenStreetMap View
+                            val mapHtml = remember(childLocation.latitude, childLocation.longitude, childLocation.accuracy, childUser.name) {
+                                val lat = childLocation.latitude
+                                val lng = childLocation.longitude
+                                val acc = childLocation.accuracy
+                                val safeName = childUser.name.ifEmpty { "Child" }.replace("'", "\\'")
+                                """
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                                <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                                <style>
+                                  html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #0F172A; }
+                                  .leaflet-control-attribution { display: none; }
+                                </style>
+                                </head>
+                                <body>
+                                <div id="map"></div>
+                                <script>
+                                  var map = L.map('map', {zoomControl: true}).setView([$lat, $lng], 16);
+                                  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    maxZoom: 19
+                                  }).addTo(map);
+                                  var marker = L.marker([$lat, $lng]).addTo(map);
+                                  marker.bindPopup('<b>$safeName</b>').openPopup();
+                                  if ($acc > 0) {
+                                    L.circle([$lat, $lng], {radius: $acc, color: '#0284C7', fillColor: '#38BDF8', fillOpacity: 0.25}).addTo(map);
+                                  }
+                                </script>
+                                </body>
+                                </html>
+                                """.trimIndent()
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(110.dp)
+                                    .height(200.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color(0xFF1E293B),
-                                                Color(0xFF0F172A)
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
+                                    .background(Color(0xFF0F172A))
                             ) {
-                                // Radar rings
-                                Box(
-                                    modifier = Modifier
-                                        .size(90.dp)
-                                        .clip(CircleShape)
-                                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.35f), CircleShape)
+                                androidx.compose.ui.viewinterop.AndroidView(
+                                    factory = { ctx ->
+                                        android.webkit.WebView(ctx).apply {
+                                            settings.javaScriptEnabled = true
+                                            settings.domStorageEnabled = true
+                                            settings.loadWithOverviewMode = true
+                                            settings.useWideViewPort = true
+                                            isVerticalScrollBarEnabled = false
+                                            isHorizontalScrollBarEnabled = false
+                                            webViewClient = android.webkit.WebViewClient()
+                                            loadDataWithBaseURL("https://openstreetmap.org", mapHtml, "text/html", "UTF-8", null)
+                                        }
+                                    },
+                                    update = { webView ->
+                                        webView.loadDataWithBaseURL("https://openstreetmap.org", mapHtml, "text/html", "UTF-8", null)
+                                    },
+                                    modifier = Modifier.fillMaxSize()
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .size(50.dp)
-                                        .clip(CircleShape)
-                                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f), CircleShape)
-                                )
-                                // Center Pin
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocationOn,
-                                        contentDescription = "Child Pin",
-                                        tint = Color(0xFFEF4444),
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = Color.Black.copy(alpha = 0.7f)
-                                    ) {
-                                        Text(
-                                            text = childUser.name.ifEmpty { "Child" },
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
                             }
 
                             Spacer(modifier = Modifier.height(14.dp))

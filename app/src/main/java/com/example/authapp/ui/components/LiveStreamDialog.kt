@@ -46,6 +46,7 @@ fun LiveStreamDialog(
     audioSensitivity: Float,
     remoteVideoTrack: VideoTrack?,
     webRtcManager: WebRtcManager?,
+    audioLevel: Float = 0f,
     onDismiss: () -> Unit,
     onFlipCamera: () -> Unit,
     onToggleRecording: (String) -> Unit,
@@ -337,6 +338,7 @@ fun LiveStreamDialog(
                             isRecording = isRecording,
                             recordingDurationSeconds = recordingDurationSeconds,
                             onToggleRecording = { onToggleRecording("audio") },
+                            audioLevel = audioLevel,
                             currentAudioRoute = currentAudioRoute,
                             isBluetoothConnected = isBluetoothConnected,
                             onAudioRouteSelect = onAudioRouteSelect

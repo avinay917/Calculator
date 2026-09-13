@@ -6,12 +6,6 @@
         ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')"
       }
     },
-    "requests": {
-      ".read": "auth != null",
-      "$childId": {
-        ".write": "auth != null"
-      }
-    },
     "streams": {
       ".read": "auth != null",
       "$targetUid": {

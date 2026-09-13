@@ -71,6 +71,7 @@ fun ParentScreen(
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
+    var liveAudioLevel by remember { mutableFloatStateOf(0f) }
 
     fun toggleRecording(streamType: String) {
         val childId = uiState.activeChildId ?: return
@@ -234,6 +235,12 @@ fun ParentScreen(
                     }
                 )
 
+                manager.startAudioLevelMonitoring { level ->
+                    mainHandler.post {
+                        liveAudioLevel = level
+                    }
+                }
+
                 // Listen for SDP Offer from Child
                 sdpOfferListener = FirebaseRepository.listenToSdpOffer(sessionId) { sdpOffer ->
                     mainHandler.post {
@@ -263,6 +270,7 @@ fun ParentScreen(
             }
 
             onDispose {
+                liveAudioLevel = 0f
                 remoteVideoTrack = null
                 remoteAudioTrack = null
                 webRtcManager = null
@@ -500,6 +508,7 @@ fun ParentScreen(
                     audioSensitivity = uiState.audioSensitivity,
                     remoteVideoTrack = remoteVideoTrack,
                     webRtcManager = webRtcManager,
+                    audioLevel = liveAudioLevel,
                     onDismiss = {
                         if (uiState.isRecording) {
                             toggleRecording(uiState.activeStreamType ?: "audio")
