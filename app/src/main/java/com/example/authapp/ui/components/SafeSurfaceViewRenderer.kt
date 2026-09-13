@@ -33,12 +33,13 @@ fun SafeSurfaceViewRenderer(
                     })
                     tag = "INITIALIZED"
                 } catch (t: Throwable) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceViewRenderer init failed: ${t.localizedMessage}")
                     FirebaseCrashlytics.getInstance().recordException(t)
                 }
 
                 holder.addCallback(object : SurfaceHolder.Callback {
                     override fun surfaceCreated(holder: SurfaceHolder) {
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceView surfaceCreated (valid=true)")
+                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceView surfaceCreated (valid=${holder.surface?.isValid})")
                         val pending = (getTag(android.R.id.custom) as? VideoTrack)
                         if (pending != null && (tag == "INITIALIZED" || tag is VideoTrack)) {
                             try {
@@ -88,7 +89,8 @@ fun SafeSurfaceViewRenderer(
                 renderer.tag = "INITIALIZED"
 
                 if (videoTrack != null) {
-                    if (renderer.holder.surface?.isValid == true) {
+                    val surface = try { renderer.holder?.surface } catch (_: Throwable) { null }
+                    if (surface?.isValid == true) {
                         try {
                             videoTrack.addSink(renderer)
                             renderer.tag = videoTrack
@@ -108,17 +110,17 @@ fun SafeSurfaceViewRenderer(
             }
         },
         onRelease = { renderer ->
-            renderer.setTag(android.R.id.custom, null)
-            val attached = renderer.tag as? VideoTrack
-            attached?.let {
-                try {
-                    it.removeSink(renderer)
-                } catch (t: Throwable) {
-                    FirebaseCrashlytics.getInstance().recordException(t)
-                }
-            }
-            renderer.tag = null
             try {
+                renderer.setTag(android.R.id.custom, null)
+                val attached = renderer.tag as? VideoTrack
+                attached?.let {
+                    try {
+                        it.removeSink(renderer)
+                    } catch (t: Throwable) {
+                        FirebaseCrashlytics.getInstance().recordException(t)
+                    }
+                }
+                renderer.tag = null
                 renderer.release()
                 FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceViewRenderer released cleanly")
             } catch (t: Throwable) {

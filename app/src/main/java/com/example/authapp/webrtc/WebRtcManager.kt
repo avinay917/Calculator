@@ -8,9 +8,10 @@ import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 
 class WebRtcManager(
-    private val context: Context,
+    context: Context,
     private val isReceiverOnly: Boolean = false
 ) {
+    private val appContext: Context = context.applicationContext
     val eglBase: EglBase = EglBase.create()
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
@@ -32,10 +33,7 @@ class WebRtcManager(
 
     init {
         try {
-            val options = PeerConnectionFactory.InitializationOptions.builder(context)
-                .setEnableInternalTracer(true)
-                .createInitializationOptions()
-            PeerConnectionFactory.initialize(options)
+            initializePcfIfNeeded(appContext)
 
             val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
             val decoderFactory = object : VideoDecoderFactory {
@@ -60,27 +58,27 @@ class WebRtcManager(
 
             val adm = if (isReceiverOnly) {
                 // Receiver only needs audio output/playback — no mic hardware access
-                JavaAudioDeviceModule.builder(context)
+                JavaAudioDeviceModule.builder(appContext)
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule()
             } else {
                 val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
-                JavaAudioDeviceModule.builder(context)
+                JavaAudioDeviceModule.builder(appContext)
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(useNs)
                     .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
                     .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                         override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
-                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
+                            AppHealthTelemetry.logDiagnostic(appContext, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
                             FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
                         }
                         override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode?, errorMessage: String?) {
-                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Start Error $errorCode: $errorMessage", errorMessage)
+                            AppHealthTelemetry.logDiagnostic(appContext, "LIVE_AUDIO", "FAILED", "AudioRecord Start Error $errorCode: $errorMessage", errorMessage)
                             FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Start Error] $errorCode: $errorMessage")
                         }
                         override fun onWebRtcAudioRecordError(errorMessage: String?) {
-                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Error: $errorMessage", errorMessage)
+                            AppHealthTelemetry.logDiagnostic(appContext, "LIVE_AUDIO", "FAILED", "AudioRecord Error: $errorMessage", errorMessage)
                             FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Error] $errorMessage")
                         }
                     })
@@ -121,10 +119,10 @@ class WebRtcManager(
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Broadcaster] ICE Connection State: $state")
                 if (state == PeerConnection.IceConnectionState.FAILED) {
-                    AppHealthTelemetry.logDiagnostic(context, "WEBRTC_CONNECTION", "FAILED", "ICE connection failed (NAT/Firewall block)")
+                    AppHealthTelemetry.logDiagnostic(appContext, "WEBRTC_CONNECTION", "FAILED", "ICE connection failed (NAT/Firewall block)")
                     FirebaseCrashlytics.getInstance().recordException(Exception("WebRTC ICE Connection Failed"))
                 } else if (state == PeerConnection.IceConnectionState.CONNECTED) {
-                    AppHealthTelemetry.logDiagnostic(context, "WEBRTC_CONNECTION", "SUCCESS", "WebRTC peer connection active and streaming")
+                    AppHealthTelemetry.logDiagnostic(appContext, "WEBRTC_CONNECTION", "SUCCESS", "WebRTC peer connection active and streaming")
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
@@ -164,7 +162,7 @@ class WebRtcManager(
                 videoCapturer = capturer
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
                 videoSource = factory?.createVideoSource(capturer.isScreencast)
-                capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
+                capturer.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
 
                 var started = false
                 val resolutions = listOf(
@@ -195,7 +193,7 @@ class WebRtcManager(
                         videoCapturer = fallbackCapturer
                         val newSurfaceHelper = SurfaceTextureHelper.create("CaptureThreadFallback", eglBase.eglBaseContext)
                         surfaceTextureHelper = newSurfaceHelper
-                        fallbackCapturer.initialize(newSurfaceHelper, context, videoSource?.capturerObserver)
+                        fallbackCapturer.initialize(newSurfaceHelper, appContext, videoSource?.capturerObserver)
                         for ((w, h, fps) in resolutions) {
                             try {
                                 fallbackCapturer.startCapture(w, h, fps)
@@ -209,17 +207,17 @@ class WebRtcManager(
 
                 isCameraRunning = started
                 if (started && videoSource != null) {
-                    AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
+                    AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
                     videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
                     videoTrack?.setEnabled(true)
                     peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
                     FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
                 } else {
-                    AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "Camera startCapture failed for all fallback resolutions")
+                    AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "Camera startCapture failed for all fallback resolutions")
                     FirebaseCrashlytics.getInstance().log("[WebRTC] Camera startCapture failed: video track omitted")
                 }
             } else {
-                AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "No camera capturer could be created (Camera hardware busy or CAMERA permission missing)")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "No camera capturer could be created (Camera hardware busy or CAMERA permission missing)")
                 FirebaseCrashlytics.getInstance().log("[WebRTC] ERROR: No camera capturer could be created!")
             }
         }
@@ -298,9 +296,9 @@ class WebRtcManager(
                 FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] ICE Connection State: $state")
                 when (state) {
                     PeerConnection.IceConnectionState.FAILED ->
-                        AppHealthTelemetry.logDiagnostic(context, "WEBRTC_RECEIVER", "FAILED", "Receiver ICE connection failed")
+                        AppHealthTelemetry.logDiagnostic(appContext, "WEBRTC_RECEIVER", "FAILED", "Receiver ICE connection failed")
                     PeerConnection.IceConnectionState.CONNECTED ->
-                        AppHealthTelemetry.logDiagnostic(context, "WEBRTC_RECEIVER", "SUCCESS", "Receiver ICE connected")
+                        AppHealthTelemetry.logDiagnostic(appContext, "WEBRTC_RECEIVER", "SUCCESS", "Receiver ICE connected")
                     PeerConnection.IceConnectionState.DISCONNECTED ->
                         FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] ICE disconnected")
                     else -> {}
@@ -449,8 +447,8 @@ class WebRtcManager(
 
         // 1. Try Camera2Enumerator first if supported
         try {
-            if (Camera2Enumerator.isSupported(context)) {
-                val enumerator = Camera2Enumerator(context)
+            if (Camera2Enumerator.isSupported(appContext)) {
+                val enumerator = Camera2Enumerator(appContext)
                 val capturer = findCapturer(enumerator, preferFront, cameraEventsHandler)
                 if (capturer != null) {
                     FirebaseCrashlytics.getInstance().log("[WebRTC] Created Camera2Capturer successfully (preferFront=$preferFront)")
@@ -511,6 +509,25 @@ class WebRtcManager(
     }
 
     companion object {
+        @Volatile
+        private var isPcfInitialized = false
+
+        @Synchronized
+        fun initializePcfIfNeeded(ctx: Context) {
+            if (!isPcfInitialized) {
+                try {
+                    val options = PeerConnectionFactory.InitializationOptions.builder(ctx.applicationContext)
+                        .setEnableInternalTracer(true)
+                        .createInitializationOptions()
+                    PeerConnectionFactory.initialize(options)
+                    isPcfInitialized = true
+                    FirebaseCrashlytics.getInstance().log("[WebRtcManager] PeerConnectionFactory statically initialized")
+                } catch (t: Throwable) {
+                    FirebaseCrashlytics.getInstance().recordException(t)
+                }
+            }
+        }
+
         fun getDefaultIceServers(): List<PeerConnection.IceServer> {
             return listOf(
                 PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),

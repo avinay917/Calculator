@@ -24,8 +24,23 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
 
     try {
-      FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
-      FirebaseCrashlytics.getInstance().log("Calculator App Launched")
+      val crashlytics = FirebaseCrashlytics.getInstance()
+      crashlytics.setCrashlyticsCollectionEnabled(true)
+      crashlytics.log("Calculator App Launched")
+
+      // Check if previous session crashed fatally
+      val prefs = getSharedPreferences("crash_logs", MODE_PRIVATE)
+      val lastCrashTime = prefs.getLong("last_crash_time", 0L)
+      if (lastCrashTime > 0L) {
+        val thread = prefs.getString("last_crash_thread", "unknown")
+        val msg = prefs.getString("last_crash_message", "")
+        val stack = prefs.getString("last_crash_stacktrace", "")
+        crashlytics.log("[PREV FATAL CRASH] Time: $lastCrashTime, Thread: $thread, Msg: $msg\nStack: $stack")
+        crashlytics.recordException(Exception("PREV_FATAL_CRASH: $msg on $thread"))
+        crashlytics.sendUnsentReports()
+        // Clear after logging
+        prefs.edit().remove("last_crash_time").apply()
+      }
     } catch (e: Exception) {
       e.printStackTrace()
     }

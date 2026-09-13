@@ -175,11 +175,12 @@ fun ParentScreen(
             var manager: WebRtcManager? = null
 
             try {
-                manager = WebRtcManager(context, isReceiverOnly = true)
+                FirebaseCrashlytics.getInstance().log("[ParentScreen] Initializing WebRtcManager receiver for session: $sessionId")
+                manager = WebRtcManager(context.applicationContext, isReceiverOnly = true)
                 webRtcManager = manager
 
                 try {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    val audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                     audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
                     audioManager?.isSpeakerphoneOn = true
                 } catch (e: Exception) {
