@@ -3,29 +3,26 @@
     "users": {
       ".read": "auth != null",
       "$uid": {
+        ".read": "auth != null",
         ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')"
       }
     },
     "streams": {
-      ".read": "auth != null",
-      "$targetUid": {
-        ".write": "auth != null"
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
       }
     },
     "signaling": {
-      ".read": "auth != null",
-      ".write": "auth != null",
       "$sessionId": {
         ".read": "auth != null",
         ".write": "auth != null"
       }
     },
     "recordings": {
-      ".read": "auth != null",
-      ".write": "auth != null",
       "$childId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
       }
     },
     "app_update": {
@@ -33,15 +30,15 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'parent'"
     },
     "device_health": {
-      ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null"
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     "feature_diagnostics": {
-      ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null"
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && auth.uid === $uid"
       }
     }
   }

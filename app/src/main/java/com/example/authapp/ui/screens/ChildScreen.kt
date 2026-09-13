@@ -47,6 +47,8 @@ fun ChildScreen(
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
 
+    var activeRationaleStep by remember { mutableStateOf<com.example.authapp.ui.components.PermissionStepType?>(null) }
+
     fun isMicrophoneAndCameraGranted(): Boolean {
         val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -108,6 +110,21 @@ fun ChildScreen(
         }
     }
 
+    fun triggerCorePermissionsRequest() {
+        val perms = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        stage1Launcher.launch(perms.toTypedArray())
+    }
+
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -129,20 +146,49 @@ fun ChildScreen(
 
     LaunchedEffect(Unit) {
         checkPermissions()
+        // If core permissions are missing, show rationale sheet explaining WHY instead of jarring system prompt
         if (!hasStage1Permissions || !hasCallPermissions) {
-            val perms = mutableListOf(
-                Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.CAMERA,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.READ_CALL_LOG
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                perms.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            stage1Launcher.launch(perms.toTypedArray())
+            activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA
         }
+    }
+
+    activeRationaleStep?.let { step ->
+        com.example.authapp.ui.components.PermissionRationaleSheet(
+            stepType = step,
+            onGrantClick = {
+                val currentStep = step
+                activeRationaleStep = null
+                when (currentStep) {
+                    com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA -> {
+                        triggerCorePermissionsRequest()
+                    }
+                    com.example.authapp.ui.components.PermissionStepType.CALL_LOGS -> {
+                        triggerCorePermissionsRequest()
+                    }
+                    com.example.authapp.ui.components.PermissionStepType.OVERLAY -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
+                    }
+                    com.example.authapp.ui.components.PermissionStepType.BATTERY_OPTIMIZATION -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                activeRationaleStep = null
+            }
+        )
     }
 
     Column(
@@ -242,18 +288,7 @@ fun ChildScreen(
                     ) {
                         Button(
                             onClick = {
-                                val perms = mutableListOf(
-                                    Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.CAMERA,
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    Manifest.permission.READ_PHONE_STATE,
-                                    Manifest.permission.READ_CALL_LOG
-                                )
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    perms.add(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                                stage1Launcher.launch(perms.toTypedArray())
+                                activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
@@ -321,13 +356,7 @@ fun ChildScreen(
 
                 OutlinedButton(
                     onClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            context.startActivity(intent)
-                        }
+                        activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.OVERLAY
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -373,13 +402,7 @@ fun ChildScreen(
 
                 OutlinedButton(
                     onClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            context.startActivity(intent)
-                        }
+                        activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.BATTERY_OPTIMIZATION
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
