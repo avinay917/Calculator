@@ -515,4 +515,30 @@ object FirebaseRepository {
         ref.addValueEventListener(listener)
         return listener
     }
+
+    fun listenToAppUpdate(onUpdateReceived: (AppUpdateInfo?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("app_update")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val updateInfo = snapshot.getValue(AppUpdateInfo::class.java)
+                onUpdateReceived(updateInfo)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                recordNonFatalError("App update listener cancelled: ${error.message}", error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    fun publishAppUpdate(info: AppUpdateInfo, onResult: (Boolean, String?) -> Unit) {
+        database.reference.child("app_update").setValue(info)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    onResult(true, null)
+                } else {
+                    onResult(false, task.exception?.localizedMessage)
+                }
+            }
+    }
 }

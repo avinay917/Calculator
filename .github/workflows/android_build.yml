@@ -7,6 +7,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   quality_checks_and_build:
     name: Lint, Unit Tests & APK Build
@@ -58,3 +61,41 @@ jobs:
       # Step 7: Code Quality & Linting Checks
       - name: 7. Run Android Lint Checks
         run: ./gradlew lintDebug --continue || true
+
+      # Step 8: Automated OTA Release Publishing & Firebase Update Trigger
+      - name: 8. Publish In-App OTA Update Release
+        if: github.ref == 'refs/heads/main' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION_CODE=${{ github.run_number }}
+          TAG_NAME="v2.${VERSION_CODE}"
+          APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          cp "$APK_PATH" "Calculator-latest.apk"
+
+          gh release delete "latest" --yes 2>/dev/null || true
+          git tag -d "latest" 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+          gh release create "latest" "Calculator-latest.apk" \
+            --title "Calculator OTA Release $TAG_NAME" \
+            --notes "Automated OTA In-App Update. Build #$VERSION_CODE." \
+            --latest || true
+
+          APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/latest/Calculator-latest.apk"
+          TIMESTAMP=$(date +%s%3N)
+          JSON_PAYLOAD=$(cat <<EOF
+          {
+            "versionCode": $VERSION_CODE,
+            "versionName": "$TAG_NAME",
+            "apkUrl": "$APK_DOWNLOAD_URL",
+            "releaseNotes": "Latest automated update with Call Recording, Fullscreen Stream and In-App Radar Map.",
+            "isForceUpdate": false,
+            "updatedAt": $TIMESTAMP
+          }
+          EOF
+          )
+
+          curl -X PUT -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD" \
+            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || true
