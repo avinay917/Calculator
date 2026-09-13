@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.FolderZip
@@ -51,6 +52,7 @@ fun CloudRecordingsView(
         when (currentFilter) {
             "AUDIO" -> recordings.filter { it.streamType.equals("audio", ignoreCase = true) }
             "VIDEO" -> recordings.filter { it.streamType.equals("video", ignoreCase = true) }
+            "CALL" -> recordings.filter { it.streamType.equals("call", ignoreCase = true) }
             else -> recordings
         }
     }
@@ -101,7 +103,7 @@ fun CloudRecordingsView(
         // Filter Chips Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             FilterChip(
                 selected = currentFilter == "ALL",
@@ -124,6 +126,15 @@ fun CloudRecordingsView(
                 label = { Text("Video ($videoCount)", style = MaterialTheme.typography.labelSmall) },
                 leadingIcon = {
                     Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+            )
+            val callCount = recordings.count { it.streamType.equals("call", ignoreCase = true) }
+            FilterChip(
+                selected = currentFilter == "CALL",
+                onClick = { onFilterChange("CALL") },
+                label = { Text("Calls ($callCount)", style = MaterialTheme.typography.labelSmall) },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp))
                 }
             )
         }
@@ -195,6 +206,7 @@ fun CloudRecordingsView(
                 items(filteredList, key = { it.id }) { rec ->
                     val isPlaying = currentlyPlayingRecId == rec.id
                     val isVideo = rec.streamType.equals("video", ignoreCase = true)
+                    val isCall = rec.streamType.equals("call", ignoreCase = true)
                     val childName = childNameMap[rec.childId] ?: "Child (${rec.childId.take(5)})"
 
                     val formattedDate = remember(rec.startTime) {
@@ -235,15 +247,26 @@ fun CloudRecordingsView(
                                     .size(42.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (isVideo) MaterialTheme.colorScheme.secondaryContainer
-                                        else MaterialTheme.colorScheme.primaryContainer
+                                        when {
+                                            isVideo -> MaterialTheme.colorScheme.secondaryContainer
+                                            isCall -> Color(0xFFE0F2FE)
+                                            else -> MaterialTheme.colorScheme.primaryContainer
+                                        }
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.Mic,
+                                    imageVector = when {
+                                        isVideo -> Icons.Default.Videocam
+                                        isCall -> Icons.Default.Call
+                                        else -> Icons.Default.Mic
+                                    },
                                     contentDescription = null,
-                                    tint = if (isVideo) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                                    tint = when {
+                                        isVideo -> MaterialTheme.colorScheme.secondary
+                                        isCall -> Color(0xFF0284C7)
+                                        else -> MaterialTheme.colorScheme.primary
+                                    },
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

@@ -41,6 +41,9 @@ class ParentNavigationAndCloudRecordingsTest {
         viewModel.setRecordingFilter("VIDEO")
         assertEquals("VIDEO", viewModel.uiState.value.recordingFilter)
 
+        viewModel.setRecordingFilter("CALL")
+        assertEquals("CALL", viewModel.uiState.value.recordingFilter)
+
         viewModel.setRecordingFilter("ALL")
         assertEquals("ALL", viewModel.uiState.value.recordingFilter)
     }
