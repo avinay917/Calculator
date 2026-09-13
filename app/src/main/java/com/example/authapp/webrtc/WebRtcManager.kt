@@ -22,6 +22,8 @@ class WebRtcManager(private val context: Context) {
     private val pendingCandidates = mutableListOf<IceCandidate>()
     @Volatile
     private var isRemoteDescriptionSet = false
+    @Volatile
+    private var isCameraRunning = false
 
     init {
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
@@ -173,6 +175,7 @@ class WebRtcManager(private val context: Context) {
                     }
                 }
 
+                isCameraRunning = started
                 if (started) {
                     AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
                 } else {
@@ -501,19 +504,24 @@ class WebRtcManager(private val context: Context) {
     }
 
     fun switchCamera(onSwitched: ((Boolean) -> Unit)? = null) {
-        (videoCapturer as? CameraVideoCapturer)?.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+        val capturer = videoCapturer as? CameraVideoCapturer
+        if (capturer == null || !isCameraRunning) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] switchCamera ignored: camera is not running")
+            return
+        }
+        capturer.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
             override fun onCameraSwitchDone(isFrontCamera: Boolean) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switched successfully. Front: $isFrontCamera")
                 onSwitched?.invoke(isFrontCamera)
             }
             override fun onCameraSwitchError(errorDescription: String?) {
-                FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switch error: $errorDescription")
-                FirebaseCrashlytics.getInstance().recordException(Exception("Camera switch error: $errorDescription"))
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switch notice: $errorDescription")
             }
         })
     }
 
     fun stopStream() {
+        isCameraRunning = false
         try {
             videoCapturer?.stopCapture()
         } catch (e: Exception) {

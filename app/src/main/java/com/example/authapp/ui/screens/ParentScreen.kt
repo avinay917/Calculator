@@ -202,6 +202,9 @@ fun ParentScreen(
                         remoteAudioTrack = track
                         track.setEnabled(true)
                         track.setVolume(calculateSafeAudioGain(uiState.audioSensitivity))
+                        if (!isBluetoothConnected) {
+                            audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+                        }
                         AppAnalytics.logFeatureUsage("audio_cast", "connected")
                     }
                 }
@@ -226,7 +229,13 @@ fun ParentScreen(
                 remoteVideoTrack = null
                 remoteAudioTrack = null
                 webRtcManager = null
-                FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
+                FirebaseRepository.removeSdpOfferListener(sessionId, sdpOfferListener)
+                FirebaseRepository.removeCandidateListener(sessionId, listenToParentCandidates = false, candidateListener)
+                try {
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    audioManager?.mode = AudioManager.MODE_NORMAL
+                    audioManager?.isSpeakerphoneOn = false
+                } catch (e: Exception) {}
                 if (uiState.isRecording) {
                     FirebaseRepository.requestRemoteRecording(childId, false, uiState.activeStreamType?.lowercase() ?: "audio")
                     viewModel.onRecordingStopped()

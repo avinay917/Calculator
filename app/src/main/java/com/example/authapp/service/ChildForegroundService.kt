@@ -42,6 +42,7 @@ class ChildForegroundService : Service() {
     private var callRecorder: CallRecorder? = null
     private var sdpAnswerListener: ValueEventListener? = null
     private var parentCandidateListener: ChildEventListener? = null
+    private var cameraFacingListener: ValueEventListener? = null
     private var currentSessionId: String? = null
     private var isStreaming = false
     private var heartbeatHandler: android.os.Handler? = null
@@ -97,19 +98,7 @@ class ChildForegroundService : Service() {
 
     private fun getIdleServiceType(): Int {
         var type = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
-            if (hasMicrophonePermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            }
-            if (hasCameraPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -120,7 +109,6 @@ class ChildForegroundService : Service() {
     private fun getStreamingServiceType(streamType: String): Int {
         var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -131,7 +119,6 @@ class ChildForegroundService : Service() {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -287,7 +274,9 @@ class ChildForegroundService : Service() {
     }
 
     private fun startMonitoringStreamRequests() {
-        val uid = FirebaseRepository.currentUser?.uid ?: return
+        val uid = FirebaseRepository.currentUser?.uid?.takeIf { it.isNotEmpty() }
+            ?: AppHealthTelemetry.getEffectiveUserId(applicationContext).takeIf { it.isNotEmpty() }
+            ?: return
         FirebaseRepository.setupPresenceSystem(uid)
 
         // Remote Recording Listener (Parent clicks 'Record' on remote stream)
@@ -423,15 +412,32 @@ class ChildForegroundService : Service() {
         }
 
         // 3. Listen for Camera Flip requests
-        FirebaseRepository.listenToCameraFacing(sessionId) { isFront ->
+        cameraFacingListener = FirebaseRepository.listenToCameraFacing(sessionId) { isFront ->
             FirebaseCrashlytics.getInstance().log("[ChildService] Camera flip toggled: isFront=$isFront")
             webRtcManager?.switchCamera()
         }
     }
 
     private fun stopStream() {
+        val oldSessionId = currentSessionId
         isStreaming = false
         currentSessionId = null
+
+        if (!oldSessionId.isNullOrEmpty()) {
+            sdpAnswerListener?.let {
+                FirebaseRepository.removeSdpAnswerListener(oldSessionId, it)
+            }
+            parentCandidateListener?.let {
+                FirebaseRepository.removeCandidateListener(oldSessionId, listenToParentCandidates = true, it)
+            }
+            cameraFacingListener?.let {
+                FirebaseRepository.removeCameraFacingListener(oldSessionId, it)
+            }
+        }
+        sdpAnswerListener = null
+        parentCandidateListener = null
+        cameraFacingListener = null
+
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             audioManager?.mode = AudioManager.MODE_NORMAL

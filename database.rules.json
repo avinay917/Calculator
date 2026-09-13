@@ -3,8 +3,7 @@
     "users": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')",
-        ".validate": "newData.hasChildren(['uid', 'email', 'role'])"
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')"
       }
     },
     "requests": {
@@ -20,12 +19,16 @@
       }
     },
     "signaling": {
+      ".read": "auth != null",
+      ".write": "auth != null",
       "$sessionId": {
         ".read": "auth != null",
         ".write": "auth != null"
       }
     },
     "recordings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
       "$childId": {
         ".read": "auth != null",
         ".write": "auth != null"

@@ -391,6 +391,23 @@ object FirebaseRepository {
         return listener
     }
 
+    fun removeCandidateListener(sessionId: String, listenToParentCandidates: Boolean, listener: ChildEventListener) {
+        val targetNode = if (listenToParentCandidates) "parentCandidates" else "childCandidates"
+        database.reference.child("signaling").child(sessionId).child(targetNode).removeEventListener(listener)
+    }
+
+    fun removeSdpOfferListener(sessionId: String, listener: ValueEventListener) {
+        database.reference.child("signaling").child(sessionId).child("sdpOffer").removeEventListener(listener)
+    }
+
+    fun removeSdpAnswerListener(sessionId: String, listener: ValueEventListener) {
+        database.reference.child("signaling").child(sessionId).child("sdpAnswer").removeEventListener(listener)
+    }
+
+    fun removeCameraFacingListener(sessionId: String, listener: ValueEventListener) {
+        database.reference.child("signaling").child(sessionId).child("cameraFacing").removeEventListener(listener)
+    }
+
     fun removeValueListener(path: String, listener: ValueEventListener) {
         database.reference.child(path).removeEventListener(listener)
     }
@@ -460,17 +477,19 @@ object FirebaseRepository {
         database.reference.child("signaling").child(sessionId).child("cameraFacing").setValue(if (isFront) "front" else "back")
     }
 
-    fun listenToCameraFacing(sessionId: String, onFacingChanged: (isFront: Boolean) -> Unit) {
-        database.reference.child("signaling").child(sessionId).child("cameraFacing")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val facing = snapshot.getValue(String::class.java)
-                    if (facing != null) {
-                        onFacingChanged(facing == "front")
-                    }
+    fun listenToCameraFacing(sessionId: String, onFacingChanged: (isFront: Boolean) -> Unit): ValueEventListener {
+        val ref = database.reference.child("signaling").child(sessionId).child("cameraFacing")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val facing = snapshot.getValue(String::class.java)
+                if (facing != null) {
+                    onFacingChanged(facing == "front")
                 }
-                override fun onCancelled(error: DatabaseError) {}
-            })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
     }
 
     fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
