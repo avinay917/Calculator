@@ -366,55 +366,61 @@ class ChildForegroundService : Service() {
         currentSessionId = sessionId
         isStreaming = true
 
-        // Configure hardware microphone routing for WebRTC
         try {
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            // Broadcaster MUST stay in MODE_NORMAL so local media playback (YouTube, music)
-            // and loudspeaker are NEVER suppressed or redirected to earpiece
-            audioManager?.mode = AudioManager.MODE_NORMAL
-            audioManager?.isMicrophoneMute = false
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[ChildService] AudioManager mode error: ${e.localizedMessage}")
-        }
-
-        webRtcManager = WebRtcManager(applicationContext)
-        val iceServers = WebRtcManager.getDefaultIceServers()
-
-        FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) for session: $sessionId")
-
-        webRtcManager?.startStream(
-            streamType = streamType,
-            iceServers = iceServers,
-            onIceCandidate = { candidate ->
-                val candMap = mapOf(
-                    "sdpMid" to candidate.sdpMid,
-                    "sdpMLineIndex" to candidate.sdpMLineIndex,
-                    "sdp" to candidate.sdp
-                )
-                FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = false)
-            },
-            onSdpCreated = { sdp ->
-                FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
-                FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
+            // Configure hardware microphone routing for WebRTC
+            try {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                // Broadcaster MUST stay in MODE_NORMAL so local media playback (YouTube, music)
+                // and loudspeaker are NEVER suppressed or redirected to earpiece
+                audioManager?.mode = AudioManager.MODE_NORMAL
+                audioManager?.isMicrophoneMute = false
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] AudioManager mode error: ${e.localizedMessage}")
             }
-        )
 
-        // 1. Listen for SDP Answer from Parent
-        sdpAnswerListener = FirebaseRepository.listenToSdpAnswer(sessionId) { sdpAnswer ->
-            FirebaseCrashlytics.getInstance().log("[ChildService] Received SDP Answer from Parent")
-            webRtcManager?.setRemoteAnswer(sdpAnswer)
-        }
+            webRtcManager = WebRtcManager(applicationContext)
+            val iceServers = WebRtcManager.getDefaultIceServers()
 
-        // 2. Listen for Parent ICE candidates
-        parentCandidateListener = FirebaseRepository.listenToCandidates(sessionId, listenToParentCandidates = true) { sdpMid, sdpMLineIndex, sdp ->
-            FirebaseCrashlytics.getInstance().log("[ChildService] Received Parent ICE Candidate")
-            webRtcManager?.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
-        }
+            FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) for session: $sessionId")
 
-        // 3. Listen for Camera Flip requests
-        cameraFacingListener = FirebaseRepository.listenToCameraFacing(sessionId) { isFront ->
-            FirebaseCrashlytics.getInstance().log("[ChildService] Camera flip toggled: isFront=$isFront")
-            webRtcManager?.switchCamera()
+            webRtcManager?.startStream(
+                streamType = streamType,
+                iceServers = iceServers,
+                onIceCandidate = { candidate ->
+                    val candMap = mapOf(
+                        "sdpMid" to candidate.sdpMid,
+                        "sdpMLineIndex" to candidate.sdpMLineIndex,
+                        "sdp" to candidate.sdp
+                    )
+                    FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = false)
+                },
+                onSdpCreated = { sdp ->
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
+                    FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
+                }
+            )
+
+            // 1. Listen for SDP Answer from Parent
+            sdpAnswerListener = FirebaseRepository.listenToSdpAnswer(sessionId) { sdpAnswer ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Received SDP Answer from Parent")
+                webRtcManager?.setRemoteAnswer(sdpAnswer)
+            }
+
+            // 2. Listen for Parent ICE candidates
+            parentCandidateListener = FirebaseRepository.listenToCandidates(sessionId, listenToParentCandidates = true) { sdpMid, sdpMLineIndex, sdp ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Received Parent ICE Candidate")
+                webRtcManager?.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
+            }
+
+            // 3. Listen for Camera Flip requests
+            cameraFacingListener = FirebaseRepository.listenToCameraFacing(sessionId) { isFront ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Camera flip toggled: isFront=$isFront")
+                webRtcManager?.switchCamera()
+            }
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().recordException(t)
+            AppHealthTelemetry.logDiagnostic(applicationContext, "WEBRTC_STREAM", "FAILED", "Failed to start WebRTC stream on child: ${t.localizedMessage}", t.message)
+            stopStream()
         }
     }
 

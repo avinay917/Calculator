@@ -7,7 +7,10 @@ import com.google.firebase.perf.FirebasePerformance
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 
-class WebRtcManager(private val context: Context) {
+class WebRtcManager(
+    private val context: Context,
+    private val isReceiverOnly: Boolean = false
+) {
     val eglBase: EglBase = EglBase.create()
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
@@ -26,46 +29,55 @@ class WebRtcManager(private val context: Context) {
     private var isCameraRunning = false
 
     init {
-        val options = PeerConnectionFactory.InitializationOptions.builder(context)
-            .setEnableInternalTracer(true)
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
+        try {
+            val options = PeerConnectionFactory.InitializationOptions.builder(context)
+                .setEnableInternalTracer(true)
+                .createInitializationOptions()
+            PeerConnectionFactory.initialize(options)
 
-        val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
-        val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+            val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
+            val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
 
-        // Hardware AEC causes Android's audio HAL to switch into VoIP/Communication mode,
-        // which ducks/mutes the child device's speaker when playing YouTube or media.
-        // Broadcaster never plays remote audio, so hardware AEC is not needed.
-        val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
+            val adm = if (isReceiverOnly) {
+                // Receiver only needs audio output/playback, no recording hardware access
+                JavaAudioDeviceModule.builder(context)
+                    .setUseHardwareAcousticEchoCanceler(false)
+                    .setUseHardwareNoiseSuppressor(false)
+                    .createAudioDeviceModule()
+            } else {
+                val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
+                JavaAudioDeviceModule.builder(context)
+                    .setUseHardwareAcousticEchoCanceler(false)
+                    .setUseHardwareNoiseSuppressor(useNs)
+                    .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+                    .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                        override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
+                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
+                            FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
+                        }
+                        override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode?, errorMessage: String?) {
+                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Start Error $errorCode: $errorMessage", errorMessage)
+                            FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Start Error] $errorCode: $errorMessage")
+                        }
+                        override fun onWebRtcAudioRecordError(errorMessage: String?) {
+                            AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Error: $errorMessage", errorMessage)
+                            FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Error] $errorMessage")
+                        }
+                    })
+                    .createAudioDeviceModule()
+            }
+            audioDeviceModule = adm
 
-        val adm = JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(false)
-            .setUseHardwareNoiseSuppressor(useNs)
-            .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
-            .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
-                override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
-                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
-                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
-                }
-                override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode?, errorMessage: String?) {
-                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Start Error $errorCode: $errorMessage", errorMessage)
-                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Start Error] $errorCode: $errorMessage")
-                }
-                override fun onWebRtcAudioRecordError(errorMessage: String?) {
-                    AppHealthTelemetry.logDiagnostic(context, "LIVE_AUDIO", "FAILED", "AudioRecord Error: $errorMessage", errorMessage)
-                    FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Error] $errorMessage")
-                }
-            })
-            .createAudioDeviceModule()
-        audioDeviceModule = adm
-
-        factory = PeerConnectionFactory.builder()
-            .setAudioDeviceModule(adm)
-            .setVideoEncoderFactory(encoderFactory)
-            .setVideoDecoderFactory(decoderFactory)
-            .setOptions(PeerConnectionFactory.Options())
-            .createPeerConnectionFactory()
+            factory = PeerConnectionFactory.builder()
+                .setAudioDeviceModule(adm)
+                .setVideoEncoderFactory(encoderFactory)
+                .setVideoDecoderFactory(decoderFactory)
+                .setOptions(PeerConnectionFactory.Options())
+                .createPeerConnectionFactory()
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[WebRtcManager] Initialization error: ${e.localizedMessage}")
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
     }
 
     // --- Broadcaster Mode (Child Device) ---
@@ -160,13 +172,20 @@ class WebRtcManager(private val context: Context) {
                     try {
                         capturer.dispose()
                     } catch (e: Exception) {}
-                    capturer = createVideoCapturer(preferFront = false)
-                    if (capturer != null) {
-                        videoCapturer = capturer
-                        capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
+                    try {
+                        surfaceTextureHelper?.dispose()
+                    } catch (e: Exception) {}
+                    surfaceTextureHelper = null
+
+                    val fallbackCapturer = createVideoCapturer(preferFront = false)
+                    if (fallbackCapturer != null) {
+                        videoCapturer = fallbackCapturer
+                        val newSurfaceHelper = SurfaceTextureHelper.create("CaptureThreadFallback", eglBase.eglBaseContext)
+                        surfaceTextureHelper = newSurfaceHelper
+                        fallbackCapturer.initialize(newSurfaceHelper, context, videoSource?.capturerObserver)
                         for ((w, h, fps) in resolutions) {
                             try {
-                                capturer.startCapture(w, h, fps)
+                                fallbackCapturer.startCapture(w, h, fps)
                                 FirebaseCrashlytics.getInstance().log("[WebRTC] Fallback Camera capture started: ${w}x${h}@$fps")
                                 started = true
                                 break
@@ -176,16 +195,16 @@ class WebRtcManager(private val context: Context) {
                 }
 
                 isCameraRunning = started
-                if (started) {
+                if (started && videoSource != null) {
                     AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
+                    videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
+                    videoTrack?.setEnabled(true)
+                    peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
                 } else {
                     AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "Camera startCapture failed for all fallback resolutions")
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera startCapture failed: video track omitted")
                 }
-
-                videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
-                videoTrack?.setEnabled(true)
-                peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
-                FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
             } else {
                 AppHealthTelemetry.logDiagnostic(context, "LIVE_VIDEO", "FAILED", "No camera capturer could be created (Camera hardware busy or CAMERA permission missing)")
                 FirebaseCrashlytics.getInstance().log("[WebRTC] ERROR: No camera capturer could be created!")
@@ -547,20 +566,20 @@ class WebRtcManager(private val context: Context) {
         audioTrack = null
         try {
             peerConnection?.close()
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
         peerConnection = null
         try {
             audioDeviceModule?.release()
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
         audioDeviceModule = null
         try {
             factory?.dispose()
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
         factory = null
         try {
             eglBase.release()
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${e.localizedMessage}")
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${t.localizedMessage}")
         }
         synchronized(pendingCandidates) {
             pendingCandidates.clear()

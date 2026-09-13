@@ -8,6 +8,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,7 +72,12 @@ class AudioRouteManager(private val context: Context) {
                     checkAndHandleBluetooth()
                 }
             }
-            context.registerReceiver(bluetoothReceiver, filter)
+            ContextCompat.registerReceiver(
+                context,
+                bluetoothReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerReceiver error: ${e.localizedMessage}")
         }

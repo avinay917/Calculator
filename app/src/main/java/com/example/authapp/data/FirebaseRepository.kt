@@ -236,8 +236,18 @@ object FirebaseRepository {
             })
     }
 
-    fun requestStream(childId: String, streamType: String, onComplete: (String) -> Unit) {
-        val parentId = currentUser?.uid ?: return
+    fun requestStream(
+        childId: String,
+        streamType: String,
+        onComplete: (String) -> Unit,
+        onError: ((Exception) -> Unit)? = null
+    ) {
+        val parentId = currentUser?.uid
+        if (parentId == null) {
+            val err = IllegalStateException("Parent not authenticated")
+            onError?.invoke(err)
+            return
+        }
         val timestamp = System.currentTimeMillis()
         val sessionId = "session_${childId}_${parentId}_$timestamp"
         val requestData = mapOf(
@@ -249,11 +259,19 @@ object FirebaseRepository {
             "status" to "REQUESTED",
             "timestamp" to timestamp
         )
-        database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
+        try {
+            database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
+        } catch (_: Exception) {}
         database.reference.child("streams").child(childId).child("status").setValue(requestData)
             .addOnSuccessListener {
-                database.reference.child("users").child(childId).child("streamWakeup").setValue(timestamp)
+                try {
+                    database.reference.child("users").child(childId).child("streamWakeup").setValue(timestamp)
+                } catch (_: Exception) {}
                 onComplete(sessionId)
+            }
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+                onError?.invoke(e)
             }
     }
 
@@ -329,15 +347,24 @@ object FirebaseRepository {
 
     fun sendSdpOffer(sessionId: String, sdp: String) {
         database.reference.child("signaling").child(sessionId).child("sdpOffer").setValue(sdp)
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
     }
 
     fun sendSdpAnswer(sessionId: String, sdp: String) {
         database.reference.child("signaling").child(sessionId).child("sdpAnswer").setValue(sdp)
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
     }
 
     fun sendIceCandidate(sessionId: String, candidate: Map<String, Any>, isParent: Boolean) {
         val targetNode = if (isParent) "parentCandidates" else "childCandidates"
         database.reference.child("signaling").child(sessionId).child(targetNode).push().setValue(candidate)
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
     }
 
     fun listenToSdpOffer(sessionId: String, onOfferReceived: (String) -> Unit): ValueEventListener {

@@ -12,15 +12,13 @@ fun SafeSurfaceViewRenderer(
     eglContext: EglBase.Context?,
     modifier: Modifier = Modifier
 ) {
-    // Keep track of the currently attached sink to safely swap or detach without releasing the EGL renderer
-    var currentTrack by remember { mutableStateOf<VideoTrack?>(null) }
-
     AndroidView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
                 setEnableHardwareScaler(true)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
+                setZOrderMediaOverlay(true)
                 if (eglContext != null) {
                     try {
                         init(eglContext, object : RendererCommon.RendererEvents {
@@ -31,47 +29,52 @@ fun SafeSurfaceViewRenderer(
                                 FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
                             }
                         })
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
+                    } catch (t: Throwable) {
+                        FirebaseCrashlytics.getInstance().recordException(t)
                     }
                 }
             }
         },
         update = { renderer ->
-            if (currentTrack != videoTrack) {
-                // Detach previous track if any
-                currentTrack?.let { oldTrack ->
+            val oldTrack = renderer.tag as? VideoTrack
+            if (oldTrack != videoTrack) {
+                oldTrack?.let {
                     try {
-                        oldTrack.removeSink(renderer)
+                        it.removeSink(renderer)
                         FirebaseCrashlytics.getInstance().log("[WebRTC UI] Old videoTrack detached from sink")
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
+                    } catch (t: Throwable) {
+                        FirebaseCrashlytics.getInstance().recordException(t)
                     }
                 }
-                currentTrack = videoTrack
-                // Attach new track safely
+                renderer.tag = videoTrack
                 videoTrack?.let { newTrack ->
                     try {
                         newTrack.addSink(renderer)
                         FirebaseCrashlytics.getInstance().log("[WebRTC UI] New videoTrack attached to sink")
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
+                    } catch (t: Throwable) {
+                        FirebaseCrashlytics.getInstance().recordException(t)
                     }
                 }
             }
         },
         onRelease = { renderer ->
-            try {
-                currentTrack?.removeSink(renderer)
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
+            val attachedTrack = renderer.tag as? VideoTrack
+            attachedTrack?.let {
+                try {
+                    it.removeSink(renderer)
+                } catch (t: Throwable) {
+                    FirebaseCrashlytics.getInstance().recordException(t)
+                }
             }
+            renderer.tag = null
             try {
                 renderer.clearImage()
+            } catch (_: Throwable) {}
+            try {
                 renderer.release()
                 FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceViewRenderer released cleanly")
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
+            } catch (t: Throwable) {
+                FirebaseCrashlytics.getInstance().recordException(t)
             }
         },
         modifier = modifier
