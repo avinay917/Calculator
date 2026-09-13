@@ -38,7 +38,25 @@ class WebRtcManager(
             PeerConnectionFactory.initialize(options)
 
             val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
-            val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+            val decoderFactory = object : VideoDecoderFactory {
+                private val hardwareFactory = try { DefaultVideoDecoderFactory(eglBase.eglBaseContext) } catch (_: Throwable) { null }
+                private val softwareFactory = SoftwareVideoDecoderFactory()
+
+                override fun createDecoder(info: VideoCodecInfo?): VideoDecoder? {
+                    return try {
+                        hardwareFactory?.createDecoder(info) ?: softwareFactory.createDecoder(info)
+                    } catch (_: Throwable) {
+                        softwareFactory.createDecoder(info)
+                    }
+                }
+
+                override fun getSupportedCodecs(): Array<VideoCodecInfo> {
+                    val list = mutableListOf<VideoCodecInfo>()
+                    try { hardwareFactory?.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
+                    try { softwareFactory.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
+                    return list.distinctBy { it.name }.toTypedArray()
+                }
+            }
 
             val adm = if (isReceiverOnly) {
                 // Receiver only needs audio output/playback — no mic hardware access

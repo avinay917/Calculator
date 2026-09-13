@@ -1,5 +1,6 @@
 package com.example.authapp.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -57,46 +58,42 @@ fun LiveStreamDialog(
 ) {
     val isVideo = activeStreamType.equals("video", ignoreCase = true)
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        )
+    BackHandler(onBack = onDismiss)
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = if (isVideo) Color.Black else MaterialTheme.colorScheme.background
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = if (isVideo) Color.Black else MaterialTheme.colorScheme.background
-        ) {
-            if (isVideo) {
-                // Video Mode: Edge-to-edge SafeSurfaceViewRenderer with floating HUD
-                Box(modifier = Modifier.fillMaxSize()) {
-                    if (remoteVideoTrack != null && webRtcManager != null) {
-                        key(remoteVideoTrack) {
-                            SafeSurfaceViewRenderer(
-                                videoTrack = remoteVideoTrack,
-                                eglContext = webRtcManager.eglBase.eglBaseContext,
-                                modifier = Modifier.fillMaxSize()
+        if (isVideo) {
+            // Video Mode: Edge-to-edge SafeSurfaceViewRenderer with floating HUD
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (webRtcManager != null) {
+                    SafeSurfaceViewRenderer(
+                        videoTrack = remoteVideoTrack,
+                        eglContext = webRtcManager.eglBase.eglBaseContext,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                if (remoteVideoTrack == null) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Connecting to child camera...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.85f)
                             )
                         }
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(48.dp),
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Connecting to child camera...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
                     }
+                }
 
                     // Top Floating Bar with Gradient
                     Box(
@@ -363,4 +360,3 @@ fun LiveStreamDialog(
             }
         }
     }
-}

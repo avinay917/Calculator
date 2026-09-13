@@ -116,6 +116,7 @@ dependencies {
   implementation(libs.firebase.messaging)
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.crashlytics)
+  implementation("com.google.firebase:firebase-crashlytics-ndk")
   implementation(libs.firebase.perf)
   implementation(libs.firebase.storage)
   implementation(libs.webrtc)

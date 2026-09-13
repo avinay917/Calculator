@@ -304,8 +304,9 @@ fun ParentScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -495,39 +496,39 @@ fun ParentScreen(
                     }
                 )
             }
+        }
 
-            // Active Stream Modal Dialog
-            uiState.activeSessionId?.let {
-                LiveStreamDialog(
-                    activeStreamType = uiState.activeStreamType,
-                    activeChildName = uiState.activeChildName,
-                    streamStatusText = uiState.streamStatusText,
-                    isFrontCamera = uiState.isFrontCamera,
-                    isRecording = uiState.isRecording,
-                    recordingDurationSeconds = uiState.recordingDurationSeconds,
-                    audioSensitivity = uiState.audioSensitivity,
-                    remoteVideoTrack = remoteVideoTrack,
-                    webRtcManager = webRtcManager,
-                    audioLevel = liveAudioLevel,
-                    onDismiss = {
-                        if (uiState.isRecording) {
-                            toggleRecording(uiState.activeStreamType ?: "audio")
-                        }
-                        viewModel.stopStream()
-                        AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
-                    },
-                    onFlipCamera = {
-                        viewModel.toggleCameraFacing()
-                        Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
-                        AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
-                    },
-                    onToggleRecording = { type -> toggleRecording(type) },
-                    onSensitivityChange = { viewModel.setAudioSensitivity(it) },
-                    currentAudioRoute = currentAudioRoute,
-                    isBluetoothConnected = isBluetoothConnected,
-                    onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
-                )
-            }
+        // Active Stream Fullscreen Screen (Overlay directly in Activity Window)
+        uiState.activeSessionId?.let {
+            LiveStreamDialog(
+                activeStreamType = uiState.activeStreamType,
+                activeChildName = uiState.activeChildName,
+                streamStatusText = uiState.streamStatusText,
+                isFrontCamera = uiState.isFrontCamera,
+                isRecording = uiState.isRecording,
+                recordingDurationSeconds = uiState.recordingDurationSeconds,
+                audioSensitivity = uiState.audioSensitivity,
+                remoteVideoTrack = remoteVideoTrack,
+                webRtcManager = webRtcManager,
+                audioLevel = liveAudioLevel,
+                onDismiss = {
+                    if (uiState.isRecording) {
+                        toggleRecording(uiState.activeStreamType ?: "audio")
+                    }
+                    viewModel.stopStream()
+                    AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
+                },
+                onFlipCamera = {
+                    viewModel.toggleCameraFacing()
+                    Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
+                    AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
+                },
+                onToggleRecording = { type -> toggleRecording(type) },
+                onSensitivityChange = { viewModel.setAudioSensitivity(it) },
+                currentAudioRoute = currentAudioRoute,
+                isBluetoothConnected = isBluetoothConnected,
+                onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
+            )
         }
     }
 }
