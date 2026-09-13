@@ -238,7 +238,8 @@ object FirebaseRepository {
 
     fun requestStream(childId: String, streamType: String, onComplete: (String) -> Unit) {
         val parentId = currentUser?.uid ?: return
-        val sessionId = "session_${childId}_$parentId"
+        val timestamp = System.currentTimeMillis()
+        val sessionId = "session_${childId}_${parentId}_$timestamp"
         val requestData = mapOf(
             "childId" to childId,
             "parentId" to parentId,
@@ -246,11 +247,12 @@ object FirebaseRepository {
             "type" to streamType,
             "sessionId" to sessionId,
             "status" to "REQUESTED",
-            "timestamp" to System.currentTimeMillis()
+            "timestamp" to timestamp
         )
+        database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
         database.reference.child("streams").child(childId).child("status").setValue(requestData)
             .addOnSuccessListener {
-                database.reference.child("users").child(childId).child("streamWakeup").setValue(System.currentTimeMillis())
+                database.reference.child("users").child(childId).child("streamWakeup").setValue(timestamp)
                 onComplete(sessionId)
             }
     }
@@ -264,6 +266,36 @@ object FirebaseRepository {
         if (!sessionId.isNullOrEmpty()) {
             database.reference.child("signaling").child(sessionId).removeValue()
         }
+        val parentId = currentUser?.uid
+        if (parentId != null) {
+            database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
+        }
+    }
+
+    fun requestRemoteRecording(childId: String, isRecording: Boolean, streamType: String) {
+        val data = mapOf(
+            "isRecording" to isRecording,
+            "streamType" to streamType,
+            "timestamp" to System.currentTimeMillis()
+        )
+        database.reference.child("streams").child(childId).child("recordCommand").setValue(data)
+    }
+
+    fun listenToRemoteRecording(
+        childId: String,
+        onCommand: (isRecording: Boolean, streamType: String) -> Unit
+    ): ValueEventListener {
+        val ref = database.reference.child("streams").child(childId).child("recordCommand")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val isRecording = snapshot.child("isRecording").getValue(Boolean::class.java) ?: false
+                val streamType = snapshot.child("streamType").getValue(String::class.java) ?: "audio"
+                onCommand(isRecording, streamType)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
     }
 
     fun listenToStreamRequests(

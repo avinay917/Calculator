@@ -26,36 +26,51 @@ class CallRecorder(private val context: Context) {
             val sanitizedNumber = phoneNumber.replace(Regex("[^0-9+]"), "").ifEmpty { "unknown" }
             val file = File(recordingsDir, "call_${sanitizedNumber}_${System.currentTimeMillis()}.m4a")
 
-            val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
+            val sources = listOf(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION
+            )
+
+            var started = false
+            for (source in sources) {
+                var testRecorder: MediaRecorder? = null
+                try {
+                    val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        MediaRecorder(context)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        MediaRecorder()
+                    }
+                    testRecorder = recorder
+                    recorder.setAudioSource(source)
+                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    recorder.setAudioEncodingBitRate(128000)
+                    recorder.setAudioSamplingRate(44100)
+                    recorder.setOutputFile(file.absolutePath)
+                    recorder.prepare()
+                    recorder.start()
+                    mediaRecorder = recorder
+                    started = true
+                    FirebaseCrashlytics.getInstance().log("[CallRecorder] Call recording started with source=$source for $phoneNumber")
+                    break
+                } catch (err: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[CallRecorder] Source $source failed: ${err.localizedMessage}")
+                    try {
+                        testRecorder?.release()
+                    } catch (_: Exception) {}
+                }
             }
 
-            // Attempt VOICE_COMMUNICATION first; fallback to MIC if device restricted
-            try {
-                recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            } catch (_: Exception) {
-                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            if (!started) {
+                throw IllegalStateException("All audio sources failed for call recording")
             }
 
-            recorder.apply {
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(128000)
-                setAudioSamplingRate(44100)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
-            }
-
-            mediaRecorder = recorder
             currentOutputFile = file
             isRecording = true
             activeCallNumber = phoneNumber
             recordingStartTimeMillis = System.currentTimeMillis()
-            FirebaseCrashlytics.getInstance().log("[CallRecorder] Automatic call recording started for $phoneNumber")
             file
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[CallRecorder] Failed to start call recording: ${e.localizedMessage}")

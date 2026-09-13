@@ -37,7 +37,7 @@ class WebRtcManager(private val context: Context) {
         val adm = JavaAudioDeviceModule.builder(context)
             .setUseHardwareAcousticEchoCanceler(useAec)
             .setUseHardwareNoiseSuppressor(useNs)
-            .setAudioSource(android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
             .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                 override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
                     FirebaseCrashlytics.getInstance().log("[WebRTC AudioRecord Init Error] $errorMessage")
@@ -503,15 +503,35 @@ class WebRtcManager(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        videoCapturer?.dispose()
+        try {
+            videoCapturer?.dispose()
+        } catch (_: Exception) {}
         videoCapturer = null
-        surfaceTextureHelper?.dispose()
+        try {
+            surfaceTextureHelper?.dispose()
+        } catch (_: Exception) {}
         surfaceTextureHelper = null
-        peerConnection?.close()
+        try {
+            videoTrack?.setEnabled(false)
+            videoTrack?.dispose()
+        } catch (_: Exception) {}
+        videoTrack = null
+        try {
+            audioTrack?.setEnabled(false)
+            audioTrack?.dispose()
+        } catch (_: Exception) {}
+        audioTrack = null
+        try {
+            peerConnection?.close()
+        } catch (_: Exception) {}
         peerConnection = null
-        audioDeviceModule?.release()
+        try {
+            audioDeviceModule?.release()
+        } catch (_: Exception) {}
         audioDeviceModule = null
-        factory?.dispose()
+        try {
+            factory?.dispose()
+        } catch (_: Exception) {}
         factory = null
         try {
             eglBase.release()

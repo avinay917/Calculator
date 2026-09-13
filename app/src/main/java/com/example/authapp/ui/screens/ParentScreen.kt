@@ -71,74 +71,16 @@ fun ParentScreen(
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
-    val streamRecorder = remember { StreamAudioRecorder(context) }
-    val audioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted) {
-            Toast.makeText(context, "Microphone permission is required to record stream audio", Toast.LENGTH_LONG).show()
-        }
-    }
-
     fun toggleRecording(streamType: String) {
+        val childId = uiState.activeChildId ?: return
         if (uiState.isRecording) {
-            val childId = uiState.activeChildId ?: ""
-            val durationSec = uiState.recordingDurationSeconds
-            val recordedFile = streamRecorder.stopRecording()
             viewModel.onRecordingStopped()
-
-            if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                val filePath = recordedFile.absolutePath
-                FirebaseRepository.saveRecordingSession(
-                    childId = childId,
-                    streamType = streamType.lowercase(),
-                    durationSeconds = durationSec,
-                    localFilePath = filePath
-                ) {
-                    Toast.makeText(context, "Recording saved to device! (${recordedFile.name})", Toast.LENGTH_SHORT).show()
-                }
-
-                // Background cloud sync to Firebase Storage
-                try {
-                    val fileUri = Uri.fromFile(recordedFile)
-                    FirebaseRepository.uploadRecordingFile(
-                        childId = childId,
-                        fileUri = fileUri,
-                        streamType = streamType.lowercase(),
-                        durationSeconds = durationSec,
-                        localFilePath = filePath
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().recordException(e)
-                }
-            } else {
-                FirebaseRepository.saveRecordingSession(
-                    childId = childId,
-                    streamType = streamType.lowercase(),
-                    durationSeconds = durationSec
-                ) {
-                    Toast.makeText(context, "Recording saved to history", Toast.LENGTH_SHORT).show()
-                }
-            }
+            FirebaseRepository.requestRemoteRecording(childId, false, streamType.lowercase())
+            Toast.makeText(context, "Recording stopped. Syncing to Cloud History...", Toast.LENGTH_SHORT).show()
         } else {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasPermission) {
-                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                Toast.makeText(context, "Microphone permission required for recording", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val file = streamRecorder.startRecording(streamType)
-            if (file != null) {
-                viewModel.onRecordingStarted()
-                Toast.makeText(context, "Recording started to ${file.name}...", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
-            }
+            viewModel.onRecordingStarted()
+            FirebaseRepository.requestRemoteRecording(childId, true, streamType.lowercase())
+            Toast.makeText(context, "High-quality master recording started on child device...", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -205,6 +147,7 @@ fun ParentScreen(
                 mediaPlayer?.release()
             } catch (e: Exception) {}
             mediaPlayer = null
+            audioRouteManager.release()
         }
     }
 
@@ -283,10 +226,10 @@ fun ParentScreen(
                 remoteVideoTrack = null
                 remoteAudioTrack = null
                 webRtcManager = null
-                audioRouteManager.release()
                 FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
-                if (streamRecorder.isRecording) {
-                    streamRecorder.stopRecording()
+                if (uiState.isRecording) {
+                    FirebaseRepository.requestRemoteRecording(childId, false, uiState.activeStreamType?.lowercase() ?: "audio")
+                    viewModel.onRecordingStopped()
                 }
                 manager.stopStream()
             }

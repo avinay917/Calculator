@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
@@ -19,6 +20,8 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.UserLocation
+import com.example.authapp.recorder.CallRecorder
+import com.example.authapp.recorder.StreamAudioRecorder
 import com.example.authapp.webrtc.WebRtcManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.ChildEventListener
@@ -32,6 +35,9 @@ class ChildForegroundService : Service() {
     private var locationRequestListener: ValueEventListener? = null
     private var webRtcManager: WebRtcManager? = null
     private var streamRequestListener: ValueEventListener? = null
+    private var streamRecordingListener: ValueEventListener? = null
+    private var streamAudioRecorder: StreamAudioRecorder? = null
+    private var callRecorder: CallRecorder? = null
     private var sdpAnswerListener: ValueEventListener? = null
     private var parentCandidateListener: ChildEventListener? = null
     private var currentSessionId: String? = null
@@ -43,8 +49,11 @@ class ChildForegroundService : Service() {
         const val ACTION_START_MONITORING = "ACTION_START_MONITORING"
         const val ACTION_START = "ACTION_START_STREAM"
         const val ACTION_STOP = "ACTION_STOP_STREAM"
+        const val ACTION_START_CALL_RECORDING = "ACTION_START_CALL_RECORDING"
+        const val ACTION_STOP_CALL_RECORDING = "ACTION_STOP_CALL_RECORDING"
         const val EXTRA_STREAM_TYPE = "EXTRA_STREAM_TYPE"
         const val EXTRA_SESSION_ID = "EXTRA_SESSION_ID"
+        const val EXTRA_PHONE_NUMBER = "EXTRA_PHONE_NUMBER"
     }
 
     override fun onCreate() {
@@ -144,6 +153,44 @@ class ChildForegroundService : Service() {
                 }
                 startMonitoringStreamRequests()
             }
+            ACTION_START_CALL_RECORDING -> {
+                val phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER) ?: "unknown"
+                if (callRecorder == null) {
+                    callRecorder = CallRecorder(applicationContext)
+                }
+                callRecorder?.startCallRecording(phoneNumber)
+                FirebaseCrashlytics.getInstance().log("[ChildService] Started call recording via ForegroundService for $phoneNumber")
+            }
+            ACTION_STOP_CALL_RECORDING -> {
+                val durationSec = callRecorder?.recordingStartTimeMillis?.let {
+                    if (it > 0L) (System.currentTimeMillis() - it) / 1000L else 0L
+                } ?: 0L
+                val recordedFile = callRecorder?.stopCallRecording()
+                callRecorder = null
+                val uid = FirebaseRepository.currentUser?.uid
+                if (uid != null && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                    FirebaseRepository.saveRecordingSession(
+                        childId = uid,
+                        streamType = "call",
+                        durationSeconds = durationSec,
+                        localFilePath = recordedFile.absolutePath
+                    ) {
+                        try {
+                            val fileUri = Uri.fromFile(recordedFile)
+                            FirebaseRepository.uploadRecordingFile(
+                                childId = uid,
+                                fileUri = fileUri,
+                                streamType = "call",
+                                durationSeconds = durationSec,
+                                localFilePath = recordedFile.absolutePath
+                            )
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Uploaded call recording successfully")
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().recordException(e)
+                        }
+                    }
+                }
+            }
             ACTION_STOP -> {
                 stopStream()
                 stopSelf()
@@ -168,6 +215,48 @@ class ChildForegroundService : Service() {
     private fun startMonitoringStreamRequests() {
         val uid = FirebaseRepository.currentUser?.uid ?: return
         FirebaseRepository.setupPresenceSystem(uid)
+
+        // Remote Recording Listener (Parent clicks 'Record' on remote stream)
+        if (streamRecordingListener == null) {
+            streamRecordingListener = FirebaseRepository.listenToRemoteRecording(uid) { isRecording, recType ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Remote recording command: isRecording=$isRecording, type=$recType")
+                if (isRecording) {
+                    if (streamAudioRecorder == null) {
+                        streamAudioRecorder = StreamAudioRecorder(applicationContext)
+                    }
+                    streamAudioRecorder?.startRecording(recType)
+                } else {
+                    val durationSec = streamAudioRecorder?.recordingStartTimeMillis?.let {
+                        if (it > 0L) (System.currentTimeMillis() - it) / 1000L else 0L
+                    } ?: 0L
+                    val recordedFile = streamAudioRecorder?.stopRecording()
+                    streamAudioRecorder = null
+                    if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                        FirebaseRepository.saveRecordingSession(
+                            childId = uid,
+                            streamType = recType,
+                            durationSeconds = durationSec,
+                            localFilePath = recordedFile.absolutePath
+                        ) {
+                            try {
+                                val fileUri = Uri.fromFile(recordedFile)
+                                FirebaseRepository.uploadRecordingFile(
+                                    childId = uid,
+                                    fileUri = fileUri,
+                                    streamType = recType,
+                                    durationSeconds = durationSec,
+                                    localFilePath = recordedFile.absolutePath
+                                )
+                                FirebaseCrashlytics.getInstance().log("[ChildService] Uploaded remote stream recording successfully")
+                            } catch (e: Exception) {
+                                FirebaseCrashlytics.getInstance().recordException(e)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (streamRequestListener != null) return
 
         FirebaseCrashlytics.getInstance().log("[ChildService] Listening to RTDB stream requests for: $uid")
@@ -217,7 +306,9 @@ class ChildForegroundService : Service() {
         // Configure hardware microphone routing for WebRTC
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            // Broadcaster MUST stay in MODE_NORMAL so local media playback (YouTube, music)
+            // and loudspeaker are NEVER suppressed or redirected to earpiece
+            audioManager?.mode = AudioManager.MODE_NORMAL
             audioManager?.isMicrophoneMute = false
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[ChildService] AudioManager mode error: ${e.localizedMessage}")

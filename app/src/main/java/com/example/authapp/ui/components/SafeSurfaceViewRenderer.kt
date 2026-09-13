@@ -2,6 +2,7 @@ package com.example.authapp.ui.components
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.*
@@ -12,24 +13,24 @@ fun SafeSurfaceViewRenderer(
     eglContext: EglBase.Context?,
     modifier: Modifier = Modifier
 ) {
-    var rendererRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
-    var isInitialized by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    DisposableEffect(videoTrack, rendererRef, isInitialized) {
-        val renderer = rendererRef
-        if (renderer != null && videoTrack != null && isInitialized) {
-            try {
-                videoTrack.addSink(renderer)
-                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack attached to SurfaceViewRenderer sink")
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
-            }
-        }
-        onDispose {
-            if (renderer != null && videoTrack != null && isInitialized) {
+    // Hold a stable reference to SurfaceViewRenderer tied to this composable lifecycle
+    val renderer = remember(context) {
+        SurfaceViewRenderer(context).apply {
+            setEnableHardwareScaler(true)
+            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+            setMirror(false)
+            if (eglContext != null) {
                 try {
-                    videoTrack.removeSink(renderer)
-                    FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack detached from SurfaceViewRenderer sink")
+                    init(eglContext, object : RendererCommon.RendererEvents {
+                        override fun onFirstFrameRendered() {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
+                        }
+                        override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
+                        }
+                    })
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
@@ -37,52 +38,37 @@ fun SafeSurfaceViewRenderer(
         }
     }
 
-    AndroidView(
-        factory = { ctx ->
-            SurfaceViewRenderer(ctx).apply {
-                setZOrderMediaOverlay(true)
-                setEnableHardwareScaler(true)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                setMirror(false)
-                if (eglContext != null) {
-                    try {
-                        init(eglContext, object : RendererCommon.RendererEvents {
-                            override fun onFirstFrameRendered() {
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
-                            }
-                            override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
-                            }
-                        })
-                        isInitialized = true
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
-                    }
-                }
-                rendererRef = this
+    // Attach / Detach videoTrack sink safely without triggering recomposition loops
+    DisposableEffect(videoTrack, renderer) {
+        if (videoTrack != null) {
+            try {
+                videoTrack.addSink(renderer)
+                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack attached to SurfaceViewRenderer sink")
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
             }
-        },
-        update = { renderer ->
-            rendererRef = renderer
-            if (eglContext != null && !isInitialized) {
+        }
+
+        onDispose {
+            if (videoTrack != null) {
                 try {
-                    renderer.init(eglContext, null)
-                    isInitialized = true
+                    videoTrack.removeSink(renderer)
+                    FirebaseCrashlytics.getInstance().log("[WebRTC UI] Remote videoTrack detached from SurfaceViewRenderer sink")
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
             }
-        },
-        onRelease = { renderer ->
             try {
                 renderer.clearImage()
                 renderer.release()
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
-            rendererRef = null
-            isInitialized = false
-        },
+        }
+    }
+
+    AndroidView(
+        factory = { renderer },
         modifier = modifier
     )
 }

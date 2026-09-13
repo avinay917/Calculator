@@ -18,3 +18,5 @@ node_modules/
 
 # Sensitive config files — do not commit
 fcm_config.json
+.kotlin/
+
