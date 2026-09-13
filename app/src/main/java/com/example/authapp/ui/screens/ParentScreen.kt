@@ -29,6 +29,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.authapp.analytics.AppAnalytics
+import com.example.authapp.audio.AudioOutputRoute
+import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.recorder.StreamAudioRecorder
 import com.example.authapp.ui.components.ChildLocationDialog
@@ -52,6 +54,10 @@ fun ParentScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val audioRouteManager = remember { AudioRouteManager(context) }
+    val currentAudioRoute by audioRouteManager.currentRoute.collectAsStateWithLifecycle()
+    val isBluetoothConnected by audioRouteManager.isBluetoothConnected.collectAsStateWithLifecycle()
 
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
@@ -151,6 +157,10 @@ fun ParentScreen(
             audioManager?.isSpeakerphoneOn = true
 
             val iceServers = WebRtcManager.getDefaultIceServers()
+            audioRouteManager.checkAndHandleBluetooth()
+            if (!isBluetoothConnected) {
+                audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+            }
             manager.startReceiver(
                 iceServers = iceServers,
                 onIceCandidate = { candidate ->
@@ -198,10 +208,7 @@ fun ParentScreen(
                 remoteVideoTrack = null
                 remoteAudioTrack = null
                 webRtcManager = null
-                try {
-                    audioManager?.mode = AudioManager.MODE_NORMAL
-                    audioManager?.isSpeakerphoneOn = false
-                } catch (e: Exception) {}
+                audioRouteManager.release()
                 FirebaseRepository.removeValueListener("signaling/$sessionId/sdpOffer", sdpOfferListener)
                 if (streamRecorder.isRecording) {
                     streamRecorder.stopRecording()
@@ -390,7 +397,10 @@ fun ParentScreen(
                     AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
                 },
                 onToggleRecording = { type -> toggleRecording(type) },
-                onSensitivityChange = { viewModel.setAudioSensitivity(it) }
+                onSensitivityChange = { viewModel.setAudioSensitivity(it) },
+                currentAudioRoute = currentAudioRoute,
+                isBluetoothConnected = isBluetoothConnected,
+                onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
             )
         }
     }

@@ -7,9 +7,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.authapp.audio.AudioOutputRoute
 import java.util.Locale
 
 @Composable
@@ -29,7 +33,10 @@ fun LiveAudioMonitorView(
     onSensitivityChange: (Float) -> Unit,
     isRecording: Boolean,
     recordingDurationSeconds: Long,
-    onToggleRecording: () -> Unit
+    onToggleRecording: () -> Unit,
+    currentAudioRoute: AudioOutputRoute = AudioOutputRoute.SPEAKER,
+    isBluetoothConnected: Boolean = false,
+    onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "audioRadar")
     val pulseScale by infiniteTransition.animateFloat(
@@ -98,66 +105,64 @@ fun LiveAudioMonitorView(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            val profileText = when {
-                audioSensitivity >= 80f -> "⚡ Whisper Surveillance Mode (Clean Boost)"
-                audioSensitivity >= 40f -> "🎙️ Balanced Studio Mode (Noise Reduced)"
-                else -> "👤 Natural Clear Mode (Unity Gain)"
-            }
-            val profileColor = when {
-                audioSensitivity >= 80f -> Color(0xFFC62828)
-                audioSensitivity >= 40f -> Color(0xFF1565C0)
-                else -> Color(0xFF2E7D32)
-            }
-            val profileBg = when {
-                audioSensitivity >= 80f -> Color(0xFFFFEBEE)
-                audioSensitivity >= 40f -> Color(0xFFE3F2FD)
-                else -> Color(0xFFE8F5E9)
-            }
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = profileBg,
-                modifier = Modifier.padding(horizontal = 8.dp)
+            // Audio Output Switcher (Speaker / Earpiece / Bluetooth)
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = profileText,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = profileColor,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Unified Status Strip: Studio Filter + Loudspeaker
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                ) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "✨ Studio Voice Filter ON",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        text = "Audio Output",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("•", color = MaterialTheme.colorScheme.outline)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "🔊 Loudspeaker Active",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF2E7D32)
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 1. Loudspeaker (Neeche waala)
+                        FilterChip(
+                            selected = currentAudioRoute == AudioOutputRoute.SPEAKER,
+                            onClick = { onAudioRouteSelect(AudioOutputRoute.SPEAKER) },
+                            label = { Text("Speaker", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // 2. Earpiece (Upar waala speaker)
+                        FilterChip(
+                            selected = currentAudioRoute == AudioOutputRoute.EARPIECE,
+                            onClick = { onAudioRouteSelect(AudioOutputRoute.EARPIECE) },
+                            label = { Text("Earpiece", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.Hearing, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // 3. Bluetooth (Wireless - automatically available / selected if connected)
+                        if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
+                            FilterChip(
+                                selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
+                                onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
+                                label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Audio Sensitivity & Whisper Boost Slider Card
             Card(
@@ -178,7 +183,7 @@ fun LiveAudioMonitorView(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Audio Sensitivity / Whisper Boost",
+                            text = "Sensitivity / Boost",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -221,14 +226,6 @@ fun LiveAudioMonitorView(
                             modifier = Modifier.weight(1f)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "💡 Slide to 100% to amplify distant room whispers. Hardware noise suppression eliminates ceiling fan & AC humming.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        fontSize = 11.sp
-                    )
                 }
             }
 

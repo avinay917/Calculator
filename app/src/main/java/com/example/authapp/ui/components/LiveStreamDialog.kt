@@ -10,9 +10,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.webrtc.WebRtcManager
 import org.webrtc.VideoTrack
 import java.util.Locale
@@ -41,7 +45,10 @@ fun LiveStreamDialog(
     onDismiss: () -> Unit,
     onFlipCamera: () -> Unit,
     onToggleRecording: (String) -> Unit,
-    onSensitivityChange: (Float) -> Unit
+    onSensitivityChange: (Float) -> Unit,
+    currentAudioRoute: AudioOutputRoute = AudioOutputRoute.SPEAKER,
+    isBluetoothConnected: Boolean = false,
+    onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
     val isVideo = activeStreamType.equals("video", ignoreCase = true)
 
@@ -153,6 +160,44 @@ fun LiveStreamDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Audio Output Switcher for Video Stream
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = currentAudioRoute == AudioOutputRoute.SPEAKER,
+                            onClick = { onAudioRouteSelect(AudioOutputRoute.SPEAKER) },
+                            label = { Text("Speaker", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = currentAudioRoute == AudioOutputRoute.EARPIECE,
+                            onClick = { onAudioRouteSelect(AudioOutputRoute.EARPIECE) },
+                            label = { Text("Earpiece", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.Hearing, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
+                            FilterChip(
+                                selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
+                                onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
+                                label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     // Video Controls: Camera Switch & Record
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -192,7 +237,7 @@ fun LiveStreamDialog(
                         }
                     }
                 } else {
-                    // Real-time Live Audio Monitor with Whisper Boost & Recording
+                    // Real-time Live Audio Monitor with Whisper Boost & Recording & Audio Route Switcher
                     LiveAudioMonitorView(
                         childName = activeChildName ?: "Child",
                         statusText = streamStatusText,
@@ -200,7 +245,10 @@ fun LiveStreamDialog(
                         onSensitivityChange = onSensitivityChange,
                         isRecording = isRecording,
                         recordingDurationSeconds = recordingDurationSeconds,
-                        onToggleRecording = { onToggleRecording("audio") }
+                        onToggleRecording = { onToggleRecording("audio") },
+                        currentAudioRoute = currentAudioRoute,
+                        isBluetoothConnected = isBluetoothConnected,
+                        onAudioRouteSelect = onAudioRouteSelect
                     )
                 }
             }

@@ -119,28 +119,57 @@ class WebRtcManager(private val context: Context) {
 
         // Video Track (if requested)
         if (streamType.equals("video", ignoreCase = true)) {
-            val capturer = createVideoCapturer()
+            var capturer = createVideoCapturer(preferFront = true)
             if (capturer != null) {
                 videoCapturer = capturer
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
                 videoSource = factory?.createVideoSource(capturer.isScreencast)
                 capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
-                try {
-                    capturer.startCapture(640, 480, 30)
-                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera capture started: 640x480@30")
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera 640x480 failed, trying 480x360: ${e.localizedMessage}")
+
+                var started = false
+                val resolutions = listOf(
+                    Triple(640, 480, 30),
+                    Triple(640, 480, 15),
+                    Triple(480, 360, 24),
+                    Triple(320, 240, 15)
+                )
+                for ((w, h, fps) in resolutions) {
                     try {
-                        capturer.startCapture(480, 360, 24)
-                    } catch (e2: Exception) {
-                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera startCapture failed: ${e2.localizedMessage}")
-                        FirebaseCrashlytics.getInstance().recordException(e2)
+                        capturer.startCapture(w, h, fps)
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera capture started: ${w}x${h}@$fps")
+                        started = true
+                        break
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera ${w}x${h}@$fps failed: ${e.localizedMessage}")
+                    }
+                }
+
+                // If preferred camera failed to startCapture, try fallback to back camera!
+                if (!started) {
+                    try {
+                        capturer.dispose()
+                    } catch (e: Exception) {}
+                    capturer = createVideoCapturer(preferFront = false)
+                    if (capturer != null) {
+                        videoCapturer = capturer
+                        capturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
+                        for ((w, h, fps) in resolutions) {
+                            try {
+                                capturer.startCapture(w, h, fps)
+                                FirebaseCrashlytics.getInstance().log("[WebRTC] Fallback Camera capture started: ${w}x${h}@$fps")
+                                started = true
+                                break
+                            } catch (e: Exception) {}
+                        }
                     }
                 }
 
                 videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
                 videoTrack?.setEnabled(true)
                 peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
+            } else {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] ERROR: No camera capturer could be created!")
             }
         }
 
@@ -322,22 +351,86 @@ class WebRtcManager(private val context: Context) {
         }
     }
 
-    private fun createVideoCapturer(): VideoCapturer? {
-        val enumerator = if (Camera2Enumerator.isSupported(context)) {
-            Camera2Enumerator(context)
-        } else {
-            Camera1Enumerator(true)
-        }
-        for (deviceName in enumerator.deviceNames) {
-            if (enumerator.isFrontFacing(deviceName)) {
-                val capturer = enumerator.createCapturer(deviceName, null)
-                if (capturer != null) return capturer
+    private fun createVideoCapturer(preferFront: Boolean = true): VideoCapturer? {
+        val cameraEventsHandler = object : CameraVideoCapturer.CameraEventsHandler {
+            override fun onCameraError(errorDescription: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Camera Error] $errorDescription")
+            }
+            override fun onCameraDisconnected() {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Camera Disconnected]")
+            }
+            override fun onCameraFreezed(errorDescription: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Camera Freezed] $errorDescription")
+            }
+            override fun onCameraOpening(cameraName: String?) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Camera Opening] $cameraName")
+            }
+            override fun onFirstFrameAvailable() {
+                FirebaseCrashlytics.getInstance().log("[WebRTC First Frame Available]")
+            }
+            override fun onCameraClosed() {
+                FirebaseCrashlytics.getInstance().log("[WebRTC Camera Closed]")
             }
         }
-        for (deviceName in enumerator.deviceNames) {
-            if (!enumerator.isFrontFacing(deviceName)) {
-                val capturer = enumerator.createCapturer(deviceName, null)
-                if (capturer != null) return capturer
+
+        // 1. Try Camera2Enumerator first if supported
+        try {
+            if (Camera2Enumerator.isSupported(context)) {
+                val enumerator = Camera2Enumerator(context)
+                val capturer = findCapturer(enumerator, preferFront, cameraEventsHandler)
+                if (capturer != null) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Created Camera2Capturer successfully (preferFront=$preferFront)")
+                    return capturer
+                }
+            }
+        } catch (e: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] Camera2Enumerator failed: ${e.localizedMessage}")
+        }
+
+        // 2. Fallback to Camera1Enumerator
+        try {
+            val enumerator = Camera1Enumerator(true)
+            val capturer = findCapturer(enumerator, preferFront, cameraEventsHandler)
+            if (capturer != null) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Created Camera1Capturer fallback successfully (preferFront=$preferFront)")
+                return capturer
+            }
+        } catch (e: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] Camera1Enumerator failed: ${e.localizedMessage}")
+        }
+
+        FirebaseCrashlytics.getInstance().log("[WebRTC] ERROR: No camera capturer could be created!")
+        return null
+    }
+
+    private fun findCapturer(
+        enumerator: CameraEnumerator,
+        preferFront: Boolean,
+        handler: CameraVideoCapturer.CameraEventsHandler
+    ): VideoCapturer? {
+        val deviceNames = enumerator.deviceNames ?: return null
+        // First pass: try preferred facing
+        for (deviceName in deviceNames) {
+            val isFront = enumerator.isFrontFacing(deviceName)
+            if (isFront == preferFront) {
+                try {
+                    val capturer = enumerator.createCapturer(deviceName, handler)
+                    if (capturer != null) return capturer
+                } catch (e: Throwable) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] createCapturer ($deviceName) failed: ${e.localizedMessage}")
+                }
+            }
+        }
+        // Second pass: try alternative facing
+        for (deviceName in deviceNames) {
+            val isFront = enumerator.isFrontFacing(deviceName)
+            if (isFront != preferFront) {
+                try {
+                    val capturer = enumerator.createCapturer(deviceName, handler)
+                    if (capturer != null) return capturer
+                } catch (e: Throwable) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] createCapturer alternate ($deviceName) failed: ${e.localizedMessage}")
+                }
             }
         }
         return null

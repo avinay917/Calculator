@@ -61,9 +61,28 @@ class ChildForegroundService : Service() {
         return fine || coarse
     }
 
+    private fun hasMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun getIdleServiceType(): Int {
         var type = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            if (hasLocationPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (hasMicrophonePermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            if (hasCameraPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
@@ -75,13 +94,15 @@ class ChildForegroundService : Service() {
     private fun getStreamingServiceType(streamType: String): Int {
         var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            type = if (streamType.equals("video", ignoreCase = true)) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            }
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (hasMicrophonePermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            if (hasCameraPermission() && streamType.equals("video", ignoreCase = true)) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
