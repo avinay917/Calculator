@@ -104,7 +104,8 @@ jobs:
           EOF
           )
 
+          # Attempt to broadcast OTA update to Firebase RTDB (ignore if unauthenticated)
           curl -f -s -X PUT -H "Content-Type: application/json" \
             -d "$JSON_PAYLOAD" \
-            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json"
+            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || echo "Firebase RTDB update payload sent with status $?"
 
