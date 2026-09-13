@@ -47,12 +47,14 @@ object FirebaseRepository {
                 if (connected) {
                     val disconnectMap = mapOf<String, Any>(
                         "isOnline" to false,
+                        "online" to false,
                         "lastSeen" to ServerValue.TIMESTAMP
                     )
                     userRef.onDisconnect().updateChildren(disconnectMap)
 
                     val onlineMap = mapOf<String, Any>(
                         "isOnline" to true,
+                        "online" to true,
                         "lastSeen" to ServerValue.TIMESTAMP
                     )
                     userRef.updateChildren(onlineMap)
@@ -213,15 +215,21 @@ object FirebaseRepository {
     }
 
     fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit): ValueEventListener {
+        val currentParentUid = currentUser?.uid ?: ""
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<User>()
                 for (child in snapshot.children) {
                     val user = child.getValue(User::class.java)
                     if (user != null && user.role == "child") {
-                        val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
-                        val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
-                        list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
+                        // If child is linked to a parent, only show to that parent.
+                        // If not yet linked (legacy/unpaired), show so parent can claim/link.
+                        val isBelongingToParent = user.parentId.isEmpty() || user.parentId == currentParentUid
+                        if (isBelongingToParent) {
+                            val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
+                            val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
+                            list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
+                        }
                     }
                 }
                 onUsersUpdated(list)
@@ -233,6 +241,20 @@ object FirebaseRepository {
         }
         database.reference.child("users").addValueEventListener(listener)
         return listener
+    }
+
+    fun linkChildToParent(childId: String, parentId: String, onComplete: (Boolean, String?) -> Unit) {
+        val updates = mapOf<String, Any>(
+            "parentId" to parentId
+        )
+        database.reference.child("users").child(childId).updateChildren(updates)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    onComplete(true, null)
+                } else {
+                    onComplete(false, task.exception?.localizedMessage)
+                }
+            }
     }
 
     fun requestStream(childId: String, streamType: String, onComplete: (String) -> Unit) {

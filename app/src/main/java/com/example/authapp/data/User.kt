@@ -19,6 +19,8 @@ data class User(
     val email: String = "",
     val role: String = "child", // Default role assigned to all new sign-ups
     val fcmToken: String = "",
+    val parentId: String = "",
+    val familyCode: String = "",
     @get:PropertyName("isOnline") @set:PropertyName("isOnline")
     var isOnline: Boolean = false,
     val lastSeen: Long = 0L,

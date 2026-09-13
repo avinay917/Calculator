@@ -57,7 +57,10 @@ fun SignUpScreen(
     var termsError by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    var isLoading by remember { mutableStateOf(false) }
+
     fun validateAndSubmit() {
+        if (isLoading) return
         var isValid = true
         fullNameError = null
         emailError = null
@@ -101,8 +104,10 @@ fun SignUpScreen(
         }
 
         if (isValid) {
+            isLoading = true
             com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_up", "SignUpScreen")
             com.example.authapp.data.FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
+                isLoading = false
                 if (success) {
                     Toast.makeText(context, "Account created successfully! Please Sign In to continue.", Toast.LENGTH_LONG).show()
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
@@ -350,6 +355,7 @@ fun SignUpScreen(
         // Sign Up Button
         Button(
             onClick = { validateAndSubmit() },
+            enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -358,11 +364,19 @@ fun SignUpScreen(
                 containerColor = MaterialTheme.colorScheme.primary
             )
         ) {
-            Text(
-                text = "Sign Up",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.5.dp
+                )
+            } else {
+                Text(
+                    text = "Sign Up",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

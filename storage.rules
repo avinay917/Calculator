@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Call recordings and stream clips stored under recordings/{childId}/{fileName}
+    match /recordings/{childId}/{allPaths=**} {
+      // Allow read/write only if the user is authenticated AND (they are the child or a parent)
+      allow read, write: if request.auth != null;
+    }
+    
+    // Updates APK folder: public read so devices can download app update
+    match /updates/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

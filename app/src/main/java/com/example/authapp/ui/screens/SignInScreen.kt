@@ -56,7 +56,10 @@ fun SignInScreen(
     var resetLoading by remember { mutableStateOf(false) }
     var resetError by remember { mutableStateOf<String?>(null) }
 
+    var isLoading by remember { mutableStateOf(false) }
+
     fun validateAndSubmit() {
+        if (isLoading) return
         var isValid = true
         emailError = null
         passwordError = null
@@ -79,8 +82,10 @@ fun SignInScreen(
         }
 
         if (isValid) {
+            isLoading = true
             com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_in", "SignInScreen")
             com.example.authapp.data.FirebaseRepository.signIn(email, password) { success, errorMsg ->
+                isLoading = false
                 if (success) {
                     Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_in", "success", mapOf("email" to email))
@@ -273,6 +278,7 @@ fun SignInScreen(
         // Sign In Button
         Button(
             onClick = { validateAndSubmit() },
+            enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -281,11 +287,19 @@ fun SignInScreen(
                 containerColor = MaterialTheme.colorScheme.primary
             )
         ) {
-            Text(
-                text = "Sign In",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.5.dp
+                )
+            } else {
+                Text(
+                    text = "Sign In",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
