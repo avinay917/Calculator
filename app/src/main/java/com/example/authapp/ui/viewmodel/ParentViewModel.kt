@@ -47,18 +47,29 @@ class ParentViewModel : ViewModel() {
     fun startStream(child: User, streamType: String) {
         val typeNormalized = if (streamType.equals("video", ignoreCase = true)) "Video" else "Audio"
         try {
-            FirebaseRepository.requestStream(child.uid, streamType.lowercase()) { sessionId ->
-                _uiState.update {
-                    it.copy(
-                        activeSessionId = sessionId,
-                        activeStreamType = typeNormalized,
-                        activeChildId = child.uid,
-                        activeChildName = child.name.ifEmpty { "Child Device" },
-                        streamStatusText = "Connecting to child device...",
-                        isFrontCamera = true
-                    )
+            FirebaseRepository.requestStream(
+                childId = child.uid,
+                streamType = streamType.lowercase(),
+                onComplete = { sessionId: String ->
+                    _uiState.update {
+                        it.copy(
+                            activeSessionId = sessionId,
+                            activeStreamType = typeNormalized,
+                            activeChildId = child.uid,
+                            activeChildName = child.name.ifEmpty { "Child Device" },
+                            streamStatusText = "Connecting to child device...",
+                            isFrontCamera = true
+                        )
+                    }
+                },
+                onError = { err ->
+                    _uiState.update {
+                        it.copy(
+                            streamStatusText = "Request failed: ${err.localizedMessage}"
+                        )
+                    }
                 }
-            }
+            )
         } catch (e: Exception) {
             _uiState.update {
                 it.copy(

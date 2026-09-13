@@ -236,11 +236,15 @@ object FirebaseRepository {
             })
     }
 
+    fun requestStream(childId: String, streamType: String, onComplete: (String) -> Unit) {
+        requestStream(childId, streamType, onComplete, null)
+    }
+
     fun requestStream(
         childId: String,
         streamType: String,
         onComplete: (String) -> Unit,
-        onError: ((Exception) -> Unit)? = null
+        onError: ((Exception) -> Unit)?
     ) {
         val parentId = currentUser?.uid
         if (parentId == null) {
