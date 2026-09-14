@@ -144,10 +144,14 @@ fun ChildScreen(
         }
     }
 
+    val permPrefs = remember { context.getSharedPreferences("child_permission_prefs", Context.MODE_PRIVATE) }
+
     LaunchedEffect(Unit) {
         checkPermissions()
-        // If core permissions are missing, show rationale sheet explaining WHY instead of jarring system prompt
-        if (!hasStage1Permissions || !hasCallPermissions) {
+        // Only auto-prompt once if permissions are missing; do not repeatedly harass user
+        val alreadyPrompted = permPrefs.getBoolean("already_prompted_core", false)
+        if (!alreadyPrompted && (!hasStage1Permissions || !hasCallPermissions)) {
+            permPrefs.edit().putBoolean("already_prompted_core", true).apply()
             activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA
         }
     }
@@ -186,6 +190,7 @@ fun ChildScreen(
                 }
             },
             onDismiss = {
+                permPrefs.edit().putBoolean("already_prompted_core", true).apply()
                 activeRationaleStep = null
             }
         )
