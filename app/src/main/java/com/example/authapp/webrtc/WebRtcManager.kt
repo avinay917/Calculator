@@ -10,6 +10,7 @@ import android.media.audiofx.NoiseSuppressor
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
+import android.os.Build
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 
@@ -18,7 +19,7 @@ class WebRtcManager(
     private val isReceiverOnly: Boolean = false
 ) {
     private val appContext: Context = context.applicationContext
-    val eglBase: EglBase = EglBase.create()
+    val eglBase: EglBase = EglBase.create(null, EglBase.CONFIG_PLAIN)
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
@@ -45,21 +46,30 @@ class WebRtcManager(
             initializePcfIfNeeded(appContext)
 
             val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
+            val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             val decoderFactory = object : VideoDecoderFactory {
-                private val hardwareFactory = try { DefaultVideoDecoderFactory(eglBase.eglBaseContext) } catch (_: Throwable) { null }
+                // On Samsung devices (especially Exynos chips like A21s), hardware OMX decoding causes native SIGABRT in libc.so.
+                // SoftwareVideoDecoderFactory (libvpx VP8/VP9) is completely crash-safe and lightweight.
+                private val hardwareFactory = if (isSamsung) null else try { DefaultVideoDecoderFactory(eglBase.eglBaseContext) } catch (_: Throwable) { null }
                 private val softwareFactory = SoftwareVideoDecoderFactory()
 
                 override fun createDecoder(info: VideoCodecInfo?): VideoDecoder? {
-                    return try {
-                        hardwareFactory?.createDecoder(info) ?: softwareFactory.createDecoder(info)
-                    } catch (_: Throwable) {
+                    return if (isSamsung) {
                         softwareFactory.createDecoder(info)
+                    } else {
+                        try {
+                            hardwareFactory?.createDecoder(info) ?: softwareFactory.createDecoder(info)
+                        } catch (_: Throwable) {
+                            softwareFactory.createDecoder(info)
+                        }
                     }
                 }
 
                 override fun getSupportedCodecs(): Array<VideoCodecInfo> {
                     val list = mutableListOf<VideoCodecInfo>()
-                    try { hardwareFactory?.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
+                    if (!isSamsung) {
+                        try { hardwareFactory?.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
+                    }
                     try { softwareFactory.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
                     return list.distinctBy { it.name }.toTypedArray()
                 }

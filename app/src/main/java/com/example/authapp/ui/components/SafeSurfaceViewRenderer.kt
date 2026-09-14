@@ -4,6 +4,7 @@ import android.view.SurfaceHolder
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.*
 
@@ -26,7 +27,7 @@ fun SafeSurfaceViewRenderer(
             val state = SurfaceRendererState()
             SurfaceViewRenderer(ctx).apply {
                 tag = state
-                setEnableHardwareScaler(true)
+                setEnableHardwareScaler(false)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
                 setZOrderMediaOverlay(true)
@@ -34,6 +35,7 @@ fun SafeSurfaceViewRenderer(
                 try {
                     init(eglContext, object : RendererCommon.RendererEvents {
                         override fun onFirstFrameRendered() {
+                            AppHealthTelemetry.logDiagnostic(ctx, "LIVE_VIDEO", "SUCCESS", "Parent SurfaceView rendered first video frame!")
                             FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
                         }
                         override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
@@ -74,6 +76,7 @@ fun SafeSurfaceViewRenderer(
                                 FirebaseCrashlytics.getInstance().recordException(t)
                             }
                         }
+                        state.pendingTrack = state.attachedTrack ?: state.pendingTrack
                         state.attachedTrack = null
                     }
                 })
