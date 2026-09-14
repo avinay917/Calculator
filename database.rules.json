@@ -20,6 +20,7 @@
       }
     },
     "recordings": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'parent'",
       "$childId": {
         ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
         ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
@@ -27,7 +28,7 @@
     },
     "app_update": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'parent'"
     },
     "ice_servers": {
       ".read": "auth != null",

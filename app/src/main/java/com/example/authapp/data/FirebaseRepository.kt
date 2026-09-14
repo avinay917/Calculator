@@ -576,7 +576,10 @@ object FirebaseRepository {
                 onRecordingsUpdated(list.sortedByDescending { it.startTime })
             }
 
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                AppHealthTelemetry.logDiagnostic("LISTEN_RECORDINGS_ERROR", "Firebase recordings listen cancelled: ${error.message} (${error.code})")
+                onRecordingsUpdated(emptyList())
+            }
         }
         database.reference.child("recordings").addValueEventListener(listener)
         return listener

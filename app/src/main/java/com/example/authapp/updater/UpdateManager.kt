@@ -78,6 +78,13 @@ object UpdateManager {
                 if (!apkUrl.startsWith("https://", ignoreCase = true)) {
                     throw IllegalArgumentException("Only secure HTTPS APK URLs are supported")
                 }
+                val host = Uri.parse(apkUrl).host?.lowercase() ?: ""
+                val isTrustedHost = host.endsWith("github.com") ||
+                    host.endsWith("githubusercontent.com") ||
+                    host.endsWith("googleapis.com")
+                if (!isTrustedHost) {
+                    throw SecurityException("Untrusted APK download host: $host")
+                }
 
                 val updatesDir = File(context.cacheDir, "updates").apply {
                     if (!exists()) mkdirs()
