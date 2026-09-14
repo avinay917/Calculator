@@ -462,10 +462,17 @@ class WebRtcManager(
             override fun onCameraError(errorDescription: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Error] $errorDescription")
                 AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "Camera hardware error: $errorDescription")
-                if (!isStopped && isCameraRunning) {
+                if (!isStopped) {
                     try {
                         val capturer = videoCapturer as? CameraVideoCapturer
-                        capturer?.switchCamera(null)
+                        capturer?.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+                            override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                                FirebaseCrashlytics.getInstance().log("[WebRTC] Auto-switched to alternate camera lens (isFront=$isFrontCamera)")
+                            }
+                            override fun onCameraSwitchError(switchError: String?) {
+                                FirebaseCrashlytics.getInstance().log("[WebRTC] Auto-switch camera error: $switchError")
+                            }
+                        })
                     } catch (_: Exception) {}
                 }
             }
@@ -590,7 +597,19 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
-                PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer()
+                PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
+                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
+                    .setUsername("openrelayproject")
+                    .setPassword("openrelayproject")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443")
+                    .setUsername("openrelayproject")
+                    .setPassword("openrelayproject")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443?transport=tcp")
+                    .setUsername("openrelayproject")
+                    .setPassword("openrelayproject")
+                    .createIceServer()
             )
         }
 
