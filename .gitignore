@@ -21,3 +21,35 @@ fcm_config.json
 .kotlin/
 *.apk
 
+# Keystore files (security-critical)
+*.keystore
+*.jks
+app/debug.keystore
+
+# Local properties with credentials
+gradle.properties.local
+
+# Firebase config
+google-services.json.local
+
+# Environment files
+.env
+.env.local
+*.env
+
+# IDE and OS files
+*.iml
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Gradle
+.gradle/
+gradle/wrapper/gradle-wrapper.properties.local
+
+# Build outputs
+build/
+dist/
+*.apk
+*.aab
