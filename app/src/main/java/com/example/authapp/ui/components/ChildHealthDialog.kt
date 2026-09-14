@@ -137,8 +137,8 @@ fun ChildHealthDialog(
                     PermissionRow(name = "Camera (Video)", granted = permissions["camera"] == true)
                     PermissionRow(name = "GPS Location", granted = permissions["location"] == true)
                     PermissionRow(name = "Phone State", granted = permissions["readPhoneState"] == true)
-                    PermissionRow(name = "Call Log", granted = permissions["readCallLog"] == true)
-                    PermissionRow(name = "Post Notifications", granted = permissions["notifications"] == true)
+                    PermissionRow(name = "Post Notifications", granted = permissions["postNotifications"] == true || permissions["notifications"] == true)
+                    PermissionRow(name = "Display Over Other Apps (Overlay)", granted = permissions["systemAlertWindow"] == true)
                     PermissionRow(name = "Battery Optimization Disabled", granted = permissions["batteryOptimizationIgnored"] == true)
                 }
             }

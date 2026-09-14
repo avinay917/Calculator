@@ -58,7 +58,8 @@ class ChildForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START_MONITORING = "ACTION_START_MONITORING"
         const val ACTION_START = "ACTION_START_STREAM"
-        const val ACTION_STOP = "ACTION_STOP_STREAM"
+        const val ACTION_STOP = "ACTION_STOP_SERVICE"
+        const val ACTION_STOP_STREAM = "ACTION_STOP_STREAM_ONLY"
         const val ACTION_START_CALL_RECORDING = "ACTION_START_CALL_RECORDING"
         const val ACTION_STOP_CALL_RECORDING = "ACTION_STOP_CALL_RECORDING"
         const val EXTRA_STREAM_TYPE = "EXTRA_STREAM_TYPE"
@@ -315,6 +316,23 @@ class ChildForegroundService : Service() {
                         "FAILED",
                         "Call recording output was empty or failed to generate file"
                     )
+                }
+            }
+            ACTION_STOP_STREAM -> {
+                stopStream()
+                streamAudioRecorder?.stopRecording()
+                streamAudioRecorder = null
+                currentServiceState = "IDLE_PROTECTED"
+                AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        getIdleServiceType()
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
                 }
             }
             ACTION_STOP -> {

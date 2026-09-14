@@ -52,12 +52,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         } else if (action == "STOP_STREAM") {
             val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_STOP
+                this.action = ChildForegroundService.ACTION_STOP_STREAM
             }
             try {
                 startService(intent)
             } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop service: ${e.localizedMessage}")
+                FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop stream: ${e.localizedMessage}")
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
         } else if (action == "REFRESH_LOCATION" || action == "WAKEUP") {
