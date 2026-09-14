@@ -142,4 +142,12 @@ class ParentViewModelTest {
         assertEquals(10, sched.durationMinutes)
         assertTrue(sched.isEnabled)
     }
+
+    @Test
+    fun firebaseRepository_flowExtensions_instantiateValidFlows() {
+        assertNotNull(com.example.authapp.data.FirebaseRepository.listenToChildUsersFlow())
+        assertNotNull(com.example.authapp.data.FirebaseRepository.listenToDeviceHealthFlow("child_123"))
+        assertNotNull(com.example.authapp.data.FirebaseRepository.listenToSecurityAlertsFlow("child_123"))
+        assertNotNull(com.example.authapp.data.FirebaseRepository.listenToCallLogsFlow("child_123"))
+    }
 }

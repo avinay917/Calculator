@@ -489,6 +489,7 @@ class ChildForegroundService : Service() {
 
         currentSessionId = sessionId
         isStreaming = true
+        acquireWakeLock()
 
         if (streamType.equals("video", ignoreCase = true)) {
             ensureOverlayWindow()
@@ -598,40 +599,64 @@ class ChildForegroundService : Service() {
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             audioManager?.mode = AudioManager.MODE_NORMAL
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] audioManager reset error: ${e.localizedMessage}")
+        }
         try {
             webRtcManager?.stopStream()
         } catch (e: Exception) {
-            e.printStackTrace()
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
         webRtcManager = null
+        releaseWakeLock()
         removeOverlayWindow()
     }
 
     private fun acquireWakeLock() {
-        if (wakeLock == null) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuthApp:ChildStreamWakeLock")
-            wakeLock?.acquire(24 * 60 * 60 * 1000L /* 24 hours lock-screen keep-alive */)
+        try {
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuthApp:ChildStreamWakeLock")
+                wakeLock?.setReferenceCounted(false)
+            }
+            // 30 minute safe timeout to prevent draining battery if stream disconnect is not received
+            wakeLock?.acquire(30 * 60 * 1000L)
+            FirebaseCrashlytics.getInstance().log("[ChildService] Stream Partial WakeLock acquired (30m max)")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
-        if (wifiLock == null) {
-            try {
+
+        try {
+            if (wifiLock == null) {
                 val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
                 wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AuthApp:ChildWifiLock")
-                wifiLock?.acquire()
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().log("[ChildService] wifiLock error: ${e.localizedMessage}")
+                wifiLock?.setReferenceCounted(false)
             }
+            wifiLock?.acquire()
+            FirebaseCrashlytics.getInstance().log("[ChildService] Stream High-perf WifiLock acquired")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 
     private fun releaseWakeLock() {
-        if (wakeLock?.isHeld == true) {
-            wakeLock?.release()
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                FirebaseCrashlytics.getInstance().log("[ChildService] Stream Partial WakeLock released")
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
         wakeLock = null
-        if (wifiLock?.isHeld == true) {
-            wifiLock?.release()
+
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+                FirebaseCrashlytics.getInstance().log("[ChildService] Stream WifiLock released")
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
         wifiLock = null
     }

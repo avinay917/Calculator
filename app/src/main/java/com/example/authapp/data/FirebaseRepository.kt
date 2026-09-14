@@ -11,6 +11,9 @@ import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
@@ -896,5 +899,41 @@ object FirebaseRepository {
         }
         ref.addValueEventListener(listener)
         return listener
+    }
+
+    // --- Reactive Clean Architecture Flow Extensions (Best Practice) ---
+    fun listenToChildUsersFlow(): Flow<List<User>> = callbackFlow {
+        val listener = listenToChildUsers { trySend(it) }
+        awaitClose { removeValueListener("users", listener) }
+    }
+
+    fun listenToDeviceHealthFlow(childId: String): Flow<DeviceHealth?> = callbackFlow {
+        val listener = listenToDeviceHealth(childId) { trySend(it) }
+        awaitClose { removeValueListener("device_health/$childId", listener) }
+    }
+
+    fun listenToSecurityAlertsFlow(childId: String): Flow<List<SecurityAlert>> = callbackFlow {
+        val listener = listenToSecurityAlerts(childId) { trySend(it) }
+        awaitClose { removeValueListener("alerts/$childId", listener) }
+    }
+
+    fun listenToCallLogsFlow(childId: String): Flow<List<CallLogItem>> = callbackFlow {
+        val listener = listenToCallLogs(childId) { trySend(it) }
+        awaitClose { removeValueListener("call_logs/$childId", listener) }
+    }
+
+    fun listenToNotificationsFlow(childId: String): Flow<List<NotificationItem>> = callbackFlow {
+        val listener = listenToNotifications(childId) { trySend(it) }
+        awaitClose { removeValueListener("notifications/$childId", listener) }
+    }
+
+    fun listenToRecordingSchedulesFlow(childId: String): Flow<List<RecordingSchedule>> = callbackFlow {
+        val listener = listenToRecordingSchedules(childId) { trySend(it) }
+        awaitClose { removeValueListener("schedules/$childId", listener) }
+    }
+
+    fun listenToSnapshotsFlow(childId: String): Flow<List<SnapshotInfo>> = callbackFlow {
+        val listener = listenToSnapshots(childId) { trySend(it) }
+        awaitClose { removeValueListener("snapshots/$childId", listener) }
     }
 }

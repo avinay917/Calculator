@@ -699,19 +699,20 @@ class WebRtcManager(
         }
     }
 
+    @Synchronized
     fun stopStream() {
         if (isStopped) return
         isStopped = true
         isCameraRunning = false
         stopAudioLevelMonitoring()
 
-        // Release hardware audio effects (Fix 3)
+        // Release hardware audio effects
         try { hardwareAgc?.release() } catch (_: Throwable) {}
         hardwareAgc = null
         try { hardwareNs?.release() } catch (_: Throwable) {}
         hardwareNs = null
 
-        // Stop and dispose camera capturer
+        // Stop and dispose camera capturer safely
         try { videoCapturer?.stopCapture() } catch (_: Throwable) {}
         try { videoCapturer?.dispose() } catch (_: Throwable) {}
         videoCapturer = null
@@ -720,20 +721,20 @@ class WebRtcManager(
         try { surfaceTextureHelper?.dispose() } catch (_: Throwable) {}
         surfaceTextureHelper = null
 
-        // Dispose video track & source (FIX: videoSource was never disposed before)
+        // Dispose video track & source
         try { videoTrack?.setEnabled(false); videoTrack?.dispose() } catch (_: Throwable) {}
         videoTrack = null
         try { videoSource?.dispose() } catch (_: Throwable) {}
         videoSource = null
 
-        // Dispose audio track & source (FIX: audioSource was never disposed before)
+        // Dispose audio track & source
         try { audioTrack?.setEnabled(false); audioTrack?.dispose() } catch (_: Throwable) {}
         audioTrack = null
         try { audioSource?.dispose() } catch (_: Throwable) {}
         audioSource = null
 
         // Close peer connection
-        try { peerConnection?.close() } catch (_: Throwable) {}
+        try { peerConnection?.dispose() } catch (_: Throwable) {}
         peerConnection = null
 
         // Release audio device module
@@ -744,8 +745,10 @@ class WebRtcManager(
         try { factory?.dispose() } catch (_: Throwable) {}
         factory = null
 
-        // Release EGL context last
-        try { eglBase.release() } catch (t: Throwable) {
+        // Release EGL context
+        try {
+            eglBase.release()
+        } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${t.localizedMessage}")
         }
 
@@ -754,6 +757,6 @@ class WebRtcManager(
             isRemoteDescriptionSet = false
         }
 
-        FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() complete — all resources released")
+        FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() complete — all resources cleanly released")
     }
 }
