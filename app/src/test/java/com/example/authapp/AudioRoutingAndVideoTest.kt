@@ -110,4 +110,15 @@ class AudioRoutingAndVideoTest {
         assertEquals(0.5, WebRtcManager.calculateSafeAudioGain(-50f), 0.001)
         assertEquals(2.0, WebRtcManager.calculateSafeAudioGain(150f), 0.001)
     }
+
+    @Test
+    fun superBoostGain_scalesSmoothlyForWhispers() {
+        // Gain range is 0.5x to 3.5x
+        assertEquals(0.5, WebRtcManager.calculateSuperBoostGain(0f), 0.001)
+        assertEquals(2.0, WebRtcManager.calculateSuperBoostGain(50f), 0.001)
+        assertEquals(3.5, WebRtcManager.calculateSuperBoostGain(100f), 0.001)
+        // Clamping check
+        assertEquals(0.5, WebRtcManager.calculateSuperBoostGain(-50f), 0.001)
+        assertEquals(3.5, WebRtcManager.calculateSuperBoostGain(150f), 0.001)
+    }
 }

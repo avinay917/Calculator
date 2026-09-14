@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.MediaRecorder
 import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.NoiseSuppressor
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -29,6 +30,7 @@ class WebRtcManager(
     private var audioDeviceModule: JavaAudioDeviceModule? = null
     private var hardwareAgc: AutomaticGainControl? = null
     private var hardwareNs: NoiseSuppressor? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
 
     private val pendingCandidates = mutableListOf<IceCandidate>()
     @Volatile
@@ -71,9 +73,9 @@ class WebRtcManager(
                     .createAudioDeviceModule()
             } else {
                 JavaAudioDeviceModule.builder(appContext)
-                    .setUseHardwareAcousticEchoCanceler(true)
-                    .setUseHardwareNoiseSuppressor(false)
-                    .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+                    .setUseHardwareAcousticEchoCanceler(false) // One-way surveillance: disable hardware AEC so mic gain is not suppressed
+                    .setUseHardwareNoiseSuppressor(false)      // Disable aggressive hardware gating so quiet whispers are captured
+                    .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION) // Hardware beamforming
                     .setAudioFormat(AudioFormat.ENCODING_PCM_16BIT)
                     .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                         override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
@@ -118,8 +120,12 @@ class WebRtcManager(
         val perfTrace = FirebasePerformance.getInstance().newTrace("webrtc_stream_init_$streamType")
         perfTrace.start()
 
-        val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
-        rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            enableDscp = true // QoS Expedited Forwarding priority for voice packets
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+            iceCandidatePoolSize = 2
+        }
 
         peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
@@ -147,14 +153,20 @@ class WebRtcManager(
             }
         })
 
-        // Audio Track with Clean Studio Surveillance & Vibration Filter (Fix 2)
+        // Audio Track with High-Sensitivity Whisper Capture & Digital AGC2
         val audioConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            // One-way listening: disable AEC so microphone input sensitivity is 100% full
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
+            // WebRTC software AGC2: automatically boosts distant and whispered voices (+25 dB)
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
+            // Noise suppression tuned to preserve human voice band
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
+            // Disable highpass filter to keep deep/low vocal fundamentals (100Hz-300Hz) intact
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "false"))
+            // Suppress screen taps and physical vibration
+            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
         }
         audioSource = factory?.createAudioSource(audioConstraints)
@@ -300,8 +312,12 @@ class WebRtcManager(
         onRemoteAudioTrack: (AudioTrack) -> Unit = {}
     ) {
         if (isStopped) return
-        val rtcConfig = PeerConnection.RTCConfiguration(iceServers)
-        rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            enableDscp = true // QoS Expedited Forwarding packet tagging
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+            iceCandidatePoolSize = 2
+        }
 
         peerConnection = factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState?) {
@@ -341,7 +357,7 @@ class WebRtcManager(
                     is AudioTrack -> {
                         FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Remote AudioTrack received")
                         track.setEnabled(true)
-                        track.setVolume(1.0)
+                        track.setVolume(1.5) // Default slight boost on parent receiver
                         onRemoteAudioTrack(track)
                     }
                     else -> {}
@@ -564,15 +580,16 @@ class WebRtcManager(
         }
 
         fun preferOpusHighQuality(sdpDescription: String): String {
+            val opusParams = "a=fmtp:111 minptime=10;ptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000;cbr=1"
             return if (sdpDescription.contains("a=fmtp:111")) {
                 sdpDescription.replace(
                     Regex("a=fmtp:111 .*"),
-                    "a=fmtp:111 minptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000"
+                    opusParams
                 )
             } else if (sdpDescription.contains("a=rtpmap:111 opus/48000")) {
                 sdpDescription.replace(
                     "a=rtpmap:111 opus/48000",
-                    "a=rtpmap:111 opus/48000\r\na=fmtp:111 minptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000"
+                    "a=rtpmap:111 opus/48000\r\n$opusParams"
                 )
             } else {
                 sdpDescription
@@ -584,6 +601,19 @@ class WebRtcManager(
         fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
             val clamped = sensitivityPercent.coerceIn(0f, 100f)
             return 0.5 + (clamped / 100.0) * 1.5
+        }
+
+        /**
+         * Ultra-high sensitivity boost curve for distant whisper monitoring.
+         * Scales smoothly up to 3.5x digital gain without clipping.
+         */
+        fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
+            val clamped = sensitivityPercent.coerceIn(0f, 100f)
+            return if (clamped <= 50f) {
+                0.5 + (clamped / 50.0) * 1.5 // 0.5x -> 2.0x
+            } else {
+                2.0 + ((clamped - 50.0) / 50.0) * 1.5 // 2.0x -> 3.5x
+            }
         }
     }
 
@@ -651,6 +681,30 @@ class WebRtcManager(
         currentAudioLevel = 0f
     }
 
+    /**
+     * Boosts remote audio signal using DSP LoudnessEnhancer for whispered/distant sound.
+     * @param audioSessionId The audio session to apply the effect to.
+     * @param gainMilliBel Target gain in mB (e.g., 1200 mB = +12dB boost).
+     */
+    fun enableLoudnessBooster(audioSessionId: Int, gainMilliBel: Int = 1200) {
+        try {
+            loudnessEnhancer?.release()
+            loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
+                setTargetGain(gainMilliBel.coerceIn(0, 3000))
+                enabled = true
+            }
+            FirebaseCrashlytics.getInstance().log("[WebRTC] LoudnessEnhancer enabled with gain: ${gainMilliBel}mB for session: $audioSessionId")
+        } catch (t: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] LoudnessEnhancer init failed: ${t.localizedMessage}")
+        }
+    }
+
+    fun setLoudnessGain(gainMilliBel: Int) {
+        try {
+            loudnessEnhancer?.setTargetGain(gainMilliBel.coerceIn(0, 3000))
+        } catch (_: Throwable) {}
+    }
+
     private fun enableHardwareAudioEffects() {
         try {
             val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -706,11 +760,13 @@ class WebRtcManager(
         isCameraRunning = false
         stopAudioLevelMonitoring()
 
-        // Release hardware audio effects
+        // Release audio effects
         try { hardwareAgc?.release() } catch (_: Throwable) {}
         hardwareAgc = null
         try { hardwareNs?.release() } catch (_: Throwable) {}
         hardwareNs = null
+        try { loudnessEnhancer?.release() } catch (_: Throwable) {}
+        loudnessEnhancer = null
 
         // Stop and dispose camera capturer safely
         try { videoCapturer?.stopCapture() } catch (_: Throwable) {}
