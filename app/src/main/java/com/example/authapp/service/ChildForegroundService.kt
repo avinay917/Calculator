@@ -46,6 +46,8 @@ class ChildForegroundService : Service() {
     private var currentSessionId: String? = null
     private var isStreaming = false
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val candidateBuffer = mutableListOf<Map<String, Any>>()
+    private val candidateHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var overlayView: android.view.View? = null
     private var heartbeatHandler: android.os.Handler? = null
     private var heartbeatRunnable: Runnable? = null
@@ -469,17 +471,30 @@ class ChildForegroundService : Service() {
                     streamType = streamType,
                     iceServers = iceServers,
                     onIceCandidate = { candidate ->
-                    val candMap = mapOf(
-                        "sdpMid" to candidate.sdpMid,
-                        "sdpMLineIndex" to candidate.sdpMLineIndex,
-                        "sdp" to candidate.sdp
-                    )
-                    FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = false)
-                },
-                onSdpCreated = { sdp ->
-                    FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
-                    FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
-                }
+                        val candMap = mapOf(
+                            "sdpMid" to candidate.sdpMid,
+                            "sdpMLineIndex" to candidate.sdpMLineIndex,
+                            "sdp" to candidate.sdp
+                        )
+                        synchronized(candidateBuffer) {
+                            candidateBuffer.add(candMap)
+                        }
+                        candidateHandler.removeCallbacksAndMessages(null)
+                        candidateHandler.postDelayed({
+                            val batch = synchronized(candidateBuffer) {
+                                val list = candidateBuffer.toList()
+                                candidateBuffer.clear()
+                                list
+                            }
+                            if (batch.isNotEmpty()) {
+                                FirebaseRepository.sendIceCandidatesBatch(sessionId, batch, isParent = false)
+                            }
+                        }, 500L)
+                    },
+                    onSdpCreated = { sdp ->
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
+                        FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
+                    }
             )
 
             // 1. Listen for SDP Answer from Parent
@@ -523,6 +538,16 @@ class ChildForegroundService : Service() {
                 FirebaseRepository.removeCameraFacingListener(oldSessionId, it)
             }
         }
+        candidateHandler.removeCallbacksAndMessages(null)
+        val remaining = synchronized(candidateBuffer) {
+            val list = candidateBuffer.toList()
+            candidateBuffer.clear()
+            list
+        }
+        if (remaining.isNotEmpty() && !oldSessionId.isNullOrEmpty()) {
+            FirebaseRepository.sendIceCandidatesBatch(oldSessionId, remaining, isParent = false)
+        }
+
         sdpAnswerListener = null
         parentCandidateListener = null
         cameraFacingListener = null

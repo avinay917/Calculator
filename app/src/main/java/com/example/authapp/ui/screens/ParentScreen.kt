@@ -174,6 +174,9 @@ fun ParentScreen(
             var candidateListener: com.google.firebase.database.ChildEventListener? = null
             var manager: WebRtcManager? = null
 
+            val candidateBuffer = mutableListOf<Map<String, Any>>()
+            val candidateHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
             try {
                 FirebaseCrashlytics.getInstance().log("[ParentScreen] Initializing WebRtcManager receiver for session: $sessionId")
                 manager = WebRtcManager(context.applicationContext, isReceiverOnly = true)
@@ -199,18 +202,31 @@ fun ParentScreen(
 
                     manager.startReceiver(
                         iceServers = iceServers,
-                    onIceCandidate = { candidate ->
-                        try {
-                            val candMap = mapOf(
-                                "sdpMid" to candidate.sdpMid,
-                                "sdpMLineIndex" to candidate.sdpMLineIndex,
-                                "sdp" to candidate.sdp
-                            )
-                            FirebaseRepository.sendIceCandidate(sessionId, candMap, isParent = true)
-                        } catch (e: Exception) {
-                            FirebaseCrashlytics.getInstance().recordException(e)
-                        }
-                    },
+                        onIceCandidate = { candidate ->
+                            try {
+                                val candMap = mapOf(
+                                    "sdpMid" to candidate.sdpMid,
+                                    "sdpMLineIndex" to candidate.sdpMLineIndex,
+                                    "sdp" to candidate.sdp
+                                )
+                                synchronized(candidateBuffer) {
+                                    candidateBuffer.add(candMap)
+                                }
+                                candidateHandler.removeCallbacksAndMessages(null)
+                                candidateHandler.postDelayed({
+                                    val batch = synchronized(candidateBuffer) {
+                                        val list = candidateBuffer.toList()
+                                        candidateBuffer.clear()
+                                        list
+                                    }
+                                    if (batch.isNotEmpty()) {
+                                        FirebaseRepository.sendIceCandidatesBatch(sessionId, batch, isParent = true)
+                                    }
+                                }, 500L)
+                            } catch (e: Exception) {
+                                FirebaseCrashlytics.getInstance().recordException(e)
+                            }
+                        },
                     onRemoteVideoTrack = { track ->
                         mainHandler.post {
                             viewModel.updateStreamStatus("Live Video Streaming 🟢")
@@ -278,6 +294,16 @@ fun ParentScreen(
                 remoteVideoTrack = null
                 remoteAudioTrack = null
                 webRtcManager = null
+                candidateHandler.removeCallbacksAndMessages(null)
+                val remaining = synchronized(candidateBuffer) {
+                    val list = candidateBuffer.toList()
+                    candidateBuffer.clear()
+                    list
+                }
+                if (remaining.isNotEmpty()) {
+                    FirebaseRepository.sendIceCandidatesBatch(sessionId, remaining, isParent = true)
+                }
+                FirebaseRepository.cleanupSignalingData(sessionId, childId)
                 try {
                     sdpOfferListener?.let {
                         FirebaseRepository.removeSdpOfferListener(sessionId, it)

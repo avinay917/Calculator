@@ -305,9 +305,7 @@ object FirebaseRepository {
             "timestamp" to System.currentTimeMillis()
         )
         database.reference.child("streams").child(childId).child("status").setValue(statusData)
-        if (!sessionId.isNullOrEmpty()) {
-            database.reference.child("signaling").child(sessionId).removeValue()
-        }
+        cleanupSignalingData(sessionId ?: "", childId)
         val parentId = currentUser?.uid
         if (parentId != null) {
             database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
@@ -388,6 +386,31 @@ object FirebaseRepository {
             .addOnFailureListener { e ->
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
+    }
+
+    fun sendIceCandidatesBatch(sessionId: String, candidates: List<Map<String, Any>>, isParent: Boolean) {
+        if (candidates.isEmpty() || sessionId.isEmpty()) return
+        val targetNode = if (isParent) "parentCandidates" else "childCandidates"
+        val ref = database.reference.child("signaling").child(sessionId).child(targetNode)
+        val batchMap = mutableMapOf<String, Any>()
+        for (candidate in candidates) {
+            val key = ref.push().key ?: continue
+            batchMap[key] = candidate
+        }
+        if (batchMap.isNotEmpty()) {
+            ref.updateChildren(batchMap).addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        }
+    }
+
+    fun cleanupSignalingData(sessionId: String, childId: String? = null) {
+        if (sessionId.isNotEmpty()) {
+            database.reference.child("signaling").child(sessionId).removeValue()
+        }
+        if (!childId.isNullOrEmpty()) {
+            database.reference.child("streams").child(childId).child("request").removeValue()
+        }
     }
 
     fun listenToSdpOffer(sessionId: String, onOfferReceived: (String) -> Unit): ValueEventListener {

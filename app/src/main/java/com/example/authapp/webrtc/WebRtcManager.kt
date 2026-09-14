@@ -1,6 +1,11 @@
 package com.example.authapp.webrtc
 
 import android.content.Context
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.MediaRecorder
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
@@ -22,6 +27,8 @@ class WebRtcManager(
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
     private var audioDeviceModule: JavaAudioDeviceModule? = null
+    private var hardwareAgc: AutomaticGainControl? = null
+    private var hardwareNs: NoiseSuppressor? = null
 
     private val pendingCandidates = mutableListOf<IceCandidate>()
     @Volatile
@@ -63,11 +70,11 @@ class WebRtcManager(
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule()
             } else {
-                val useNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
                 JavaAudioDeviceModule.builder(appContext)
-                    .setUseHardwareAcousticEchoCanceler(false)
-                    .setUseHardwareNoiseSuppressor(useNs)
-                    .setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+                    .setUseHardwareAcousticEchoCanceler(true)
+                    .setUseHardwareNoiseSuppressor(false)
+                    .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+                    .setAudioFormat(AudioFormat.ENCODING_PCM_16BIT)
                     .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                         override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
                             AppHealthTelemetry.logDiagnostic(appContext, "LIVE_AUDIO", "FAILED", "AudioRecord Init Error: $errorMessage", errorMessage)
@@ -140,20 +147,26 @@ class WebRtcManager(
             }
         })
 
-        // Audio Track with Clean Studio Surveillance & Vibration Filter
+        // Audio Track with Clean Studio Surveillance & Vibration Filter (Fix 2)
         val audioConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
         }
         audioSource = factory?.createAudioSource(audioConstraints)
         audioTrack = factory?.createAudioTrack("ARDAMSa0", audioSource)
         audioTrack?.setEnabled(true)
-        peerConnection?.addTrack(audioTrack, listOf("ARDAMS"))
+        audioTrack?.let { at ->
+            peerConnection?.addTransceiver(
+                at,
+                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+            )
+        }
+        enableHardwareAudioEffects()
 
         // Video Track (if requested)
         if (streamType.equals("video", ignoreCase = true)) {
@@ -211,8 +224,13 @@ class WebRtcManager(
                     AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "SUCCESS", "Camera capturer active and video track attached")
                     videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
                     videoTrack?.setEnabled(true)
-                    peerConnection?.addTrack(videoTrack, listOf("ARDAMS"))
-                    FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection (started=$started)")
+                    videoTrack?.let { vt ->
+                        peerConnection?.addTransceiver(
+                            vt,
+                            RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                        )
+                    }
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection via transceiver (started=$started)")
                 } else {
                     AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "Camera startCapture failed for all fallback resolutions")
                     FirebaseCrashlytics.getInstance().log("[WebRTC] Camera startCapture failed: video track omitted")
@@ -223,16 +241,12 @@ class WebRtcManager(
             }
         }
 
-        val mediaConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
-        }
-
+        // Offer banate waqt empty constraints do, legacy flags mat do (Fix 5)
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
                 if (isStopped) return
                 desc?.let { originalOffer ->
-                    val optimizedOffer = SessionDescription(originalOffer.type, optimizeOpusSdp(originalOffer.description))
+                    val optimizedOffer = SessionDescription(originalOffer.type, preferOpusHighQuality(originalOffer.description))
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
@@ -257,7 +271,7 @@ class WebRtcManager(
             override fun onSetFailure(error: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Offer Set Failure: $error")
             }
-        }, mediaConstraints)
+        }, MediaConstraints())
     }
 
     fun setRemoteAnswer(sdpString: String, onSetSuccess: (() -> Unit)? = null) {
@@ -366,7 +380,7 @@ class WebRtcManager(
                     override fun onCreateSuccess(answerDesc: SessionDescription?) {
                         if (isStopped) return
                         answerDesc?.let { originalAnswer ->
-                            val optimizedAnswer = SessionDescription(originalAnswer.type, optimizeOpusSdp(originalAnswer.description))
+                            val optimizedAnswer = SessionDescription(originalAnswer.type, preferOpusHighQuality(originalAnswer.description))
                             peerConnection?.setLocalDescription(object : SdpObserver {
                                 override fun onCreateSuccess(p0: SessionDescription?) {}
                                 override fun onSetSuccess() {
@@ -549,28 +563,23 @@ class WebRtcManager(
             )
         }
 
-        fun optimizeOpusSdp(sdpDescription: String): String {
-            val lines = sdpDescription.split(Regex("\r?\n")).filter { it.isNotEmpty() }
-            val hasFmtp = lines.any { it.startsWith("a=fmtp:111") }
-            val result = mutableListOf<String>()
-            for (line in lines) {
-                if (line.startsWith("a=fmtp:111") || (line.startsWith("a=fmtp:") && line.contains("opus", ignoreCase = true))) {
-                    var modified = line
-                    if (!modified.contains("maxaveragebitrate=")) modified += ";maxaveragebitrate=64000"
-                    if (!modified.contains("sprop-maxcapturerate=")) modified += ";sprop-maxcapturerate=48000"
-                    if (!modified.contains("usedtx=")) modified += ";usedtx=1"
-                    if (!modified.contains("useinbandfec=")) modified += ";useinbandfec=1"
-                    if (!modified.contains("stereo=")) modified += ";stereo=0"
-                    result.add(modified)
-                } else if (!hasFmtp && line.startsWith("a=rtpmap:111 opus/48000")) {
-                    result.add(line)
-                    result.add("a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0")
-                } else {
-                    result.add(line)
-                }
+        fun preferOpusHighQuality(sdpDescription: String): String {
+            return if (sdpDescription.contains("a=fmtp:111")) {
+                sdpDescription.replace(
+                    Regex("a=fmtp:111 .*"),
+                    "a=fmtp:111 minptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000"
+                )
+            } else if (sdpDescription.contains("a=rtpmap:111 opus/48000")) {
+                sdpDescription.replace(
+                    "a=rtpmap:111 opus/48000",
+                    "a=rtpmap:111 opus/48000\r\na=fmtp:111 minptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000"
+                )
+            } else {
+                sdpDescription
             }
-            return result.joinToString("\r\n") + "\r\n"
         }
+
+        fun optimizeOpusSdp(sdpDescription: String): String = preferOpusHighQuality(sdpDescription)
 
         fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
             val clamped = sensitivityPercent.coerceIn(0f, 100f)
@@ -642,11 +651,65 @@ class WebRtcManager(
         currentAudioLevel = 0f
     }
 
+    private fun enableHardwareAudioEffects() {
+        try {
+            val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val sessionId = getAudioSessionIdFromAdm() ?: audioManager?.generateAudioSessionId()
+            if (sessionId != null && sessionId != 0) {
+                if (AutomaticGainControl.isAvailable()) {
+                    try {
+                        hardwareAgc = AutomaticGainControl.create(sessionId)?.apply {
+                            enabled = true
+                        }
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Hardware AutomaticGainControl enabled (sessionId=$sessionId)")
+                    } catch (e: Throwable) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Hardware AGC error: ${e.localizedMessage}")
+                    }
+                }
+                if (NoiseSuppressor.isAvailable()) {
+                    try {
+                        hardwareNs = NoiseSuppressor.create(sessionId)?.apply {
+                            enabled = true
+                        }
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Hardware NoiseSuppressor enabled (sessionId=$sessionId)")
+                    } catch (e: Throwable) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Hardware NS error: ${e.localizedMessage}")
+                    }
+                }
+            }
+            try {
+                audioDeviceModule?.setNoiseSuppressorEnabled(true)
+            } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] enableHardwareAudioEffects notice: ${e.localizedMessage}")
+        }
+    }
+
+    private fun getAudioSessionIdFromAdm(): Int? {
+        return try {
+            val audioInputField = audioDeviceModule?.javaClass?.getDeclaredField("audioInput")
+            audioInputField?.isAccessible = true
+            val audioInput = audioInputField?.get(audioDeviceModule)
+            val audioRecordField = audioInput?.javaClass?.getDeclaredField("audioRecord")
+            audioRecordField?.isAccessible = true
+            val audioRecord = audioRecordField?.get(audioInput) as? android.media.AudioRecord
+            audioRecord?.audioSessionId
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun stopStream() {
         if (isStopped) return
         isStopped = true
         isCameraRunning = false
         stopAudioLevelMonitoring()
+
+        // Release hardware audio effects (Fix 3)
+        try { hardwareAgc?.release() } catch (_: Throwable) {}
+        hardwareAgc = null
+        try { hardwareNs?.release() } catch (_: Throwable) {}
+        hardwareNs = null
 
         // Stop and dispose camera capturer
         try { videoCapturer?.stopCapture() } catch (_: Throwable) {}
