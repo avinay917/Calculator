@@ -21,6 +21,7 @@ fun SafeSurfaceViewRenderer(
                 setEnableHardwareScaler(true)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
+                setZOrderMediaOverlay(true)
 
                 try {
                     init(eglContext, object : RendererCommon.RendererEvents {

@@ -62,7 +62,7 @@ fun LiveStreamDialog(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = if (isVideo) Color.Black else MaterialTheme.colorScheme.background
+        color = if (isVideo) Color.Transparent else MaterialTheme.colorScheme.background
     ) {
         if (isVideo) {
             // Video Mode: Edge-to-edge SafeSurfaceViewRenderer with floating HUD

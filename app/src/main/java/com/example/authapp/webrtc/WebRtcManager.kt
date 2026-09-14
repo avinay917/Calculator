@@ -360,10 +360,7 @@ class WebRtcManager(
             override fun onSetSuccess() {
                 if (isStopped) return
                 drainPendingCandidates()
-                val mediaConstraints = MediaConstraints().apply {
-                    mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
-                    mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-                }
+                val mediaConstraints = MediaConstraints()
                 peerConnection?.createAnswer(object : SdpObserver {
                     override fun onCreateSuccess(answerDesc: SessionDescription?) {
                         if (isStopped) return
@@ -541,8 +538,10 @@ class WebRtcManager(
         }
 
         fun optimizeOpusSdp(sdpDescription: String): String {
-            val hasFmtp = sdpDescription.lines().any { it.startsWith("a=fmtp:111") }
-            return sdpDescription.lines().joinToString("\r\n") { line ->
+            val lines = sdpDescription.split(Regex("\r?\n")).filter { it.isNotEmpty() }
+            val hasFmtp = lines.any { it.startsWith("a=fmtp:111") }
+            val result = mutableListOf<String>()
+            for (line in lines) {
                 if (line.startsWith("a=fmtp:111") || (line.startsWith("a=fmtp:") && line.contains("opus", ignoreCase = true))) {
                     var modified = line
                     if (!modified.contains("maxaveragebitrate=")) modified += ";maxaveragebitrate=64000"
@@ -550,14 +549,15 @@ class WebRtcManager(
                     if (!modified.contains("usedtx=")) modified += ";usedtx=1"
                     if (!modified.contains("useinbandfec=")) modified += ";useinbandfec=1"
                     if (!modified.contains("stereo=")) modified += ";stereo=0"
-                    modified
+                    result.add(modified)
                 } else if (!hasFmtp && line.startsWith("a=rtpmap:111 opus/48000")) {
-                    // FIX: do NOT add \r\n inside the line — joinToString already adds \r\n between lines
-                    "$line\na=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0"
+                    result.add(line)
+                    result.add("a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000;sprop-maxcapturerate=48000;usedtx=1;stereo=0")
                 } else {
-                    line
+                    result.add(line)
                 }
             }
+            return result.joinToString("\r\n") + "\r\n"
         }
 
         fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
