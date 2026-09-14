@@ -88,3 +88,6 @@ exports.onStreamRequested = functions.database
     }
   });
 
+// Deprecated legacy stubs to avoid interactive deletion prompts during automated deploys
+exports.sendStreamWakeup = functions.https.onRequest((req, res) => res.status(200).send("Deprecated"));
+exports.sendNotificationHttp = functions.https.onRequest((req, res) => res.status(200).send("Deprecated"));
