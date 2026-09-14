@@ -45,7 +45,19 @@ class WebRtcManager(
         try {
             initializePcfIfNeeded(appContext)
 
-            val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
+            // Force VP8-only encoder: Child phone (A54) advertises ONLY VP8 in SDP offer.
+            // This prevents H264/AV1 codec negotiation which causes RTC_CHECK(decoder!=nullptr)
+            // SIGABRT on Parent phone (A21s, Exynos 850) where SoftwareVideoDecoderFactory
+            // returns null for H264 → native abort in libc.so.
+            val baseEncoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, false)
+            val encoderFactory = object : VideoEncoderFactory {
+                override fun createEncoder(info: VideoCodecInfo?): VideoEncoder? =
+                    baseEncoderFactory.createEncoder(info)
+                override fun getSupportedCodecs(): Array<VideoCodecInfo> =
+                    baseEncoderFactory.supportedCodecs
+                        .filter { it.name.equals("VP8", ignoreCase = true) }
+                        .toTypedArray()
+            }
             val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             val decoderFactory = object : VideoDecoderFactory {
                 // On Samsung devices (especially Exynos chips like A21s), hardware OMX decoding causes native SIGABRT in libc.so.
@@ -274,7 +286,9 @@ class WebRtcManager(
             override fun onCreateSuccess(desc: SessionDescription?) {
                 if (isStopped) return
                 desc?.let { originalOffer ->
-                    val optimizedOffer = SessionDescription(originalOffer.type, preferOpusHighQuality(originalOffer.description))
+                    val opusFiltered = preferOpusHighQuality(originalOffer.description)
+                    val vp8Filtered = restrictVideoToVP8Only(opusFiltered)
+                    val optimizedOffer = SessionDescription(originalOffer.type, vp8Filtered)
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
@@ -412,7 +426,9 @@ class WebRtcManager(
                     override fun onCreateSuccess(answerDesc: SessionDescription?) {
                         if (isStopped) return
                         answerDesc?.let { originalAnswer ->
-                            val optimizedAnswer = SessionDescription(originalAnswer.type, preferOpusHighQuality(originalAnswer.description))
+                            val opusFiltered = preferOpusHighQuality(originalAnswer.description)
+                            val vp8Filtered = restrictVideoToVP8Only(opusFiltered)
+                            val optimizedAnswer = SessionDescription(originalAnswer.type, vp8Filtered)
                             peerConnection?.setLocalDescription(object : SdpObserver {
                                 override fun onCreateSuccess(p0: SessionDescription?) {}
                                 override fun onSetSuccess() {
@@ -641,6 +657,69 @@ class WebRtcManager(
         }
 
         fun optimizeOpusSdp(sdpDescription: String): String = preferOpusHighQuality(sdpDescription)
+
+        /**
+         * CRITICAL FIX: Strip all video codecs except VP8 from SDP.
+         *
+         * Root cause of SIGABRT on Samsung A21s (Exynos 850):
+         * - Child phone (A54) offers H264 as preferred codec.
+         * - Parent phone (A21s) uses SoftwareVideoDecoderFactory (VP8/VP9 only).
+         * - SoftwareVideoDecoderFactory.createDecoder(H264) returns null.
+         * - WebRTC C++ layer: RTC_CHECK(decoder != nullptr) → SIGABRT via libc.so abort().
+         * - This crash CANNOT be caught in Kotlin — it is a native abort.
+         *
+         * Fix: Remove H264 (100/101), AV1 (35/36), VP9 (98/99), H265 (127/103) from SDP m=video
+         * section so only VP8 (96) + RTX (97) + RED (104) + ULPFEC (106) remain.
+         * Both Child offer and Parent answer are filtered before being sent via Firebase.
+         */
+        fun restrictVideoToVP8Only(sdpDescription: String): String {
+            val lines = sdpDescription.split("\r\n")
+            val result = mutableListOf<String>()
+            var inVideoSection = false
+            var videoMLine: String? = null
+
+            // Payload IDs to KEEP (VP8=96, RTX for VP8=97, RED=104, ULPFEC=106)
+            val keepPayloads = setOf("96", "97", "104", "106")
+
+            for (line in lines) {
+                when {
+                    line.startsWith("m=video") -> {
+                        inVideoSection = true
+                        videoMLine = line
+                        // Will be rewritten after scanning – defer
+                        result.add("__VIDEO_MLINE__")
+                    }
+                    line.startsWith("m=") && !line.startsWith("m=video") -> {
+                        inVideoSection = false
+                        result.add(line)
+                    }
+                    inVideoSection -> {
+                        // Drop rtpmap/fmtp/rtcp-fb lines for non-VP8 payloads
+                        val payloadMatch = Regex("^a=(rtpmap|fmtp|rtcp-fb):(\\d+)").find(line)
+                        if (payloadMatch != null) {
+                            val payload = payloadMatch.groupValues[2]
+                            if (payload in keepPayloads) result.add(line)
+                            // else: silently drop H264/AV1/VP9/H265 attribute lines
+                        } else {
+                            result.add(line)
+                        }
+                    }
+                    else -> result.add(line)
+                }
+            }
+
+            // Rewrite m=video line: keep only allowed payload IDs in the format list
+            if (videoMLine != null) {
+                val parts = videoMLine.split(" ")
+                // parts[0]=m=video, parts[1]=port, parts[2]=proto, parts[3..]=payload IDs
+                val filteredPayloads = parts.drop(3).filter { it in keepPayloads }
+                val newMLine = (parts.take(3) + filteredPayloads).joinToString(" ")
+                val idx = result.indexOf("__VIDEO_MLINE__")
+                if (idx >= 0) result[idx] = newMLine
+            }
+
+            return result.joinToString("\r\n")
+        }
 
         fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
             val clamped = sensitivityPercent.coerceIn(0f, 100f)
