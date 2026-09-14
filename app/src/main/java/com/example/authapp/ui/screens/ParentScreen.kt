@@ -41,6 +41,10 @@ import androidx.compose.material.icons.filled.Sensors
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.ui.components.ChildLocationDialog
 import com.example.authapp.ui.components.ChildUserCard
+import com.example.authapp.ui.components.ChildSnapshotDialog
+import com.example.authapp.ui.components.ChildActivityDialog
+import com.example.authapp.ui.components.ChildAlertsDialog
+import com.example.authapp.ui.components.ChildScheduleDialog
 import com.example.authapp.ui.components.CloudRecordingsView
 import com.example.authapp.ui.components.LiveStreamDialog
 import com.example.authapp.ui.viewmodel.ParentViewModel
@@ -474,6 +478,7 @@ fun ParentScreen(
                                 ChildUserCard(
                                     user = child,
                                     deviceHealth = uiState.deviceHealthMap[child.uid],
+                                    alertsCount = uiState.securityAlertsMap[child.uid]?.size ?: 0,
                                     onAudioClick = {
                                         viewModel.startStream(child, "audio")
                                         Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
@@ -484,6 +489,18 @@ fun ParentScreen(
                                     },
                                     onLocationClick = {
                                         viewModel.openLocationDialog(child)
+                                    },
+                                    onSnapshotClick = {
+                                        viewModel.openSnapshotDialog(child)
+                                    },
+                                    onActivityClick = {
+                                        viewModel.openActivityDialog(child)
+                                    },
+                                    onAlertsClick = {
+                                        viewModel.openAlertsDialog(child)
+                                    },
+                                    onScheduleClick = {
+                                        viewModel.openScheduleDialog(child)
                                     }
                                 )
                             }
@@ -524,6 +541,55 @@ fun ParentScreen(
                         viewModel.requestLocationRefresh(childUser.uid)
                         Toast.makeText(context, "Real-time location refresh requested...", Toast.LENGTH_SHORT).show()
                     }
+                )
+            }
+
+            // Silent Remote Snapshot Dialog (Phase 1)
+            uiState.activeSnapshotDialogChild?.let { childUser ->
+                ChildSnapshotDialog(
+                    childUser = childUser,
+                    snapshots = uiState.snapshotsMap[childUser.uid] ?: emptyList(),
+                    statusMessage = uiState.snapshotStatusMessage,
+                    onRequestSnapshot = { facing ->
+                        viewModel.requestSnapshot(childUser.uid, facing)
+                    },
+                    onDismiss = { viewModel.closeSnapshotDialog() }
+                )
+            }
+
+            // Call Logs & Notifications Activity Dialog (Phase 2)
+            uiState.activeActivityDialogChild?.let { childUser ->
+                ChildActivityDialog(
+                    childUser = childUser,
+                    callLogs = uiState.callLogsMap[childUser.uid] ?: emptyList(),
+                    notifications = uiState.notificationsMap[childUser.uid] ?: emptyList(),
+                    onDismiss = { viewModel.closeActivityDialog() }
+                )
+            }
+
+            // Security Alerts Dialog (Phase 1 & 2)
+            uiState.activeAlertsDialogChild?.let { childUser ->
+                ChildAlertsDialog(
+                    childUser = childUser,
+                    alerts = uiState.securityAlertsMap[childUser.uid] ?: emptyList(),
+                    onDismiss = { viewModel.closeAlertsDialog() }
+                )
+            }
+
+            // Auto-Recording Schedules Dialog (Phase 1)
+            uiState.activeScheduleDialogChild?.let { childUser ->
+                ChildScheduleDialog(
+                    childUser = childUser,
+                    schedules = uiState.schedulesMap[childUser.uid] ?: emptyList(),
+                    onSaveSchedule = { schedule ->
+                        viewModel.saveRecordingSchedule(childUser.uid, schedule)
+                        Toast.makeText(context, "Recording schedule saved", Toast.LENGTH_SHORT).show()
+                    },
+                    onDeleteSchedule = { scheduleId ->
+                        viewModel.deleteRecordingSchedule(childUser.uid, scheduleId)
+                        Toast.makeText(context, "Recording schedule removed", Toast.LENGTH_SHORT).show()
+                    },
+                    onDismiss = { viewModel.closeScheduleDialog() }
                 )
             }
         }

@@ -27,13 +27,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.BatteryAlert
+
 @Composable
 fun ChildUserCard(
     user: User,
     deviceHealth: DeviceHealth? = null,
+    alertsCount: Int = 0,
     onAudioClick: () -> Unit,
     onVideoClick: () -> Unit,
     onLocationClick: () -> Unit,
+    onSnapshotClick: () -> Unit,
+    onActivityClick: () -> Unit,
+    onAlertsClick: () -> Unit,
+    onScheduleClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -184,51 +195,77 @@ fun ChildUserCard(
                         )
                     }
                 }
+
+                // Low Battery Critical Warning Alert (Phase 1)
+                if (battery in 0..15 && !isCharging) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFEBEE),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BatteryAlert,
+                                contentDescription = null,
+                                tint = Color(0xFFC62828),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Battery Low ($battery%) - Child needs to charge",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFFC62828)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Quick Actions: Audio, Video, GPS (all styled consistently with safe padding)
+            // Primary Row: Audio, Video, GPS, Photo (Snapshot)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 FilledTonalButton(
                     onClick = {
                         AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
                         if (!user.isOnline) {
-                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline. Waiting for device to connect...", Toast.LENGTH_SHORT).show()
-                            AppAnalytics.logActionFailure("audio_cast", "ParentScreen", "Child device is offline")
+                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
                             return@FilledTonalButton
                         }
                         onAudioClick()
                     },
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Mic, contentDescription = "Audio Stream", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Audio", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("Audio", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
                 FilledTonalButton(
                     onClick = {
                         AppAnalytics.logButtonClick("video_cast", "ParentScreen", mapOf("childId" to user.uid))
                         if (!user.isOnline) {
-                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline. Waiting for device to connect...", Toast.LENGTH_SHORT).show()
-                            AppAnalytics.logActionFailure("video_cast", "ParentScreen", "Child device is offline")
+                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
                             return@FilledTonalButton
                         }
                         onVideoClick()
                     },
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Video", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("Video", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
                 FilledTonalButton(
@@ -237,12 +274,73 @@ fun ChildUserCard(
                         onLocationClick()
                     },
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("GPS", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("GPS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+
+                FilledTonalButton(
+                    onClick = {
+                        AppAnalytics.logButtonClick("snapshot", "ParentScreen", mapOf("childId" to user.uid))
+                        onSnapshotClick()
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("Photo", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Secondary Row: Activity (Calls & Notifs), Security Alerts, Schedules
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    onClick = onActivityClick,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Activity", style = MaterialTheme.typography.labelSmall)
+                }
+
+                OutlinedButton(
+                    onClick = onAlertsClick,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = if (alertsCount > 0) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.outlinedButtonColors()
+                ) {
+                    Icon(imageVector = Icons.Default.Security, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = if (alertsCount > 0) "Alerts ($alertsCount)" else "Alerts",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (alertsCount > 0) FontWeight.Bold else FontWeight.Normal
+                        )
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onScheduleClick,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Schedule", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

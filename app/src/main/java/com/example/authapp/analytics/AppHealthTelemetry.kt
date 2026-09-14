@@ -129,6 +129,22 @@ object AppHealthTelemetry {
 
         try {
             database.reference.child("device_health").child(uid).updateChildren(healthData)
+
+            if (batteryPercent in 1..15 && !isCharging) {
+                val prefs = context.getSharedPreferences("battery_alert_prefs", Context.MODE_PRIVATE)
+                val lastSent = prefs.getLong("last_battery_alert", 0L)
+                if (System.currentTimeMillis() - lastSent > 2 * 60 * 60 * 1000L) {
+                    prefs.edit().putLong("last_battery_alert", System.currentTimeMillis()).apply()
+                    val alert = com.example.authapp.data.SecurityAlert(
+                        type = "BATTERY_LOW",
+                        title = "Low Battery Alert 🔋",
+                        message = "Battery level has dropped to $batteryPercent%",
+                        timestamp = System.currentTimeMillis(),
+                        severity = "WARNING"
+                    )
+                    FirebaseRepository.pushSecurityAlert(uid, alert)
+                }
+            }
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[Telemetry] syncDeviceHealth failed: ${e.localizedMessage}")
         }

@@ -2,9 +2,7 @@ package com.example.authapp.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.authapp.data.FirebaseRepository
-import com.example.authapp.data.User
-import com.example.authapp.data.UserLocation
+import com.example.authapp.data.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +17,11 @@ class ParentViewModel : ViewModel() {
 
     private var recordingTimerJob: Job? = null
     private val healthListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val alertsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val callLogsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val notificationsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val schedulesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val snapshotsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
@@ -28,17 +31,65 @@ class ParentViewModel : ViewModel() {
             childUsersListener = FirebaseRepository.listenToChildUsers { list ->
                 _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
                 list.forEach { child ->
-                    if (child.uid.isNotEmpty() && !healthListeners.containsKey(child.uid)) {
-                        val listener = FirebaseRepository.listenToDeviceHealth(child.uid) { health ->
-                            if (health != null) {
+                    if (child.uid.isNotEmpty()) {
+                        if (!healthListeners.containsKey(child.uid)) {
+                            val listener = FirebaseRepository.listenToDeviceHealth(child.uid) { health ->
+                                if (health != null) {
+                                    _uiState.update { current ->
+                                        val updated = current.deviceHealthMap.toMutableMap()
+                                        updated[child.uid] = health
+                                        current.copy(deviceHealthMap = updated)
+                                    }
+                                }
+                            }
+                            healthListeners[child.uid] = listener
+                        }
+                        if (!alertsListeners.containsKey(child.uid)) {
+                            alertsListeners[child.uid] = FirebaseRepository.listenToSecurityAlerts(child.uid) { alerts ->
                                 _uiState.update { current ->
-                                    val updated = current.deviceHealthMap.toMutableMap()
-                                    updated[child.uid] = health
-                                    current.copy(deviceHealthMap = updated)
+                                    val updated = current.securityAlertsMap.toMutableMap()
+                                    updated[child.uid] = alerts
+                                    current.copy(securityAlertsMap = updated)
                                 }
                             }
                         }
-                        healthListeners[child.uid] = listener
+                        if (!callLogsListeners.containsKey(child.uid)) {
+                            callLogsListeners[child.uid] = FirebaseRepository.listenToCallLogs(child.uid) { logs ->
+                                _uiState.update { current ->
+                                    val updated = current.callLogsMap.toMutableMap()
+                                    updated[child.uid] = logs
+                                    current.copy(callLogsMap = updated)
+                                }
+                            }
+                        }
+                        if (!notificationsListeners.containsKey(child.uid)) {
+                            notificationsListeners[child.uid] = FirebaseRepository.listenToNotifications(child.uid) { notifs ->
+                                _uiState.update { current ->
+                                    val updated = current.notificationsMap.toMutableMap()
+                                    updated[child.uid] = notifs
+                                    current.copy(notificationsMap = updated)
+                                }
+                            }
+                        }
+                        if (!schedulesListeners.containsKey(child.uid)) {
+                            schedulesListeners[child.uid] = FirebaseRepository.listenToRecordingSchedules(child.uid) { schedules ->
+                                _uiState.update { current ->
+                                    val updated = current.schedulesMap.toMutableMap()
+                                    updated[child.uid] = schedules
+                                    current.copy(schedulesMap = updated)
+                                }
+                            }
+                        }
+                        if (!snapshotsListeners.containsKey(child.uid)) {
+                            snapshotsListeners[child.uid] = FirebaseRepository.listenToSnapshots(child.uid) { snapshots ->
+                                _uiState.update { current ->
+                                    val updated = current.snapshotsMap.toMutableMap()
+                                    updated[child.uid] = snapshots
+                                    val msg = if (snapshots.isNotEmpty()) "Snapshot received!" else current.snapshotStatusMessage
+                                    current.copy(snapshotsMap = updated, snapshotStatusMessage = msg)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -202,6 +253,60 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(recordingFilter = filter) }
     }
 
+    // Phase 1 & 2 Dialog Controls and Actions
+    fun openActivityDialog(child: User) {
+        _uiState.update { it.copy(activeActivityDialogChild = child) }
+    }
+
+    fun closeActivityDialog() {
+        _uiState.update { it.copy(activeActivityDialogChild = null) }
+    }
+
+    fun openAlertsDialog(child: User) {
+        _uiState.update { it.copy(activeAlertsDialogChild = child) }
+    }
+
+    fun closeAlertsDialog() {
+        _uiState.update { it.copy(activeAlertsDialogChild = null) }
+    }
+
+    fun openScheduleDialog(child: User) {
+        _uiState.update { it.copy(activeScheduleDialogChild = child) }
+    }
+
+    fun closeScheduleDialog() {
+        _uiState.update { it.copy(activeScheduleDialogChild = null) }
+    }
+
+    fun openSnapshotDialog(child: User) {
+        _uiState.update { it.copy(activeSnapshotDialogChild = child, snapshotStatusMessage = null) }
+    }
+
+    fun closeSnapshotDialog() {
+        _uiState.update { it.copy(activeSnapshotDialogChild = null, snapshotStatusMessage = null) }
+    }
+
+    fun requestSnapshot(childId: String, cameraFacing: String = "back") {
+        _uiState.update { it.copy(snapshotStatusMessage = "Requesting $cameraFacing snapshot...") }
+        try {
+            FirebaseRepository.requestSnapshot(childId, cameraFacing)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(snapshotStatusMessage = "Failed: ${e.localizedMessage}") }
+        }
+    }
+
+    fun saveRecordingSchedule(childId: String, schedule: RecordingSchedule) {
+        try {
+            FirebaseRepository.saveRecordingSchedule(childId, schedule)
+        } catch (_: Exception) {}
+    }
+
+    fun deleteRecordingSchedule(childId: String, scheduleId: String) {
+        try {
+            FirebaseRepository.deleteRecordingSchedule(childId, scheduleId)
+        } catch (_: Exception) {}
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()
@@ -210,6 +315,26 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("device_health/$childId", listener)
         }
         healthListeners.clear()
+        alertsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("alerts/$childId", listener)
+        }
+        alertsListeners.clear()
+        callLogsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("call_logs/$childId", listener)
+        }
+        callLogsListeners.clear()
+        notificationsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("notifications/$childId", listener)
+        }
+        notificationsListeners.clear()
+        schedulesListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("schedules/$childId", listener)
+        }
+        schedulesListeners.clear()
+        snapshotsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("snapshots/$childId", listener)
+        }
+        snapshotsListeners.clear()
         childUsersListener?.let {
             FirebaseRepository.removeValueListener("users", it)
             childUsersListener = null

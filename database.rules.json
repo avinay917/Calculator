@@ -45,6 +45,36 @@
         ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'parent')",
         ".write": "auth != null && auth.uid === $uid"
       }
+    },
+    "alerts": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
+      }
+    },
+    "call_logs": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
+      }
+    },
+    "notifications": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
+      }
+    },
+    "schedules": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
+      }
+    },
+    "snapshots": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child(auth.uid).child('role').val() === 'parent')"
+      }
     }
   }
 }

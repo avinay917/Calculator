@@ -721,4 +721,180 @@ object FirebaseRepository {
             }
         })
     }
+
+    // --- Security Alerts (Battery, SIM, Keywords) ---
+    fun pushSecurityAlert(childId: String, alert: SecurityAlert) {
+        val ref = database.reference.child("alerts").child(childId).push()
+        val toSave = alert.copy(id = ref.key ?: "")
+        ref.setValue(toSave)
+    }
+
+    fun listenToSecurityAlerts(childId: String, onAlerts: (List<SecurityAlert>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("alerts").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<SecurityAlert>()
+                for (child in snapshot.children) {
+                    child.getValue(SecurityAlert::class.java)?.let { list.add(it) }
+                }
+                onAlerts(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    // --- Call Log History ---
+    fun syncCallLogs(childId: String, callLogs: List<CallLogItem>) {
+        if (callLogs.isEmpty()) return
+        val ref = database.reference.child("call_logs").child(childId)
+        val map = mutableMapOf<String, Any>()
+        for (log in callLogs) {
+            val key = if (log.id.isNotEmpty()) log.id else "${log.timestamp}_${log.number.takeLast(4)}"
+            map[key] = log.copy(id = key)
+        }
+        ref.updateChildren(map)
+    }
+
+    fun listenToCallLogs(childId: String, onLogs: (List<CallLogItem>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("call_logs").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<CallLogItem>()
+                for (child in snapshot.children) {
+                    child.getValue(CallLogItem::class.java)?.let { list.add(it) }
+                }
+                onLogs(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    // --- Notification Mirroring ---
+    fun pushNotification(childId: String, item: NotificationItem) {
+        val ref = database.reference.child("notifications").child(childId).push()
+        val toSave = item.copy(id = ref.key ?: "")
+        ref.setValue(toSave)
+    }
+
+    fun listenToNotifications(childId: String, onNotifications: (List<NotificationItem>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("notifications").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<NotificationItem>()
+                for (child in snapshot.children) {
+                    child.getValue(NotificationItem::class.java)?.let { list.add(it) }
+                }
+                onNotifications(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    // --- Scheduled Recordings ---
+    fun saveRecordingSchedule(childId: String, schedule: RecordingSchedule) {
+        val ref = if (schedule.id.isNotEmpty()) {
+            database.reference.child("schedules").child(childId).child(schedule.id)
+        } else {
+            database.reference.child("schedules").child(childId).push()
+        }
+        val toSave = schedule.copy(id = ref.key ?: schedule.id)
+        ref.setValue(toSave)
+    }
+
+    fun deleteRecordingSchedule(childId: String, scheduleId: String) {
+        database.reference.child("schedules").child(childId).child(scheduleId).removeValue()
+    }
+
+    fun listenToRecordingSchedules(childId: String, onSchedules: (List<RecordingSchedule>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("schedules").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<RecordingSchedule>()
+                for (child in snapshot.children) {
+                    child.getValue(RecordingSchedule::class.java)?.let { list.add(it) }
+                }
+                onSchedules(list)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    // --- Remote Snapshots ---
+    fun requestSnapshot(childId: String, cameraFacing: String = "back") {
+        val data = mapOf(
+            "requestedAt" to System.currentTimeMillis(),
+            "cameraFacing" to cameraFacing,
+            "status" to "REQUESTED"
+        )
+        database.reference.child("streams").child(childId).child("snapshotRequest").setValue(data)
+    }
+
+    fun listenToSnapshotRequest(childId: String, onRequested: (cameraFacing: String) -> Unit): ValueEventListener {
+        val ref = database.reference.child("streams").child(childId).child("snapshotRequest")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java)
+                if (status == "REQUESTED") {
+                    val facing = snapshot.child("cameraFacing").getValue(String::class.java) ?: "back"
+                    onRequested(facing)
+                    ref.child("status").setValue("PROCESSING")
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    fun uploadSnapshot(
+        childId: String,
+        fileUri: Uri,
+        cameraFacing: String,
+        onSuccess: (SnapshotInfo) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        val timestamp = System.currentTimeMillis()
+        val storageRef = storage.reference.child("snapshots/$childId/$timestamp.jpg")
+        storageRef.putFile(fileUri)
+            .addOnSuccessListener {
+                storageRef.downloadUrl.addOnSuccessListener { downloadUrl ->
+                    val snapshotRef = database.reference.child("snapshots").child(childId).push()
+                    val info = SnapshotInfo(
+                        id = snapshotRef.key ?: "",
+                        downloadUrl = downloadUrl.toString(),
+                        timestamp = timestamp,
+                        cameraFacing = cameraFacing
+                    )
+                    snapshotRef.setValue(info).addOnSuccessListener {
+                        database.reference.child("streams").child(childId).child("snapshotRequest").removeValue()
+                        onSuccess(info)
+                    }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "DB Error") }
+                }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "URL Error") }
+            }
+            .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Upload Error") }
+    }
+
+    fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("snapshots").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<SnapshotInfo>()
+                for (child in snapshot.children) {
+                    child.getValue(SnapshotInfo::class.java)?.let { list.add(it) }
+                }
+                onSnapshots(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
 }

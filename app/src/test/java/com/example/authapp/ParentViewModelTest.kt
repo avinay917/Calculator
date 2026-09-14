@@ -92,4 +92,54 @@ class ParentViewModelTest {
         assertNull(viewModel.uiState.value.activeChildId)
         assertFalse(viewModel.uiState.value.isRecording)
     }
+
+    @Test
+    fun parentViewModel_phase1And2Dialogs_openAndCloseProperly() {
+        val viewModel = ParentViewModel()
+        val mockChild = User(uid = "child_456", email = "kid@test.com", name = "Kid", role = "child")
+
+        // Snapshot Dialog
+        viewModel.openSnapshotDialog(mockChild)
+        assertEquals(mockChild, viewModel.uiState.value.activeSnapshotDialogChild)
+        viewModel.closeSnapshotDialog()
+        assertNull(viewModel.uiState.value.activeSnapshotDialogChild)
+
+        // Activity Dialog
+        viewModel.openActivityDialog(mockChild)
+        assertEquals(mockChild, viewModel.uiState.value.activeActivityDialogChild)
+        viewModel.closeActivityDialog()
+        assertNull(viewModel.uiState.value.activeActivityDialogChild)
+
+        // Alerts Dialog
+        viewModel.openAlertsDialog(mockChild)
+        assertEquals(mockChild, viewModel.uiState.value.activeAlertsDialogChild)
+        viewModel.closeAlertsDialog()
+        assertNull(viewModel.uiState.value.activeAlertsDialogChild)
+
+        // Schedule Dialog
+        viewModel.openScheduleDialog(mockChild)
+        assertEquals(mockChild, viewModel.uiState.value.activeScheduleDialogChild)
+        viewModel.closeScheduleDialog()
+        assertNull(viewModel.uiState.value.activeScheduleDialogChild)
+    }
+
+    @Test
+    fun childActivityModels_defaultsAreValid() {
+        val callLog = com.example.authapp.data.CallLogItem(number = "1234567890", name = "Mom", type = "INCOMING", durationSeconds = 60)
+        assertEquals("Mom", callLog.name)
+        assertEquals("INCOMING", callLog.type)
+
+        val notif = com.example.authapp.data.NotificationItem(packageName = "com.whatsapp", appName = "WhatsApp", title = "Friend", text = "Hello")
+        assertEquals("WhatsApp", notif.appName)
+        assertEquals("Hello", notif.text)
+
+        val alert = com.example.authapp.data.SecurityAlert(type = "LOW_BATTERY", severity = "CRITICAL", title = "Low Battery")
+        assertEquals("LOW_BATTERY", alert.type)
+        assertEquals("CRITICAL", alert.severity)
+
+        val sched = com.example.authapp.data.RecordingSchedule(hour = 21, minute = 30, durationMinutes = 10, isEnabled = true)
+        assertEquals(21, sched.hour)
+        assertEquals(10, sched.durationMinutes)
+        assertTrue(sched.isEnabled)
+    }
 }

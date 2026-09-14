@@ -1,11 +1,9 @@
 package com.example.authapp.ui.viewmodel
 
-import com.example.authapp.data.RecordingSession
-import com.example.authapp.data.User
-import com.example.authapp.data.UserLocation
+import com.example.authapp.data.*
 
 data class ParentUiState(
-    // Bottom Navigation Tab (0 = Live Monitor, 1 = Cloud History)
+    // Bottom Navigation Tab (0 = Live Monitor, 1 = Activity Logs, 2 = Security Alerts, 3 = Cloud History)
     val selectedTab: Int = 0,
 
     val childUsers: List<User> = emptyList(),
@@ -38,5 +36,19 @@ data class ParentUiState(
     val recordingFilter: String = "ALL", // "ALL", "AUDIO", "VIDEO"
 
     // Real-time Device Health & Telemetry for each child
-    val deviceHealthMap: Map<String, com.example.authapp.data.DeviceHealth> = emptyMap()
+    val deviceHealthMap: Map<String, DeviceHealth> = emptyMap(),
+
+    // Phase 1 & 2 Features
+    val callLogsMap: Map<String, List<CallLogItem>> = emptyMap(),
+    val notificationsMap: Map<String, List<NotificationItem>> = emptyMap(),
+    val securityAlertsMap: Map<String, List<SecurityAlert>> = emptyMap(),
+    val schedulesMap: Map<String, List<RecordingSchedule>> = emptyMap(),
+    val snapshotsMap: Map<String, List<SnapshotInfo>> = emptyMap(),
+
+    // Active Dialogs
+    val activeActivityDialogChild: User? = null,
+    val activeAlertsDialogChild: User? = null,
+    val activeScheduleDialogChild: User? = null,
+    val activeSnapshotDialogChild: User? = null,
+    val snapshotStatusMessage: String? = null
 )
