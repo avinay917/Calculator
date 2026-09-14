@@ -111,10 +111,10 @@ class ChildForegroundService : Service() {
             )
             return
         }
-        mainHandler.post {
-            if (overlayView != null) return@post
+        val attachRunnable = Runnable {
+            if (overlayView != null) return@Runnable
             try {
-                val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return@post
+                val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return@Runnable
                 val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 } else {
@@ -140,6 +140,11 @@ class ChildForegroundService : Service() {
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow error: ${e.localizedMessage}")
             }
+        }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            attachRunnable.run()
+        } else {
+            mainHandler.post(attachRunnable)
         }
     }
 
@@ -190,6 +195,9 @@ class ChildForegroundService : Service() {
             ACTION_START -> {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
+                if (streamType.equals("video", ignoreCase = true)) {
+                    ensureOverlayWindow()
+                }
                 val serviceType = getStreamingServiceType(streamType)
                 currentServiceState = if (streamType.equals("video", ignoreCase = true)) "STREAMING_VIDEO" else "STREAMING_AUDIO"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
@@ -452,6 +460,9 @@ class ChildForegroundService : Service() {
             onRequested = { streamType, sessionId ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Stream request received over RTDB: $streamType, session: $sessionId")
                 if (!isStreaming || currentSessionId != sessionId) {
+                    if (streamType.equals("video", ignoreCase = true)) {
+                        ensureOverlayWindow()
+                    }
                     val serviceType = getStreamingServiceType(streamType)
                     try {
                         ServiceCompat.startForeground(

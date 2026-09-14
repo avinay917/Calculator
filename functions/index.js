@@ -21,8 +21,37 @@ exports.onStreamRequested = functions.database
       return null;
     }
 
-    const streamType = statusData.streamType || statusData.type || "audio";
-    const sessionId = statusData.sessionId || `session_${targetUid}`;
+    const status = statusData.status || "";
+
+    // If stream was stopped by parent, notify child to STOP, never start audio!
+    if (status === "STOPPED" || status === "DISCONNECTED") {
+      try {
+        const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
+        const userData = userSnapshot.val();
+        if (userData && userData.fcmToken) {
+          const stopMsg = {
+            token: userData.fcmToken,
+            android: { priority: "high", ttl: 0 },
+            data: { action: "STOP_STREAM", timestamp: String(Date.now()) }
+          };
+          await admin.messaging().send(stopMsg);
+          console.log(`Sent STOP_STREAM FCM push to ${targetUid}`);
+        }
+      } catch (err) {
+        console.error(`Error sending STOP_STREAM to ${targetUid}:`, err);
+      }
+      return null;
+    }
+
+    // Only process when parent explicitly REQUESTED a live stream
+    if (status !== "REQUESTED") {
+      console.log(`Ignoring status '${status}' for target: ${targetUid}`);
+      return null;
+    }
+
+    const streamType = (statusData.streamType || statusData.type || "audio").toLowerCase();
+    const hasVideo = streamType === "video";
+    const sessionId = statusData.sessionId || `session_${targetUid}_${Date.now()}`;
 
     try {
       // 1. Fetch target FCM Token from /users/{targetUid}
@@ -44,13 +73,14 @@ exports.onStreamRequested = functions.database
         data: {
           action: "START_STREAM",
           streamType: streamType,
+          hasVideo: hasVideo ? "true" : "false",
           sessionId: sessionId,
           timestamp: String(Date.now())
         }
       };
 
       const response = await admin.messaging().send(message);
-      console.log(`Successfully sent high-priority FCM push to ${targetUid}:`, response);
+      console.log(`Successfully sent high-priority FCM push (${streamType}) to ${targetUid}:`, response);
       return response;
     } catch (error) {
       console.error(`Error sending FCM push to ${targetUid}:`, error);

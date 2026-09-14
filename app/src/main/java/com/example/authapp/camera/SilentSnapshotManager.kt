@@ -57,11 +57,26 @@ class SilentSnapshotManager(private val context: Context) {
 
             val imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
             val bgHandler = Handler(Looper.getMainLooper())
+            var isHandled = false
 
             cameraManager.openCamera(targetCameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
+                    // Watchdog: release camera if capture doesn't complete within 6 seconds
+                    val timeoutRunnable = Runnable {
+                        if (!isHandled) {
+                            isHandled = true
+                            try { camera.close() } catch (_: Exception) {}
+                            try { imageReader.close() } catch (_: Exception) {}
+                            onError("Snapshot timed out")
+                        }
+                    }
+                    bgHandler.postDelayed(timeoutRunnable, 6000L)
+
                     try {
                         imageReader.setOnImageAvailableListener({ reader ->
+                            if (isHandled) return@setOnImageAvailableListener
+                            isHandled = true
+                            bgHandler.removeCallbacks(timeoutRunnable)
                             val image = reader.acquireLatestImage()
                             if (image != null) {
                                 try {

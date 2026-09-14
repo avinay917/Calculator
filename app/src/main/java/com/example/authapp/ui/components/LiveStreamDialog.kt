@@ -87,7 +87,7 @@ fun LiveStreamDialog(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Connecting to child camera...",
+                                text = streamStatusText.ifEmpty { "Connecting to child camera..." },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.85f)
                             )
