@@ -158,6 +158,7 @@ class WebRtcManager(
         // Video Track (if requested)
         if (streamType.equals("video", ignoreCase = true)) {
             var capturer = createVideoCapturer(preferFront = true)
+                ?: createVideoCapturer(preferFront = false)
             if (capturer != null) {
                 videoCapturer = capturer
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
@@ -424,18 +425,29 @@ class WebRtcManager(
         val cameraEventsHandler = object : CameraVideoCapturer.CameraEventsHandler {
             override fun onCameraError(errorDescription: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Error] $errorDescription")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "Camera hardware error: $errorDescription")
+                if (!isStopped && isCameraRunning) {
+                    try {
+                        val capturer = videoCapturer as? CameraVideoCapturer
+                        capturer?.switchCamera(null)
+                    } catch (_: Exception) {}
+                }
             }
             override fun onCameraDisconnected() {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Disconnected]")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "Camera disconnected by Android OS")
             }
             override fun onCameraFreezed(errorDescription: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Freezed] $errorDescription")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "WARNING", "Camera frozen: $errorDescription")
             }
             override fun onCameraOpening(cameraName: String?) {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Opening] $cameraName")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "OPENING", "Opening camera: $cameraName")
             }
             override fun onFirstFrameAvailable() {
                 FirebaseCrashlytics.getInstance().log("[WebRTC First Frame Available]")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FRAME_PRODUCED", "First video frame captured & encoding!")
             }
             override fun onCameraClosed() {
                 FirebaseCrashlytics.getInstance().log("[WebRTC Camera Closed]")

@@ -220,7 +220,9 @@ fun ParentScreen(
                     },
                     onRemoteAudioTrack = { track ->
                         mainHandler.post {
-                            viewModel.updateStreamStatus("Live Audio Streaming 🟢")
+                            if (uiState.activeStreamType.equals("audio", ignoreCase = true)) {
+                                viewModel.updateStreamStatus("Live Audio Streaming 🟢")
+                            }
                             remoteAudioTrack = track
                             try {
                                 track.setEnabled(true)

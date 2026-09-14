@@ -45,6 +45,8 @@ class ChildForegroundService : Service() {
     private var cameraFacingListener: ValueEventListener? = null
     private var currentSessionId: String? = null
     private var isStreaming = false
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var overlayView: android.view.View? = null
     private var heartbeatHandler: android.os.Handler? = null
     private var heartbeatRunnable: Runnable? = null
     private var currentServiceState: String = "IDLE_PROTECTED"
@@ -94,6 +96,61 @@ class ChildForegroundService : Service() {
 
     private fun hasCameraPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun ensureOverlayWindow() {
+        if (overlayView != null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            AppHealthTelemetry.logDiagnostic(
+                applicationContext,
+                "LIVE_VIDEO",
+                "WARNING",
+                "SYSTEM_ALERT_WINDOW permission not granted. Background camera might be blocked by OS."
+            )
+            return
+        }
+        mainHandler.post {
+            if (overlayView != null) return@post
+            try {
+                val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return@post
+                val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.view.WindowManager.LayoutParams.TYPE_PHONE
+                }
+                val params = android.view.WindowManager.LayoutParams(
+                    1, 1,
+                    layoutType,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    android.graphics.PixelFormat.TRANSLUCENT
+                ).apply {
+                    gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                    x = 0
+                    y = 0
+                }
+                val view = android.view.View(this)
+                windowManager.addView(view, params)
+                overlayView = view
+                FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 Overlay window attached for background camera access")
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow error: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    private fun removeOverlayWindow() {
+        mainHandler.post {
+            overlayView?.let { view ->
+                try {
+                    val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
+                    windowManager?.removeView(view)
+                } catch (_: Exception) {}
+            }
+            overlayView = null
+        }
     }
 
     private fun getIdleServiceType(): Int {
@@ -388,6 +445,10 @@ class ChildForegroundService : Service() {
         currentSessionId = sessionId
         isStreaming = true
 
+        if (streamType.equals("video", ignoreCase = true)) {
+            ensureOverlayWindow()
+        }
+
         try {
             // Configure hardware microphone routing for WebRTC
             try {
@@ -476,6 +537,7 @@ class ChildForegroundService : Service() {
             e.printStackTrace()
         }
         webRtcManager = null
+        removeOverlayWindow()
     }
 
     private fun acquireWakeLock() {
@@ -717,6 +779,7 @@ class ChildForegroundService : Service() {
             locationRequestListener = null
         }
         releaseWakeLock()
+        removeOverlayWindow()
         super.onDestroy()
     }
 }

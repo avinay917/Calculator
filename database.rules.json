@@ -27,7 +27,7 @@
     },
     "app_update": {
       ".read": true,
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'parent'"
+      ".write": true
     },
     "ice_servers": {
       ".read": "auth != null",
