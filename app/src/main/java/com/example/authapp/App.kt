@@ -2,18 +2,20 @@ package com.example.authapp
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.FirebaseDatabase
+import com.example.authapp.utils.Logger
+import dagger.hilt.android.HiltAndroidApp
 import java.io.PrintWriter
 import java.io.StringWriter
 
+@HiltAndroidApp
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Install persistent fatal crash catcher
+        // Install persistent fatal crash catcher
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
@@ -21,7 +23,7 @@ class App : Application() {
                 throwable.printStackTrace(PrintWriter(sw))
                 val stackTraceString = sw.toString()
 
-                // Save to local SharedPreferences so it's readable immediately on relaunch
+                // Save to local SharedPreferences
                 val prefs = getSharedPreferences("crash_logs", Context.MODE_PRIVATE)
                 prefs.edit()
                     .putLong("last_crash_time", System.currentTimeMillis())
@@ -30,16 +32,9 @@ class App : Application() {
                     .putString("last_crash_stacktrace", stackTraceString)
                     .commit()
 
-                Log.e("FATAL_APP_CRASH", "FATAL CRASH on thread ${thread.name}: ${throwable.message}\n$stackTraceString")
-
-                // Immediately send to Firebase Crashlytics
-                val crashlytics = FirebaseCrashlytics.getInstance()
-                crashlytics.setCustomKey("fatal_thread", thread.name)
-                crashlytics.log("[FATAL CRASH] Thread: ${thread.name}, Msg: ${throwable.message}")
-                crashlytics.recordException(throwable)
-                crashlytics.sendUnsentReports()
+                Logger.logFatalCrash(thread, throwable)
             } catch (t: Throwable) {
-                Log.e("FATAL_APP_CRASH", "Error in uncaught exception handler: ${t.localizedMessage}")
+                Logger.e("FATAL_CRASH_HANDLER", "Error in uncaught exception handler", t)
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable)
             }
@@ -47,14 +42,12 @@ class App : Application() {
 
         try {
             FirebaseApp.initializeApp(this)
-            val rtdb = FirebaseDatabase.getInstance("https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app")
-            // Enable offline disk caching and synchronization
+            val rtdb = FirebaseDatabase.getInstance()
             rtdb.setPersistenceEnabled(true)
             rtdb.reference.child("app_update").keepSynced(true)
-            FirebaseCrashlytics.getInstance().log("[App] Firebase Realtime Database disk persistence enabled")
+            Logger.i("App", "Firebase initialized with persistence enabled")
         } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[App] RTDB persistence init notice: ${e.localizedMessage}")
+            Logger.e("App", "Firebase initialization error", e)
         }
     }
 }
-

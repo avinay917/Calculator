@@ -6,6 +6,8 @@ plugins {
   alias(libs.plugins.google.services)
   alias(libs.plugins.firebase.crashlytics)
   alias(libs.plugins.firebase.perf)
+  kotlin("kapt")
+  id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -23,16 +25,16 @@ android {
 
     lint {
         abortOnError = false
-        checkReleaseBuilds = false
-        ignoreWarnings = true
+        checkReleaseBuilds = true
+        disable += setOf("UnusedResources", "MissingTranslation")
     }
 
     signingConfigs {
         getByName("debug") {
             storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
         }
     }
 
@@ -41,7 +43,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -120,4 +122,29 @@ dependencies {
   implementation(libs.firebase.perf)
   implementation(libs.firebase.storage)
   implementation(libs.webrtc)
+
+  // Hilt for Dependency Injection
+  implementation("com.google.dagger:hilt-android:2.48")
+  kapt("com.google.dagger:hilt-compiler:2.48")
+  implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+
+  // Encryption at rest
+  implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+  // DataStore for secure preferences
+  implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+  // Retrofit for API calls with retry logic
+  implementation("com.squareup.retrofit2:retrofit:2.11.0")
+  implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+  implementation("com.squareup.okhttp3:okhttp:4.12.0")
+  implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+  // Room for offline caching
+  implementation("androidx.room:room-runtime:2.6.1")
+  kapt("androidx.room:room-compiler:2.6.1")
+  implementation("androidx.room:room-ktx:2.6.1")
+
+  // Biometric authentication
+  implementation("androidx.biometric:biometric:1.1.0")
 }
