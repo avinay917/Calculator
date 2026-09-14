@@ -1,7 +1,6 @@
 package com.example.authapp.data
 
 import android.net.Uri
-import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.ChildEventListener
@@ -578,7 +577,7 @@ object FirebaseRepository {
             }
 
             override fun onCancelled(error: DatabaseError) {
-                AppHealthTelemetry.logDiagnostic("LISTEN_RECORDINGS_ERROR", "Firebase recordings listen cancelled: ${error.message} (${error.code})")
+                crashlytics.log("[Firebase] recordings listen cancelled: ${error.message} (${error.code})")
                 onRecordingsUpdated(emptyList())
             }
         }
