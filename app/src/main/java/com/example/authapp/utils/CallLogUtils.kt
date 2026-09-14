@@ -32,7 +32,7 @@ object CallLogUtils {
                 projection,
                 null,
                 null,
-                "${CallLog.Calls.DATE} DESC LIMIT $limit"
+                "${CallLog.Calls.DATE} DESC"
             )
 
             cursor?.use {
@@ -43,7 +43,7 @@ object CallLogUtils {
                 val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
                 val durationIdx = it.getColumnIndex(CallLog.Calls.DURATION)
 
-                while (it.moveToNext()) {
+                while (it.moveToNext() && list.size < limit) {
                     val id = if (idIdx >= 0) it.getString(idIdx) ?: "" else ""
                     val number = if (numberIdx >= 0) it.getString(numberIdx) ?: "Unknown" else "Unknown"
                     val name = if (nameIdx >= 0) it.getString(nameIdx) ?: "" else ""

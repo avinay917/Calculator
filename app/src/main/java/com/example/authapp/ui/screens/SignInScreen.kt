@@ -42,10 +42,12 @@ fun SignInScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var email by remember { mutableStateOf("") }
+    val authPrefs = remember { context.getSharedPreferences("auth_login_remember", Context.MODE_PRIVATE) }
+    val initialRemember = remember { authPrefs.getBoolean("remember_me", false) }
+    var rememberMe by remember { mutableStateOf(initialRemember) }
+    var email by remember { mutableStateOf(if (initialRemember) authPrefs.getString("saved_email", "") ?: "" else "") }
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var rememberMe by remember { mutableStateOf(false) }
 
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
@@ -87,6 +89,11 @@ fun SignInScreen(
             com.example.authapp.data.FirebaseRepository.signIn(email, password) { success, errorMsg ->
                 isLoading = false
                 if (success) {
+                    if (rememberMe) {
+                        authPrefs.edit().putBoolean("remember_me", true).putString("saved_email", email.trim()).apply()
+                    } else {
+                        authPrefs.edit().clear().apply()
+                    }
                     Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_in", "success", mapOf("email" to email))
                     onSignInSuccess(email)

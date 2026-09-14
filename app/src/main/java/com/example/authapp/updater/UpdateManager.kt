@@ -75,15 +75,16 @@ object UpdateManager {
         withContext(Dispatchers.IO) {
             var activeConn: HttpURLConnection? = null
             try {
-                if (!apkUrl.startsWith("https://", ignoreCase = true)) {
-                    throw IllegalArgumentException("Only secure HTTPS APK URLs are supported")
+                fun isTrustedUrl(urlStr: String): Boolean {
+                    if (!urlStr.startsWith("https://", ignoreCase = true)) return false
+                    val host = Uri.parse(urlStr).host?.lowercase() ?: return false
+                    return host.endsWith("github.com") ||
+                        host.endsWith("githubusercontent.com") ||
+                        host.endsWith("googleapis.com")
                 }
-                val host = Uri.parse(apkUrl).host?.lowercase() ?: ""
-                val isTrustedHost = host.endsWith("github.com") ||
-                    host.endsWith("githubusercontent.com") ||
-                    host.endsWith("googleapis.com")
-                if (!isTrustedHost) {
-                    throw SecurityException("Untrusted APK download host: $host")
+
+                if (!isTrustedUrl(apkUrl)) {
+                    throw SecurityException("Untrusted or non-HTTPS APK download URL: $apkUrl")
                 }
 
                 val updatesDir = File(context.cacheDir, "updates").apply {
@@ -101,14 +102,23 @@ object UpdateManager {
                     val conn = (url.openConnection() as HttpURLConnection).apply {
                         connectTimeout = 15000
                         readTimeout = 30000
-                        instanceFollowRedirects = true
+                        instanceFollowRedirects = false // Manual redirect handling
                     }
                     val code = conn.responseCode
                     if (code in 300..399) {
                         val location = conn.getHeaderField("Location")
                         conn.disconnect()
                         if (!location.isNullOrBlank()) {
-                            currentUrl = location
+                            // Validate redirect destination
+                            val redirectTarget = if (location.startsWith("/")) {
+                                val baseUri = Uri.parse(currentUrl)
+                                "${baseUri.scheme}://${baseUri.host}$location"
+                            } else location
+
+                            if (!isTrustedUrl(redirectTarget)) {
+                                throw SecurityException("Untrusted redirect host: $redirectTarget")
+                            }
+                            currentUrl = redirectTarget
                             redirects++
                             continue
                         }

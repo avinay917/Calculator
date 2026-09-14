@@ -37,8 +37,6 @@ class AudioRouteManager(context: Context) {
 
     init {
         try {
-            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-            setRoute(AudioOutputRoute.SPEAKER)
             registerListeners()
             checkAndHandleBluetooth()
         } catch (t: Throwable) {
@@ -132,6 +130,7 @@ class AudioRouteManager(context: Context) {
     fun setRoute(route: AudioOutputRoute) {
         val am = audioManager ?: return
         try {
+            am.mode = AudioManager.MODE_IN_COMMUNICATION
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 when (route) {
                     AudioOutputRoute.SPEAKER -> {

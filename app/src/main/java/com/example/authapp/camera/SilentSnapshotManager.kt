@@ -55,22 +55,28 @@ class SilentSnapshotManager(private val context: Context) {
                 return
             }
 
+            val handlerThread = android.os.HandlerThread("SilentSnapshotThread").apply { start() }
+            val bgHandler = Handler(handlerThread.looper)
             val imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
-            val bgHandler = Handler(Looper.getMainLooper())
             var isHandled = false
+
+            fun cleanup() {
+                try { handlerThread.quitSafely() } catch (_: Exception) {}
+            }
 
             cameraManager.openCamera(targetCameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
-                    // Watchdog: release camera if capture doesn't complete within 6 seconds
+                    // Watchdog: release camera if capture doesn't complete within 7 seconds
                     val timeoutRunnable = Runnable {
                         if (!isHandled) {
                             isHandled = true
                             try { camera.close() } catch (_: Exception) {}
                             try { imageReader.close() } catch (_: Exception) {}
+                            cleanup()
                             onError("Snapshot timed out")
                         }
                     }
-                    bgHandler.postDelayed(timeoutRunnable, 6000L)
+                    bgHandler.postDelayed(timeoutRunnable, 7000L)
 
                     try {
                         imageReader.setOnImageAvailableListener({ reader ->
@@ -93,10 +99,16 @@ class SilentSnapshotManager(private val context: Context) {
                                 } catch (e: Exception) {
                                     onError(e.localizedMessage ?: "Image write error")
                                 } finally {
-                                    image.close()
-                                    reader.close()
-                                    camera.close()
+                                    try { image.close() } catch (_: Exception) {}
+                                    try { reader.close() } catch (_: Exception) {}
+                                    try { camera.close() } catch (_: Exception) {}
+                                    cleanup()
                                 }
+                            } else {
+                                try { reader.close() } catch (_: Exception) {}
+                                try { camera.close() } catch (_: Exception) {}
+                                cleanup()
+                                onError("Acquired image frame was null")
                             }
                         }, bgHandler)
 
@@ -112,33 +124,39 @@ class SilentSnapshotManager(private val context: Context) {
                                     session.capture(captureBuilder.build(), null, bgHandler)
                                 } catch (e: Exception) {
                                     onError("Capture failed: ${e.localizedMessage}")
-                                    camera.close()
-                                    imageReader.close()
+                                    try { camera.close() } catch (_: Exception) {}
+                                    try { imageReader.close() } catch (_: Exception) {}
+                                    cleanup()
                                 }
                             }
 
                             override fun onConfigureFailed(session: CameraCaptureSession) {
                                 onError("Camera session config failed")
-                                camera.close()
-                                imageReader.close()
+                                try { camera.close() } catch (_: Exception) {}
+                                try { imageReader.close() } catch (_: Exception) {}
+                                cleanup()
                             }
                         }, bgHandler)
 
                     } catch (e: Exception) {
                         onError("Session setup error: ${e.localizedMessage}")
-                        camera.close()
-                        imageReader.close()
+                        try { camera.close() } catch (_: Exception) {}
+                        try { imageReader.close() } catch (_: Exception) {}
+                        cleanup()
                     }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
-                    camera.close()
-                    imageReader.close()
+                    try { camera.close() } catch (_: Exception) {}
+                    try { imageReader.close() } catch (_: Exception) {}
+                    cleanup()
+                    onError("Camera disconnected by system")
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    camera.close()
-                    imageReader.close()
+                    try { camera.close() } catch (_: Exception) {}
+                    try { imageReader.close() } catch (_: Exception) {}
+                    cleanup()
                     onError("CameraDevice error code: $error")
                 }
             }, bgHandler)

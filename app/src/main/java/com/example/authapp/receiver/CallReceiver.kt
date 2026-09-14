@@ -31,13 +31,6 @@ class CallReceiver : BroadcastReceiver() {
             }
             return callRecorder!!
         }
-
-        fun resetStateForTesting() {
-            lastState = TelephonyManager.EXTRA_STATE_IDLE
-            incomingNumber = ""
-            isIncoming = false
-            callStartTime = 0L
-        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {

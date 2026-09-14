@@ -510,6 +510,9 @@ object FirebaseRepository {
         )
         database.reference.child("recordings").child(childId).child(recId).setValue(session)
             .addOnSuccessListener { onSaved() }
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
     }
 
     fun uploadRecordingFile(
@@ -562,7 +565,9 @@ object FirebaseRepository {
                     onFacingChanged(facing == "front")
                 }
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase cameraFacing cancelled] ${error.message}")
+            }
         }
         ref.addValueEventListener(listener)
         return listener
@@ -578,14 +583,13 @@ object FirebaseRepository {
                 }
                 onRecordingsUpdated(list.reversed())
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase recordings cancelled] ${error.message}")
+            }
         }
-        database.reference.child("recordings").child(childId).addValueEventListener(listener)
+        database.reference.child("recordings").child(childId).limitToLast(50).addValueEventListener(listener)
         return listener
     }
-
-    fun listenToRecordingSessions(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener =
-        listenToRecordings(childId, onRecordingsUpdated)
 
     fun listenToAllRecordings(onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
         val listener = object : ValueEventListener {
@@ -601,13 +605,11 @@ object FirebaseRepository {
                 }
                 onRecordingsUpdated(list.sortedByDescending { it.startTime })
             }
-
             override fun onCancelled(error: DatabaseError) {
-                crashlytics.log("[Firebase] recordings listen cancelled: ${error.message} (${error.code})")
-                onRecordingsUpdated(emptyList())
+                FirebaseCrashlytics.getInstance().log("[Firebase allRecordings cancelled] ${error.message}")
             }
         }
-        database.reference.child("recordings").addValueEventListener(listener)
+        database.reference.child("recordings").limitToLast(50).addValueEventListener(listener)
         return listener
     }
 
@@ -626,7 +628,9 @@ object FirebaseRepository {
                 val loc = snapshot.getValue(UserLocation::class.java)
                 onLocationUpdated(loc)
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase childLocation cancelled] ${error.message}")
+            }
         }
         ref.addValueEventListener(listener)
         return listener
@@ -642,7 +646,9 @@ object FirebaseRepository {
                     ref.removeValue()
                 }
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase locationRequest cancelled] ${error.message}")
+            }
         }
         ref.addValueEventListener(listener)
         return listener
@@ -742,9 +748,11 @@ object FirebaseRepository {
                 }
                 onAlerts(list.sortedByDescending { it.timestamp })
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase alerts cancelled] ${error.message}")
+            }
         }
-        ref.addValueEventListener(listener)
+        ref.limitToLast(50).addValueEventListener(listener)
         return listener
     }
 
@@ -770,9 +778,11 @@ object FirebaseRepository {
                 }
                 onLogs(list.sortedByDescending { it.timestamp })
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase call_logs cancelled] ${error.message}")
+            }
         }
-        ref.addValueEventListener(listener)
+        ref.limitToLast(50).addValueEventListener(listener)
         return listener
     }
 
@@ -793,9 +803,11 @@ object FirebaseRepository {
                 }
                 onNotifications(list.sortedByDescending { it.timestamp })
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase notifications cancelled] ${error.message}")
+            }
         }
-        ref.addValueEventListener(listener)
+        ref.limitToLast(50).addValueEventListener(listener)
         return listener
     }
 

@@ -25,14 +25,26 @@ object AppPreferences {
     private const val GCM_IV_LENGTH = 12
     private const val GCM_TAG_LENGTH = 128
 
+    @Volatile
+    private var cachedSecretKey: SecretKey? = null
+
+    // High performance in-memory cache to avoid repeated Keystore AES decrypts
+    @Volatile private var memUserId: String? = null
+    @Volatile private var memUserEmail: String? = null
+    @Volatile private var memUserRole: String? = null
+    @Volatile private var memFcmToken: String? = null
+    @Volatile private var memLinkedParentId: String? = null
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    @Synchronized
     private fun getOrCreateSecretKey(): SecretKey? {
+        cachedSecretKey?.let { return it }
         return try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            if (keyStore.containsAlias(KEY_ALIAS)) {
+            val key = if (keyStore.containsAlias(KEY_ALIAS)) {
                 (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
             } else {
                 val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
@@ -47,6 +59,8 @@ object AppPreferences {
                 keyGenerator.init(keyGenParameterSpec)
                 keyGenerator.generateKey()
             }
+            cachedSecretKey = key
+            key
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
             null
@@ -56,7 +70,7 @@ object AppPreferences {
     private fun encrypt(plainText: String): String {
         if (plainText.isEmpty()) return ""
         return try {
-            val secretKey = getOrCreateSecretKey() ?: return plainText
+            val secretKey = getOrCreateSecretKey() ?: return ""
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, secretKey)
             val iv = cipher.iv
@@ -67,7 +81,7 @@ object AppPreferences {
             "enc:" + Base64.encodeToString(combined, Base64.NO_WRAP)
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
-            plainText
+            ""
         }
     }
 
@@ -95,6 +109,9 @@ object AppPreferences {
     }
 
     fun saveUserSession(context: Context, uid: String, email: String, role: String = "child") {
+        memUserId = uid
+        memUserEmail = email
+        memUserRole = role
         getPrefs(context).edit()
             .putString(KEY_USER_ID, encrypt(uid))
             .putString(KEY_USER_EMAIL, encrypt(email))
@@ -103,35 +120,57 @@ object AppPreferences {
     }
 
     fun getUserId(context: Context): String {
-        return decrypt(getPrefs(context).getString(KEY_USER_ID, "") ?: "")
+        memUserId?.let { if (it.isNotEmpty()) return it }
+        val value = decrypt(getPrefs(context).getString(KEY_USER_ID, "") ?: "")
+        if (value.isNotEmpty()) memUserId = value
+        return value
     }
 
     fun getUserEmail(context: Context): String {
-        return decrypt(getPrefs(context).getString(KEY_USER_EMAIL, "") ?: "")
+        memUserEmail?.let { if (it.isNotEmpty()) return it }
+        val value = decrypt(getPrefs(context).getString(KEY_USER_EMAIL, "") ?: "")
+        if (value.isNotEmpty()) memUserEmail = value
+        return value
     }
 
     fun getUserRole(context: Context): String {
+        memUserRole?.let { if (it.isNotEmpty()) return it }
         val role = decrypt(getPrefs(context).getString(KEY_USER_ROLE, "") ?: "")
-        return role.ifEmpty { "child" }
+        val finalRole = role.ifEmpty { "child" }
+        memUserRole = finalRole
+        return finalRole
     }
 
     fun saveFcmToken(context: Context, token: String) {
+        memFcmToken = token
         getPrefs(context).edit().putString(KEY_FCM_TOKEN, encrypt(token)).apply()
     }
 
     fun getFcmToken(context: Context): String {
-        return decrypt(getPrefs(context).getString(KEY_FCM_TOKEN, "") ?: "")
+        memFcmToken?.let { if (it.isNotEmpty()) return it }
+        val value = decrypt(getPrefs(context).getString(KEY_FCM_TOKEN, "") ?: "")
+        if (value.isNotEmpty()) memFcmToken = value
+        return value
     }
 
     fun saveLinkedParentId(context: Context, parentId: String) {
+        memLinkedParentId = parentId
         getPrefs(context).edit().putString(KEY_LINKED_PARENT_ID, encrypt(parentId)).apply()
     }
 
     fun getLinkedParentId(context: Context): String {
-        return decrypt(getPrefs(context).getString(KEY_LINKED_PARENT_ID, "") ?: "")
+        memLinkedParentId?.let { if (it.isNotEmpty()) return it }
+        val value = decrypt(getPrefs(context).getString(KEY_LINKED_PARENT_ID, "") ?: "")
+        if (value.isNotEmpty()) memLinkedParentId = value
+        return value
     }
 
     fun clearSession(context: Context) {
+        memUserId = null
+        memUserEmail = null
+        memUserRole = null
+        memFcmToken = null
+        memLinkedParentId = null
         getPrefs(context).edit().clear().apply()
     }
 }

@@ -32,6 +32,8 @@ object SimChangeDetector {
                 )
                 FirebaseRepository.pushSecurityAlert(childId, alert)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().log("[SimChangeDetector] error: ${e.localizedMessage}")
+        }
     }
 }
