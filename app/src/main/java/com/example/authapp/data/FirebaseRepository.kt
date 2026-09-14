@@ -1,6 +1,7 @@
 package com.example.authapp.data
 
 import android.net.Uri
+import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.ChildEventListener
