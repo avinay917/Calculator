@@ -31,6 +31,7 @@ class ParentViewModel : ViewModel() {
     private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
@@ -64,6 +65,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(securityAlertsMap = updated)
                                 }
                             }
+                            val fsAlerts = FirebaseRepository.listenToChildSecurityAlertsFirestore(child.uid) { alerts ->
+                                if (alerts.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.securityAlertsMap.toMutableMap()
+                                        updated[child.uid] = alerts
+                                        current.copy(securityAlertsMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsAlerts)
                         }
                         if (!callLogsListeners.containsKey(child.uid)) {
                             callLogsListeners[child.uid] = FirebaseRepository.listenToCallLogs(child.uid) { logs ->
@@ -73,6 +84,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(callLogsMap = updated)
                                 }
                             }
+                            val fsCalls = FirebaseRepository.listenToChildCallLogsFirestore(child.uid) { logs ->
+                                if (logs.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.callLogsMap.toMutableMap()
+                                        updated[child.uid] = logs
+                                        current.copy(callLogsMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsCalls)
                         }
                         if (!notificationsListeners.containsKey(child.uid)) {
                             notificationsListeners[child.uid] = FirebaseRepository.listenToNotifications(child.uid) { notifs ->
@@ -128,6 +149,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(smsLogsMap = updated)
                                 }
                             }
+                            val fsSms = FirebaseRepository.listenToChildSmsLogsFirestore(child.uid) { smsList ->
+                                if (smsList.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.smsLogsMap.toMutableMap()
+                                        updated[child.uid] = smsList
+                                        current.copy(smsLogsMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsSms)
                         }
                         if (!geofencesListeners.containsKey(child.uid)) {
                             geofencesListeners[child.uid] = FirebaseRepository.listenToGeofences(child.uid) { zones ->
@@ -155,6 +186,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(webHistoryMap = updated)
                                 }
                             }
+                            val fsWeb = FirebaseRepository.listenToChildWebHistoryFirestore(child.uid) { webList ->
+                                if (webList.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.webHistoryMap.toMutableMap()
+                                        updated[child.uid] = webList
+                                        current.copy(webHistoryMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsWeb)
                         }
                         if (!networkHistoryListeners.containsKey(child.uid)) {
                             networkHistoryListeners[child.uid] = FirebaseRepository.listenToNetworkHistory(child.uid) { netList ->
@@ -164,6 +205,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(networkHistoryMap = updated)
                                 }
                             }
+                            val fsNet = FirebaseRepository.listenToChildNetworkHistoryFirestore(child.uid) { netList ->
+                                if (netList.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.networkHistoryMap.toMutableMap()
+                                        updated[child.uid] = netList
+                                        current.copy(networkHistoryMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsNet)
                         }
                         if (!simInfoListeners.containsKey(child.uid)) {
                             simInfoListeners[child.uid] = FirebaseRepository.listenToSimCardInfo(child.uid) { sim ->
@@ -182,6 +233,16 @@ class ParentViewModel : ViewModel() {
                                     current.copy(packageEventsMap = updated)
                                 }
                             }
+                            val fsPkg = FirebaseRepository.listenToChildPackageEventsFirestore(child.uid) { events ->
+                                if (events.isNotEmpty()) {
+                                    _uiState.update { current ->
+                                        val updated = current.packageEventsMap.toMutableMap()
+                                        updated[child.uid] = events
+                                        current.copy(packageEventsMap = updated)
+                                    }
+                                }
+                            }
+                            firestoreRegistrations.add(fsPkg)
                         }
                     }
                 }
@@ -498,6 +559,24 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("location_history/$childId", listener)
         }
         locationHistoryListeners.clear()
+        webHistoryListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("web_history/$childId", listener)
+        }
+        webHistoryListeners.clear()
+        networkHistoryListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("network_history/$childId", listener)
+        }
+        networkHistoryListeners.clear()
+        simInfoListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("sim_info/$childId", listener)
+        }
+        simInfoListeners.clear()
+        packageEventsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("package_events/$childId", listener)
+        }
+        packageEventsListeners.clear()
+        firestoreRegistrations.forEach { it.remove() }
+        firestoreRegistrations.clear()
         childUsersListener?.let {
             FirebaseRepository.removeValueListener("users", it)
             childUsersListener = null

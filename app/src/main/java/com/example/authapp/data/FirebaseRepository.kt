@@ -9,6 +9,10 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
@@ -19,6 +23,7 @@ object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     // ✅ FIX: Hardcoded URL remove kiya - Firebase google-services.json se automatically correct DB use karta hai
     private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance()
+    private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
@@ -1261,8 +1266,215 @@ object FirebaseRepository {
     fun logSingleCallLog(childId: String, callLog: CallLogItem) {
         if (childId.isEmpty()) return
         val key = if (callLog.id.isNotEmpty()) callLog.id else "${callLog.timestamp}_${callLog.number.takeLast(4)}"
+        
+        // 1. Write to Firestore (Primary Scalable Document Store)
+        firestore.collection("call_logs").document(childId)
+            .collection("items").document(key)
+            .set(callLog.copy(id = key), SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        // 2. Backward compatibility fallback in RTDB
         database.reference.child("call_logs").child(childId).child(key).setValue(callLog.copy(id = key))
             .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    // ==========================================
+    // CLOUD FIRESTORE INTEGRATION & COST SAVING
+    // ==========================================
+
+    fun saveCallLogToFirestore(childId: String, callLog: CallLogItem) {
+        logSingleCallLog(childId, callLog)
+    }
+
+    fun listenToChildCallLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<CallLogItem>) -> Unit): ListenerRegistration {
+        return firestore.collection("call_logs").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(CallLogItem::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun saveSmsLogToFirestore(childId: String, sms: SmsItem) {
+        if (childId.isEmpty()) return
+        val key = if (sms.id.isNotEmpty()) sms.id else "${sms.timestamp}_${sms.address.takeLast(4)}"
+        firestore.collection("sms_logs").document(childId)
+            .collection("items").document(key)
+            .set(sms.copy(id = key), SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        database.reference.child("sms_logs").child(childId).child(key).setValue(sms.copy(id = key))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToChildSmsLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SmsItem>) -> Unit): ListenerRegistration {
+        return firestore.collection("sms_logs").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(SmsItem::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun saveWebHistoryToFirestore(childId: String, item: WebHistoryItem) {
+        if (childId.isEmpty() || item.url.isEmpty()) return
+        val docRef = firestore.collection("web_history").document(childId).collection("items").document()
+        val finalItem = item.copy(id = docRef.id)
+        docRef.set(finalItem, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        val rtdbRef = database.reference.child("web_history").child(childId).push()
+        rtdbRef.setValue(item.copy(id = rtdbRef.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToChildWebHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<WebHistoryItem>) -> Unit): ListenerRegistration {
+        return firestore.collection("web_history").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(WebHistoryItem::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun saveNetworkHistoryToFirestore(childId: String, item: NetworkHistoryItem) {
+        if (childId.isEmpty()) return
+        val docRef = firestore.collection("network_history").document(childId).collection("items").document()
+        val finalItem = item.copy(id = docRef.id)
+        docRef.set(finalItem, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        val rtdbRef = database.reference.child("network_history").child(childId).push()
+        rtdbRef.setValue(item.copy(id = rtdbRef.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToChildNetworkHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<NetworkHistoryItem>) -> Unit): ListenerRegistration {
+        return firestore.collection("network_history").document(childId)
+            .collection("items")
+            .orderBy("connectedAt", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(NetworkHistoryItem::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun savePackageEventToFirestore(childId: String, event: AppInstallEvent) {
+        if (childId.isEmpty()) return
+        val docRef = firestore.collection("package_events").document(childId).collection("items").document()
+        val finalItem = event.copy(id = docRef.id)
+        docRef.set(finalItem, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        val rtdbRef = database.reference.child("package_events").child(childId).push()
+        rtdbRef.setValue(event.copy(id = rtdbRef.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToChildPackageEventsFirestore(childId: String, limit: Long = 50, onUpdate: (List<AppInstallEvent>) -> Unit): ListenerRegistration {
+        return firestore.collection("package_events").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(AppInstallEvent::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun saveSecurityAlertToFirestore(childId: String, alert: SecurityAlert) {
+        if (childId.isEmpty()) return
+        val key = if (alert.id.isNotEmpty()) alert.id else "${alert.timestamp}_${alert.type}"
+        firestore.collection("security_alerts").document(childId)
+            .collection("items").document(key)
+            .set(alert.copy(id = key), SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        database.reference.child("alerts").child(childId).child(key).setValue(alert.copy(id = key))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToChildSecurityAlertsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SecurityAlert>) -> Unit): ListenerRegistration {
+        return firestore.collection("security_alerts").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(SecurityAlert::class.java) }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    fun saveRecordingToFirestore(childId: String, session: RecordingSession) {
+        if (childId.isEmpty()) return
+        val key = if (session.id.isNotEmpty()) session.id else "${session.timestamp}_${session.type}"
+        firestore.collection("recordings").document(childId)
+            .collection("items").document(key)
+            .set(session.copy(id = key), SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        database.reference.child("recordings").child(childId).child(key).setValue(session.copy(id = key))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToRecordingsFirestore(childId: String, limit: Long = 50, onUpdate: (List<RecordingSession>) -> Unit): ListenerRegistration {
+        return firestore.collection("recordings").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    crashlytics.recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(RecordingSession::class.java) }
+                    onUpdate(list)
+                }
+            }
     }
 }
 

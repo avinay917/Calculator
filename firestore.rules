@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User profile documents
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Child historical subcollections
+    match /call_logs/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /sms_logs/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /web_history/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /network_history/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /package_events/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /security_alerts/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /location_history/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    match /recordings/{childId}/items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(childId);
+    }
+
+    // Fallback: deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

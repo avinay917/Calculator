@@ -113,10 +113,10 @@ dependencies {
   implementation(firebaseBom)
   implementation(libs.firebase.auth)
   implementation(libs.firebase.database)
+  implementation("com.google.firebase:firebase-firestore")
   implementation(libs.firebase.messaging)
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.crashlytics)
-  implementation("com.google.firebase:firebase-crashlytics-ndk")
   implementation(libs.firebase.perf)
   implementation(libs.firebase.storage)
   implementation(libs.webrtc)
@@ -132,7 +132,4 @@ dependencies {
   implementation("com.squareup.retrofit2:converter-gson:2.11.0")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-  // Biometric authentication
-  implementation("androidx.biometric:biometric:1.1.0")
 }
