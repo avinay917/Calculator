@@ -201,11 +201,19 @@ fun ChildScreen(
                     }
                     com.example.authapp.ui.components.PermissionStepType.BATTERY_OPTIMIZATION -> {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            context.startActivity(intent)
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            } catch (_: android.content.ActivityNotFoundException) {
+                                // ✅ FIX: Custom ROMs (Xiaomi/Oppo/Vivo) mein yeh activity nahi hoti
+                                // Fallback: general battery settings open karo
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                 }

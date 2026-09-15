@@ -6,6 +6,41 @@ if (!admin.apps.length) {
 }
 
 /**
+ * Helper: Clean up invalid FCM token from database
+ */
+async function cleanupInvalidToken(uid) {
+  try {
+    await admin.database().ref(`/users/${uid}/fcmToken`).remove();
+    console.log(`Removed invalid FCM token for user: ${uid}`);
+  } catch (err) {
+    console.error(`Failed to remove invalid token for ${uid}:`, err);
+  }
+}
+
+/**
+ * Helper: Send FCM message with invalid token handling
+ */
+async function sendFcmSafe(uid, token, message) {
+  try {
+    const response = await admin.messaging().send(message);
+    return response;
+  } catch (err) {
+    const code = err.code || err.errorInfo?.code || "";
+    if (
+      code === "messaging/invalid-registration-token" ||
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-argument"
+    ) {
+      console.warn(`Invalid FCM token for ${uid}, removing from DB.`);
+      await cleanupInvalidToken(uid);
+    } else {
+      console.error(`FCM send error for ${uid}:`, err);
+    }
+    return null;
+  }
+}
+
+/**
  * Realtime Database Trigger: onStreamRequested
  * Triggers on /streams/{targetUid}/status
  * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
@@ -23,7 +58,7 @@ exports.onStreamRequested = functions.database
 
     const status = statusData.status || "";
 
-    // If stream was stopped by parent, notify child to STOP, never start audio!
+    // If stream was stopped by parent, notify child to STOP
     if (status === "STOPPED" || status === "DISCONNECTED") {
       try {
         const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
@@ -34,7 +69,7 @@ exports.onStreamRequested = functions.database
             android: { priority: "high", ttl: 0 },
             data: { action: "STOP_STREAM", timestamp: String(Date.now()) }
           };
-          await admin.messaging().send(stopMsg);
+          await sendFcmSafe(targetUid, userData.fcmToken, stopMsg);
           console.log(`Sent STOP_STREAM FCM push to ${targetUid}`);
         }
       } catch (err) {
@@ -54,7 +89,6 @@ exports.onStreamRequested = functions.database
     const sessionId = statusData.sessionId || `session_${targetUid}_${Date.now()}`;
 
     try {
-      // 1. Fetch target FCM Token from /users/{targetUid}
       const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
       const userData = userSnapshot.val();
 
@@ -63,7 +97,6 @@ exports.onStreamRequested = functions.database
         return null;
       }
 
-      // 2. Construct High-Priority FCM Data Payload
       const message = {
         token: userData.fcmToken,
         android: {
@@ -79,8 +112,10 @@ exports.onStreamRequested = functions.database
         }
       };
 
-      const response = await admin.messaging().send(message);
-      console.log(`Successfully sent high-priority FCM push (${streamType}) to ${targetUid}:`, response);
+      const response = await sendFcmSafe(targetUid, userData.fcmToken, message);
+      if (response) {
+        console.log(`Successfully sent high-priority FCM push (${streamType}) to ${targetUid}:`, response);
+      }
       return response;
     } catch (error) {
       console.error(`Error sending FCM push to ${targetUid}:`, error);
@@ -91,6 +126,7 @@ exports.onStreamRequested = functions.database
 /**
  * Realtime Database Trigger: onSnapshotRequested
  * Triggers on /streams/{targetUid}/snapshotRequest
+ * After sending FCM, deletes the request node to prevent re-triggers and save RTDB cost.
  */
 exports.onSnapshotRequested = functions.database
   .ref("/streams/{targetUid}/snapshotRequest")
@@ -113,8 +149,11 @@ exports.onSnapshotRequested = functions.database
             timestamp: String(Date.now())
           }
         };
-        await admin.messaging().send(message);
+        await sendFcmSafe(targetUid, userData.fcmToken, message);
         console.log(`Sent SNAPSHOT FCM wake-up to ${targetUid}`);
+
+        // ✅ Clean up request node after sending to prevent duplicate triggers & save RTDB cost
+        await admin.database().ref(`/streams/${targetUid}/snapshotRequest`).remove();
       }
     } catch (err) {
       console.error(`Error sending snapshot FCM to ${targetUid}:`, err);
@@ -125,6 +164,7 @@ exports.onSnapshotRequested = functions.database
 /**
  * Realtime Database Trigger: onCommandSent
  * Triggers on /commands/{targetUid}/{command}
+ * After sending FCM, deletes the command node to prevent re-triggers and save RTDB cost.
  */
 exports.onCommandSent = functions.database
   .ref("/commands/{targetUid}/{command}")
@@ -132,7 +172,10 @@ exports.onCommandSent = functions.database
     const targetUid = context.params.targetUid;
     const command = context.params.command;
     const data = change.after.val();
+    // Only trigger on new writes, not deletes
     if (!data) return null;
+    // Avoid re-triggering on our own delete
+    if (!change.before.val() && !data) return null;
 
     try {
       const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
@@ -148,8 +191,13 @@ exports.onCommandSent = functions.database
             timestamp: String(Date.now())
           }
         };
-        await admin.messaging().send(message);
+        await sendFcmSafe(targetUid, userData.fcmToken, message);
         console.log(`Sent COMMAND FCM wake-up (${command}) to ${targetUid}`);
+
+        // ✅ Clean up command node after sending to prevent duplicate triggers & save RTDB cost
+        await admin.database()
+          .ref(`/commands/${targetUid}/${command}`)
+          .remove();
       }
     } catch (err) {
       console.error(`Error sending command FCM to ${targetUid}:`, err);

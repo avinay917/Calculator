@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.callbackFlow
 
 object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
-    private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance("https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app")
+    // ✅ FIX: Hardcoded URL remove kiya - Firebase google-services.json se automatically correct DB use karta hai
+    private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance()
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
@@ -25,6 +26,20 @@ object FirebaseRepository {
     private var currentPresenceUid: String? = null
 
     val currentUser get() = auth.currentUser
+
+    fun updateStreamStatus(childId: String, status: String, streamType: String, sessionId: String) {
+        val streamingData = mapOf(
+            "status" to status,
+            "streamType" to streamType,
+            "sessionId" to sessionId,
+            "timestamp" to ServerValue.TIMESTAMP
+        )
+        database.reference.child("streams").child(childId).child("status")
+            .updateChildren(streamingData)
+            .addOnFailureListener { e ->
+                crashlytics.log("[FirebaseRepository] updateStreamStatus failed: ${e.localizedMessage}")
+            }
+    }
 
     fun recordNonFatalError(message: String, exception: Throwable? = null) {
         crashlytics.log("[FeatureHealth] $message")
