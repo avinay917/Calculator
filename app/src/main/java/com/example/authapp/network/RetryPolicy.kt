@@ -26,7 +26,8 @@ class RetryPolicy(private val config: RetryConfig = RetryConfig()) {
                 if (result.isSuccess) {
                     return result
                 } else {
-                    val exception = result.exceptionOrNull() ?: Exception("Unknown error")
+                    val throwable = result.exceptionOrNull()
+                    val exception = (throwable as? Exception) ?: Exception(throwable?.message ?: "Unknown error")
                     lastException = exception
                     onRetry?.invoke(attempt + 1, exception)
                     
