@@ -1,9 +1,9 @@
 {
   "rules": {
     "users": {
+      ".read": "auth != null",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('users').child($uid).child('parentId').val() === auth.uid)",
-        ".write": "auth != null && (auth.uid === $uid || (root.child('users').child($uid).child('parentId').val() === auth.uid))",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child($uid).child('parentId').val() === auth.uid)",
         ".validate": "newData.hasChildren(['role']) && (auth.uid === $uid ? newData.child('role').val() === data.child('role').val() || !data.child('role').exists() : true)"
       }
     },
@@ -15,19 +15,19 @@
     },
     "signaling": {
       "$sessionId": {
-        ".read": "auth != null && $sessionId.contains(auth.uid)",
-        ".write": "auth != null && $sessionId.contains(auth.uid)"
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
     "recordings": {
+      ".read": "auth != null",
       "$childId": {
-        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
-        ".write": "auth != null && auth.uid === $childId"
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
       }
     },
     "app_update": {
-      ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      ".read": true,
+      ".write": "auth != null"
     },
     "ice_servers": {
       ".read": "auth != null",

@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" xmlns:tools="http://schemas.android.com/tools" tools:ignore="ProtectedPermissions" />
 
     <!-- Bluetooth Audio Routing -->
@@ -34,6 +35,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Lock Screen, WiFi & Overlay Permissions -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -86,7 +88,7 @@
             android:name="com.example.authapp.service.ChildForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone|camera|location" />
+            android:foregroundServiceType="dataSync|location|microphone|camera" />
 
         <!-- Device Boot Receiver to Restore Protection -->
         <receiver

