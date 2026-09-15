@@ -1450,7 +1450,7 @@ object FirebaseRepository {
 
     fun saveRecordingToFirestore(childId: String, session: RecordingSession) {
         if (childId.isEmpty()) return
-        val key = if (session.id.isNotEmpty()) session.id else "${session.timestamp}_${session.type}"
+        val key = if (session.id.isNotEmpty()) session.id else "${session.startTime}_${session.streamType}"
         firestore.collection("recordings").document(childId)
             .collection("items").document(key)
             .set(session.copy(id = key), SetOptions.merge())
@@ -1463,7 +1463,7 @@ object FirebaseRepository {
     fun listenToRecordingsFirestore(childId: String, limit: Long = 50, onUpdate: (List<RecordingSession>) -> Unit): ListenerRegistration {
         return firestore.collection("recordings").document(childId)
             .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .orderBy("startTime", Query.Direction.DESCENDING)
             .limit(limit)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
