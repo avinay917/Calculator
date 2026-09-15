@@ -228,144 +228,154 @@ fun ChildUserCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Primary Actions: Audio, Camera Video, Screen Mirror
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            // Quick Actions 2x4 Grid
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                FilledTonalButton(
-                    onClick = {
-                        AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
-                        if (!user.isOnline) {
-                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                            return@FilledTonalButton
-                        }
-                        onAudioClick()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(10.dp)
+                // Row 1: Audio & Video
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Audio", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    FilledTonalButton(
+                        onClick = {
+                            AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
+                            if (!user.isOnline) {
+                                Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
+                                return@FilledTonalButton
+                            }
+                            onAudioClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Live Audio", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            AppAnalytics.logButtonClick("video_cast", "ParentScreen", mapOf("childId" to user.uid))
+                            if (!user.isOnline) {
+                                Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
+                                return@FilledTonalButton
+                            }
+                            onVideoClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Live Video", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                    }
                 }
 
-                FilledTonalButton(
-                    onClick = {
-                        AppAnalytics.logButtonClick("video_cast", "ParentScreen", mapOf("childId" to user.uid))
-                        if (!user.isOnline) {
-                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                            return@FilledTonalButton
-                        }
-                        onVideoClick()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(10.dp)
+                // Row 2: Screen Cast & Snapshot
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Video", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    OutlinedButton(
+                        onClick = {
+                            AppAnalytics.logButtonClick("screen_cast", "ParentScreen", mapOf("childId" to user.uid))
+                            if (!user.isOnline) {
+                                Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
+                                return@OutlinedButton
+                            }
+                            onScreenClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Screen Cast", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            AppAnalytics.logButtonClick("snapshot", "ParentScreen", mapOf("childId" to user.uid))
+                            onSnapshotClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Snapshot", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
                 }
 
-                FilledTonalButton(
-                    onClick = {
-                        AppAnalytics.logButtonClick("screen_cast", "ParentScreen", mapOf("childId" to user.uid))
-                        if (!user.isOnline) {
-                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                            return@FilledTonalButton
-                        }
-                        onScreenClick()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(10.dp)
+                // Row 3: GPS Location & Activity Logs
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(imageVector = Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Screen", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                }
-            }
+                    OutlinedButton(
+                        onClick = {
+                            AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
+                            onLocationClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("GPS Track", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Secondary Actions: GPS Location & Remote Photo Snapshot
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
-                        onLocationClick()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("GPS Location", style = MaterialTheme.typography.labelSmall)
+                    OutlinedButton(
+                        onClick = onActivityClick,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Activity Logs", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        AppAnalytics.logButtonClick("snapshot", "ParentScreen", mapOf("childId" to user.uid))
-                        onSnapshotClick()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
+                // Row 4: Security Alerts & Schedules
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Remote Photo", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-
-            // Secondary Row: Activity (Calls & Notifs), Security Alerts, Schedules
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedButton(
-                    onClick = onActivityClick,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Activity", style = MaterialTheme.typography.labelSmall)
-                }
-
-                OutlinedButton(
-                    onClick = onAlertsClick,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = if (alertsCount > 0) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.outlinedButtonColors()
-                ) {
-                    Icon(imageVector = Icons.Default.Security, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = if (alertsCount > 0) "Alerts ($alertsCount)" else "Alerts",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (alertsCount > 0) FontWeight.Bold else FontWeight.Normal
+                    OutlinedButton(
+                        onClick = onAlertsClick,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = if (alertsCount > 0) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.outlinedButtonColors()
+                    ) {
+                        Icon(imageVector = Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (alertsCount > 0) "Alerts ($alertsCount)" else "Security Alerts",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (alertsCount > 0) FontWeight.Bold else FontWeight.SemiBold
+                            )
                         )
-                    )
-                }
+                    }
 
-                OutlinedButton(
-                    onClick = onScheduleClick,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Schedule", style = MaterialTheme.typography.labelSmall)
+                    OutlinedButton(
+                        onClick = onScheduleClick,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Schedules", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
                 }
             }
         }

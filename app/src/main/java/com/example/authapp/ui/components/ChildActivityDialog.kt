@@ -35,6 +35,32 @@ fun ChildActivityDialog(
     onDismiss: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=Web, 3=Wi-Fi, 4=Apps, 5=SIM, 6=Alerts
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredCallLogs = remember(callLogs, searchQuery) {
+        if (searchQuery.isBlank()) callLogs
+        else callLogs.filter { it.name.contains(searchQuery, ignoreCase = true) || it.number.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val filteredSmsLogs = remember(smsLogs, searchQuery) {
+        if (searchQuery.isBlank()) smsLogs
+        else smsLogs.filter { it.address.contains(searchQuery, ignoreCase = true) || it.body.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val filteredWebHistory = remember(webHistory, searchQuery) {
+        if (searchQuery.isBlank()) webHistory
+        else webHistory.filter { it.title.contains(searchQuery, ignoreCase = true) || it.url.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val filteredPackageEvents = remember(packageEvents, searchQuery) {
+        if (searchQuery.isBlank()) packageEvents
+        else packageEvents.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val filteredNotifications = remember(notifications, searchQuery) {
+        if (searchQuery.isBlank()) notifications
+        else notifications.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.title.contains(searchQuery, ignoreCase = true) || it.text.contains(searchQuery, ignoreCase = true) }
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -82,6 +108,26 @@ fun ChildActivityDialog(
                         .padding(innerPadding)
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
+                    // Search Bar for Quick Log Filtering
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search logs, numbers, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     // Modern Scrollable Tab Switcher
                     PrimaryScrollableTabRow(
                         selectedTabIndex = selectedTab,
@@ -94,19 +140,19 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            text = { Text("Calls (${callLogs.size})", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Calls (${filteredCallLogs.size})", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            text = { Text("SMS (${smsLogs.size})", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("SMS (${filteredSmsLogs.size})", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
-                            text = { Text("Web (${webHistory.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Web (${filteredWebHistory.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
@@ -118,7 +164,7 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 4,
                             onClick = { selectedTab = 4 },
-                            text = { Text("Apps (${packageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
@@ -130,7 +176,7 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 6,
                             onClick = { selectedTab = 6 },
-                            text = { Text("Notifications (${notifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                     }
@@ -141,45 +187,45 @@ fun ChildActivityDialog(
                     Box(modifier = Modifier.fillMaxSize()) {
                         when (selectedTab) {
                             0 -> {
-                                if (callLogs.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Call, "No call logs recorded yet")
+                                if (filteredCallLogs.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Call, if (searchQuery.isNotEmpty()) "No matching calls found" else "No call logs recorded yet")
                                 } else {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(callLogs) { log ->
+                                        items(filteredCallLogs) { log ->
                                             CallLogListItem(log)
                                         }
                                     }
                                 }
                             }
                             1 -> {
-                                if (smsLogs.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Email, "No SMS messages recorded yet")
+                                if (filteredSmsLogs.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Email, if (searchQuery.isNotEmpty()) "No matching SMS messages found" else "No SMS messages recorded yet")
                                 } else {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(smsLogs) { sms ->
+                                        items(filteredSmsLogs) { sms ->
                                             SmsListItem(sms)
                                         }
                                     }
                                 }
                             }
                             2 -> {
-                                if (webHistory.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Language, "No web browsing history yet")
+                                if (filteredWebHistory.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Language, if (searchQuery.isNotEmpty()) "No matching web history found" else "No web browsing history yet")
                                 } else {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(webHistory) { item ->
+                                        items(filteredWebHistory) { item ->
                                             WebHistoryListItem(item)
                                         }
                                     }
@@ -201,15 +247,15 @@ fun ChildActivityDialog(
                                 }
                             }
                             4 -> {
-                                if (packageEvents.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Apps, "No app install/uninstall events yet")
+                                if (filteredPackageEvents.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Apps, if (searchQuery.isNotEmpty()) "No matching app events found" else "No app install/uninstall events yet")
                                 } else {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(packageEvents) { event ->
+                                        items(filteredPackageEvents) { event ->
                                             AppInstallEventItem(event)
                                         }
                                     }
@@ -223,22 +269,21 @@ fun ChildActivityDialog(
                                 }
                             }
                             else -> {
-                                if (notifications.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Notifications, "No notifications captured yet")
+                                if (filteredNotifications.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Notifications, if (searchQuery.isNotEmpty()) "No matching notifications found" else "No notifications captured yet")
                                 } else {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(notifications) { notif ->
+                                        items(filteredNotifications) { notif ->
                                             NotificationListItem(notif)
                                         }
                                     }
                                 }
                             }
                         }
-                    }
                 }
             }
         }

@@ -229,86 +229,108 @@ fun CloudRecordingsView(
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            else MaterialTheme.colorScheme.surface
+                            containerColor = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = if (isPlaying) 3.dp else 0.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp)
-                        ) {
-                            // Media Type Icon
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isVideo -> MaterialTheme.colorScheme.secondaryContainer
-                                            isCall -> Color(0xFFE0F2FE)
-                                            else -> MaterialTheme.colorScheme.primaryContainer
-                                        }
-                                    ),
-                                contentAlignment = Alignment.Center
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = when {
-                                        isVideo -> Icons.Default.Videocam
-                                        isCall -> Icons.Default.Call
-                                        else -> Icons.Default.Mic
-                                    },
-                                    contentDescription = null,
-                                    tint = when {
-                                        isVideo -> MaterialTheme.colorScheme.secondary
-                                        isCall -> Color(0xFF0284C7)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    },
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            // Details
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = childName,
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                // Media Type Icon
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                isVideo -> MaterialTheme.colorScheme.secondaryContainer
+                                                isCall -> Color(0xFFE0F2FE)
+                                                else -> MaterialTheme.colorScheme.primaryContainer
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = when {
+                                            isVideo -> Icons.Default.Videocam
+                                            isCall -> Icons.Default.Call
+                                            else -> Icons.Default.Mic
+                                        },
+                                        contentDescription = null,
+                                        tint = when {
+                                            isVideo -> MaterialTheme.colorScheme.secondary
+                                            isCall -> Color(0xFF0284C7)
+                                            else -> MaterialTheme.colorScheme.primary
+                                        },
+                                        modifier = Modifier.size(22.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant
-                                    ) {
-                                        Text(
-                                            text = durationStr,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        )
-                                    }
                                 }
 
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
-                                Text(
-                                    text = formattedDate,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
+                                // Details
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = childName,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                text = durationStr,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(2.dp))
 
-                                // Cloud & Local storage tags
+                                    Text(
+                                        text = formattedDate,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                // Play / Stop Button
+                                FilledIconButton(
+                                    onClick = {
+                                        if (isPlaying) {
+                                            onStopPlayback()
+                                        } else {
+                                            onPlayRecording(rec)
+                                        }
+                                    },
+                                    colors = if (isPlaying) IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error) else IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (isPlaying) "Pause" else "Play"
+                                    )
+                                }
+                            }
+
+                            // Storage Badges & Playback Status
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     if (hasCloud) {
                                         Surface(
@@ -317,7 +339,7 @@ fun CloudRecordingsView(
                                         ) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.CloudDone,
@@ -325,12 +347,12 @@ fun CloudRecordingsView(
                                                     tint = Color(0xFF0288D1),
                                                     modifier = Modifier.size(12.dp)
                                                 )
-                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
                                                     text = "Cloud Backed",
                                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                                     color = Color(0xFF0277BD),
-                                                    fontSize = 10.sp
+                                                    fontSize = 11.sp
                                                 )
                                             }
                                         }
@@ -341,32 +363,23 @@ fun CloudRecordingsView(
                                             color = Color(0xFFE8F5E9)
                                         ) {
                                             Text(
-                                                text = "💾 Local",
+                                                text = "💾 Local File",
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                                 color = Color(0xFF2E7D32),
-                                                fontSize = 10.sp,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                             )
                                         }
                                     }
                                 }
-                            }
 
-                            // Play / Stop Button
-                            FilledTonalIconButton(
-                                onClick = {
-                                    if (isPlaying) {
-                                        onStopPlayback()
-                                    } else {
-                                        onPlayRecording(rec)
-                                    }
+                                if (isPlaying) {
+                                    Text(
+                                        text = "▶ Playing Now...",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
                             }
                         }
                     }
