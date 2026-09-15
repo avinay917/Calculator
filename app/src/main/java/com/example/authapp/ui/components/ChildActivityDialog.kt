@@ -36,209 +36,205 @@ fun ChildActivityDialog(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=Web, 3=Wi-Fi, 4=Apps, 5=SIM, 6=Alerts
 
-    AlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp)
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                // Header
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = when (selectedTab) {
-                            0 -> Icons.Default.Call
-                            1 -> Icons.Default.Email
-                            2 -> Icons.Default.Language
-                            3 -> Icons.Default.Wifi
-                            4 -> Icons.Default.Apps
-                            5 -> Icons.Default.SimCard
-                            else -> Icons.Default.Notifications
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    text = "${childUser.name.ifEmpty { "Child" }} • Activity Center",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "All Device Logs, Communications & Network Events",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         },
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Activity: ${childUser.name.ifEmpty { "Child" }}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Scrollable Tab Switcher
-                ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
-                    edgePadding = 0.dp,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp))
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("Calls (${callLogs.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("SMS (${smsLogs.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        text = { Text("Web (${webHistory.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        text = { Text("Wi-Fi (${networkHistory.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
-                        text = { Text("Apps (${packageEvents.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 5,
-                        onClick = { selectedTab = 5 },
-                        text = { Text("SIM", style = MaterialTheme.typography.labelSmall) }
-                    )
-                    Tab(
-                        selected = selectedTab == 6,
-                        onClick = { selectedTab = 6 },
-                        text = { Text("Alerts (${notifications.size})", style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
+                    // Modern Scrollable Tab Switcher
+                    PrimaryScrollableTabRow(
+                        selectedTabIndex = selectedTab,
+                        edgePadding = 8.dp,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("Calls (${callLogs.size})", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("SMS (${smsLogs.size})", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            text = { Text("Web (${webHistory.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            text = { Text("Wi-Fi (${networkHistory.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 4,
+                            onClick = { selectedTab = 4 },
+                            text = { Text("Apps (${packageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 5,
+                            onClick = { selectedTab = 5 },
+                            text = { Text("SIM Card", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.SimCard, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 6,
+                            onClick = { selectedTab = 6 },
+                            text = { Text("Notifications (${notifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                when (selectedTab) {
-                    0 -> {
-                        // Call Logs List
-                        if (callLogs.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Call, "No call logs recorded yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(callLogs) { log ->
-                                    CallLogListItem(log)
+                    // Content Area (Full Height & Modern Cards)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        when (selectedTab) {
+                            0 -> {
+                                if (callLogs.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Call, "No call logs recorded yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(callLogs) { log ->
+                                            CallLogListItem(log)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    1 -> {
-                        // SMS Logs List
-                        if (smsLogs.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Email, "No SMS messages recorded yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(smsLogs) { sms ->
-                                    SmsListItem(sms)
+                            1 -> {
+                                if (smsLogs.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Email, "No SMS messages recorded yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(smsLogs) { sms ->
+                                            SmsListItem(sms)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    2 -> {
-                        // Web History
-                        if (webHistory.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Language, "No web browsing history yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(webHistory) { item ->
-                                    WebHistoryListItem(item)
+                            2 -> {
+                                if (webHistory.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Language, "No web browsing history yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(webHistory) { item ->
+                                            WebHistoryListItem(item)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    3 -> {
-                        // Wi-Fi / Network History
-                        if (networkHistory.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Wifi, "No network history recorded yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(networkHistory) { net ->
-                                    NetworkHistoryListItem(net)
+                            3 -> {
+                                if (networkHistory.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Wifi, "No network history recorded yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(networkHistory) { net ->
+                                            NetworkHistoryListItem(net)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    4 -> {
-                        // App Install / Uninstall Events
-                        if (packageEvents.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Apps, "No app install/uninstall events yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(packageEvents) { event ->
-                                    AppInstallEventItem(event)
+                            4 -> {
+                                if (packageEvents.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Apps, "No app install/uninstall events yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(packageEvents) { event ->
+                                            AppInstallEventItem(event)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    5 -> {
-                        // SIM Card Info
-                        if (simInfo == null) {
-                            EmptyStateBox(Icons.Default.SimCard, "No SIM card information reported yet")
-                        } else {
-                            SimInfoCard(simInfo)
-                        }
-                    }
-                    else -> {
-                        // Notification & Security Alerts
-                        if (notifications.isEmpty()) {
-                            EmptyStateBox(Icons.Default.Notifications, "No notifications captured yet")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(notifications) { notif ->
-                                    NotificationListItem(notif)
+                            5 -> {
+                                if (simInfo == null) {
+                                    EmptyStateBox(Icons.Default.SimCard, "No SIM card information reported yet")
+                                } else {
+                                    SimInfoCard(simInfo)
+                                }
+                            }
+                            else -> {
+                                if (notifications.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Notifications, "No notifications captured yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(notifications) { notif ->
+                                            NotificationListItem(notif)
+                                        }
+                                    }
                                 }
                             }
                         }
