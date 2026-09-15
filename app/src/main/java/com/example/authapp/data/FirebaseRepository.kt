@@ -1476,5 +1476,112 @@ object FirebaseRepository {
                 }
             }
     }
+
+    // --- 6-Digit In-App Pairing Code System ---
+
+    fun getOrGenerateParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        if (parentUid.isEmpty()) {
+            onComplete(null, "Parent UID is empty")
+            return
+        }
+        val userRef = database.reference.child("users").child(parentUid)
+        userRef.child("pairingCode").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val existingCode = snapshot.getValue(String::class.java)
+                if (!existingCode.isNullOrBlank()) {
+                    database.reference.child("pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(codeSnap: DataSnapshot) {
+                            if (codeSnap.exists()) {
+                                onComplete(existingCode, null)
+                            } else {
+                                createNewPairingCode(parentUid, parentEmail, onComplete)
+                            }
+                        }
+                        override fun onCancelled(err: DatabaseError) {
+                            createNewPairingCode(parentUid, parentEmail, onComplete)
+                        }
+                    })
+                } else {
+                    createNewPairingCode(parentUid, parentEmail, onComplete)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                createNewPairingCode(parentUid, parentEmail, onComplete)
+            }
+        })
+    }
+
+    private fun createNewPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        val random6Digit = (100000..999999).random().toString()
+        val codeData = mapOf<String, Any>(
+            "parentUid" to parentUid,
+            "parentEmail" to parentEmail,
+            "createdAt" to ServerValue.TIMESTAMP
+        )
+        database.reference.child("pairing_codes").child(random6Digit).setValue(codeData)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    database.reference.child("users").child(parentUid).child("pairingCode").setValue(random6Digit)
+                    onComplete(random6Digit, null)
+                } else {
+                    onComplete(null, task.exception?.localizedMessage ?: "Failed to generate pairing code")
+                }
+            }
+    }
+
+    fun pairChildWithCode(childUid: String, code: String, onResult: (success: Boolean, parentEmail: String?, errorMsg: String?) -> Unit) {
+        val trimmedCode = code.trim()
+        if (trimmedCode.length != 6) {
+            onResult(false, null, "Please enter a valid 6-digit code")
+            return
+        }
+        database.reference.child("pairing_codes").child(trimmedCode).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!snapshot.exists()) {
+                    onResult(false, null, "Invalid pairing code. Please check code on Parent app.")
+                    return
+                }
+                val parentUid = snapshot.child("parentUid").getValue(String::class.java)
+                val parentEmail = snapshot.child("parentEmail").getValue(String::class.java) ?: "Parent"
+                if (parentUid.isNullOrEmpty()) {
+                    onResult(false, null, "Pairing code data corrupted")
+                    return
+                }
+
+                val childUpdates = mapOf<String, Any>(
+                    "parentId" to parentUid
+                )
+                database.reference.child("users").child(childUid).updateChildren(childUpdates)
+                    .addOnCompleteListener { updateTask ->
+                        if (updateTask.isSuccessful) {
+                            try {
+                                firestore.collection("users").document(childUid)
+                                    .set(mapOf("parentId" to parentUid), SetOptions.merge())
+                            } catch (_: Exception) {}
+                            onResult(true, parentEmail, null)
+                        } else {
+                            onResult(false, null, updateTask.exception?.localizedMessage ?: "Failed to link to parent")
+                        }
+                    }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                onResult(false, null, error.message)
+            }
+        })
+    }
+
+    fun listenToChildParentLink(childUid: String, onParentIdUpdated: (String) -> Unit): ValueEventListener {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val parentId = snapshot.getValue(String::class.java) ?: ""
+                onParentIdUpdated(parentId)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        database.reference.child("users").child(childUid).child("parentId").addValueEventListener(listener)
+        return listener
+    }
 }
 

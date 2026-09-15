@@ -40,7 +40,8 @@ import android.media.MediaPlayer
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Security
-import com.example.authapp.data.RecordingSession
+import androidx.compose.material.icons.filled.QrCode
+import com.example.authapp.ui.components.PairingCodeDialog
 import com.example.authapp.ui.components.ChildControlsView
 import com.example.authapp.ui.components.ChildLocationDialog
 import com.example.authapp.ui.components.ChildUserCard
@@ -79,6 +80,7 @@ fun ParentScreen(
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var liveAudioLevel by remember { mutableFloatStateOf(0f) }
+    var showPairingDialog by remember { mutableStateOf(false) }
 
     fun toggleRecording(streamType: String) {
         val childId = uiState.activeChildId ?: return
@@ -429,6 +431,14 @@ fun ParentScreen(
                             )
                         }
 
+                        IconButton(onClick = { showPairingDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.QrCode,
+                                contentDescription = "Pair Child Device",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         IconButton(onClick = onSignOut) {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -440,11 +450,25 @@ fun ParentScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(
-                        text = "Connected Child Devices (${uiState.childUsers.size})",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Connected Child Devices (${uiState.childUsers.size})",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        FilledTonalButton(
+                            onClick = { showPairingDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Pair Device", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -469,7 +493,7 @@ fun ParentScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp),
+                                .padding(vertical = 24.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -487,12 +511,21 @@ fun ParentScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Install the app on your child's phone and sign in with 'Child' role. It will automatically connect here.",
+                                    text = "Pair your child's phone with a 6-digit code to enable live tracking & monitoring.",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodySmall,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     modifier = Modifier.padding(horizontal = 24.dp)
                                 )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { showPairingDialog = true },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Get 6-Digit Pairing Code")
+                                }
                             }
                         }
                     } else {
@@ -668,6 +701,13 @@ fun ParentScreen(
                         Toast.makeText(context, "Recording schedule removed", Toast.LENGTH_SHORT).show()
                     },
                     onDismiss = { viewModel.closeScheduleDialog() }
+                )
+            }
+
+            if (showPairingDialog) {
+                PairingCodeDialog(
+                    parentEmail = email,
+                    onDismiss = { showPairingDialog = false }
                 )
             }
         }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
@@ -45,6 +46,24 @@ fun ChildScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val currentChildUid = remember { com.example.authapp.data.FirebaseRepository.currentUser?.uid ?: "" }
+    var linkedParentId by remember { mutableStateOf("") }
+    var pairingCodeInput by remember { mutableStateOf("") }
+    var isPairingLoading by remember { mutableStateOf(false) }
+    var pairingMessage by remember { mutableStateOf<String?>(null) }
+    var isPairingError by remember { mutableStateOf(false) }
+    var showChangePairingForm by remember { mutableStateOf(false) }
+
+    DisposableEffect(currentChildUid) {
+        if (currentChildUid.isEmpty()) return@DisposableEffect onDispose {}
+        val listener = com.example.authapp.data.FirebaseRepository.listenToChildParentLink(currentChildUid) { parentId ->
+            linkedParentId = parentId
+        }
+        onDispose {
+            com.example.authapp.data.FirebaseRepository.removeValueListener("users/$currentChildUid/parentId", listener)
+        }
+    }
+
     var hasStage1Permissions by remember { mutableStateOf(false) }
     var hasCallPermissions by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
@@ -282,6 +301,153 @@ fun ChildScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // Card 0: Parent Device Pairing Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (linkedParentId.isNotEmpty()) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color = if (linkedParentId.isNotEmpty()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.tertiary
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (linkedParentId.isNotEmpty()) Icons.Default.Check else Icons.Default.Link,
+                        contentDescription = null,
+                        tint = if (linkedParentId.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (linkedParentId.isNotEmpty()) "Linked With Parent Account" else "Link Device With Parent",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (linkedParentId.isNotEmpty() && !showChangePairingForm) {
+                    Text(
+                        text = "This device is paired with Parent ID: ${linkedParentId.take(10)}... Telemetry & streaming requests are active.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    TextButton(
+                        onClick = { showChangePairingForm = true },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Change or Re-Link Parent Code", style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Text(
+                        text = "Enter the 6-digit Pairing Code generated from your Parent Dashboard to connect this device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = pairingCodeInput,
+                        onValueChange = {
+                            if (it.length <= 6) {
+                                pairingCodeInput = it.filter { char -> char.isLetterOrDigit() }.uppercase()
+                            }
+                        },
+                        label = { Text("6-Digit Pairing Code") },
+                        placeholder = { Text("e.g. 849201") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        textStyle = MaterialTheme.typography.titleLarge.copy(
+                            textAlign = TextAlign.Center,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            letterSpacing = 4.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    pairingMessage?.let { msg ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = msg,
+                            color = if (isPairingError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (pairingCodeInput.length != 6) {
+                                    pairingMessage = "Please enter all 6 digits"
+                                    isPairingError = true
+                                    return@Button
+                                }
+                                isPairingLoading = true
+                                pairingMessage = null
+                                com.example.authapp.data.FirebaseRepository.pairChildWithCode(
+                                    childUid = currentChildUid,
+                                    code = pairingCodeInput
+                                ) { success, parentEmail, errorMsg ->
+                                    isPairingLoading = false
+                                    if (success) {
+                                        isPairingError = false
+                                        pairingMessage = "Connected to ${parentEmail ?: "Parent"} successfully!"
+                                        showChangePairingForm = false
+                                        pairingCodeInput = ""
+                                        com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
+                                    } else {
+                                        isPairingError = true
+                                        pairingMessage = errorMsg ?: "Pairing failed"
+                                    }
+                                }
+                            },
+                            enabled = !isPairingLoading && pairingCodeInput.length == 6,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isPairingLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Connect Device")
+                            }
+                        }
+
+                        if (showChangePairingForm && linkedParentId.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = { showChangePairingForm = false },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Card 1: Stage 1 Permissions (Mic, Camera, Notifications)
         Card(
