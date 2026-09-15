@@ -994,37 +994,8 @@ object FirebaseRepository {
         database.reference.child("parent_controls").child(childId).updateChildren(data)
     }
 
-    fun listenToParentControls(childId: String, onControlsUpdated: (ParentControlSettings) -> Unit): ValueEventListener {
-        val ref = database.reference.child("parent_controls").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val isStudyModeActive = snapshot.child("isStudyModeActive").getValue(Boolean::class.java) ?: false
-                val studyModeMessage = snapshot.child("studyModeMessage").getValue(String::class.java) ?: "Study Mode is active. Focus on your studies!"
-                val studyModeUntilTimestamp = snapshot.child("studyModeUntilTimestamp").getValue(Long::class.java) ?: 0L
-                val lastUpdated = snapshot.child("lastUpdated").getValue(Long::class.java) ?: 0L
-                val dailyLimit = (snapshot.child("dailyScreenTimeLimitMinutes").getValue(Long::class.java) ?: 0L).toInt()
-
-                val blockedMap = mutableMapOf<String, Boolean>()
-                for (child in snapshot.child("blockedPackages").children) {
-                    val rawPkg = child.key ?: continue
-                    val isBlocked = child.getValue(Boolean::class.java) ?: false
-                    // Un-sanitize key if needed
-                    val pkg = rawPkg.replace("_", ".")
-                    blockedMap[pkg] = isBlocked
-                    blockedMap[rawPkg] = isBlocked
-                }
-
-                val settings = ParentControlSettings(
-                    isStudyModeActive = isStudyModeActive,
-                    studyModeMessage = studyModeMessage,
-                    studyModeUntilTimestamp = studyModeUntilTimestamp,
-                    blockedPackages = blockedMap,
-                    dailyScreenTimeLimitMinutes = dailyLimit,
-                    lastUpdated = lastUpdated
-                )
-                onControlsUpdated(settings)
-            }
-            override fun onCancelled(error: DatabaseError) {}
+    fun deleteRecordingSchedule(childId: String, scheduleId: String) {
+        if (childId.isEmpty() || scheduleId.isEmpty()) return
         database.reference.child("schedules").child(childId).child(scheduleId).removeValue()
     }
 
