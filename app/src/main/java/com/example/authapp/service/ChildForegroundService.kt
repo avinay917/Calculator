@@ -715,55 +715,6 @@ class ChildForegroundService : Service() {
         removeOverlayWindow()
     }
 
-    private fun acquireWakeLock() {
-        try {
-            if (wakeLock == null) {
-                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-                wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuthApp:ChildStreamWakeLock")
-                wakeLock?.setReferenceCounted(false)
-            }
-            // 30 minute safe timeout to prevent draining battery if stream disconnect is not received
-            wakeLock?.acquire(30 * 60 * 1000L)
-            FirebaseCrashlytics.getInstance().log("[ChildService] Stream Partial WakeLock acquired (30m max)")
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
-
-        try {
-            if (wifiLock == null) {
-                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-                wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AuthApp:ChildWifiLock")
-                wifiLock?.setReferenceCounted(false)
-            }
-            wifiLock?.acquire()
-            FirebaseCrashlytics.getInstance().log("[ChildService] Stream High-perf WifiLock acquired")
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            if (wakeLock?.isHeld == true) {
-                wakeLock?.release()
-                FirebaseCrashlytics.getInstance().log("[ChildService] Stream Partial WakeLock released")
-            }
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
-        wakeLock = null
-
-        try {
-            if (wifiLock?.isHeld == true) {
-                wifiLock?.release()
-                FirebaseCrashlytics.getInstance().log("[ChildService] Stream WifiLock released")
-            }
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
-        wifiLock = null
-    }
-
     private fun startLocationMonitoring() {
         if (!hasLocationPermission()) {
             AppHealthTelemetry.logDiagnostic(

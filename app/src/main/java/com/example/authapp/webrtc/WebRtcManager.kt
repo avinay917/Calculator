@@ -678,8 +678,43 @@ class WebRtcManager(
             var inVideoSection = false
             var videoMLine: String? = null
 
-            // Payload IDs to KEEP (VP8=96, RTX for VP8=97, RED=104, ULPFEC=106)
-            val keepPayloads = setOf("96", "97", "104", "106")
+            // First pass: Dynamically discover payload types for VP8 and redundancy (RED, ULPFEC)
+            val vp8Payloads = mutableSetOf<String>()
+            var inVid = false
+            for (line in lines) {
+                if (line.startsWith("m=video")) inVid = true
+                else if (line.startsWith("m=")) inVid = false
+                if (inVid) {
+                    val match = Regex("^a=rtpmap:(\\d+)\\s+(VP8|red|ulpfec)/", RegexOption.IGNORE_CASE).find(line)
+                    if (match != null) {
+                        vp8Payloads.add(match.groupValues[1])
+                    }
+                }
+            }
+            // Second pass: Find RTX payload types associated with VP8
+            val rtxPayloads = mutableSetOf<String>()
+            inVid = false
+            for (line in lines) {
+                if (line.startsWith("m=video")) inVid = true
+                else if (line.startsWith("m=")) inVid = false
+                if (inVid) {
+                    val match = Regex("^a=fmtp:(\\d+)\\s+apt=(\\d+)", RegexOption.IGNORE_CASE).find(line)
+                    if (match != null) {
+                        val pt = match.groupValues[1]
+                        val apt = match.groupValues[2]
+                        if (apt in vp8Payloads) {
+                            rtxPayloads.add(pt)
+                        }
+                    }
+                }
+            }
+
+            // Payload IDs to KEEP (dynamically discovered, with safe fallback)
+            val keepPayloads = if (vp8Payloads.isNotEmpty()) {
+                vp8Payloads + rtxPayloads
+            } else {
+                setOf("96", "97", "104", "106")
+            }
 
             for (line in lines) {
                 when {
