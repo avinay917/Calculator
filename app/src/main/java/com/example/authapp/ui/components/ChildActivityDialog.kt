@@ -282,8 +282,8 @@ fun ChildActivityDialog(
                                         }
                                     }
                                 }
-                            }
                         }
+                    }
                 }
             }
         }
