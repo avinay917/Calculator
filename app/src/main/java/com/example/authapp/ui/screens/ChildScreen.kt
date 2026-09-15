@@ -1,6 +1,7 @@
 package com.example.authapp.ui.screens
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -20,6 +21,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -46,6 +49,8 @@ fun ChildScreen(
     var hasCallPermissions by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
+    var hasExactAlarmPermission by remember { mutableStateOf(false) }
+    var hasNotificationListenerPermission by remember { mutableStateOf(false) }
 
     var activeRationaleStep by remember { mutableStateOf<com.example.authapp.ui.components.PermissionStepType?>(null) }
 
@@ -55,6 +60,20 @@ fun ChildScreen(
         val loc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         return mic && cam && loc
+    }
+
+    fun checkExactAlarmPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.canScheduleExactAlarms() == true
+        } else true
+    }
+
+    fun checkNotificationListenerPermission(): Boolean {
+        val enabledListeners = android.provider.Settings.Secure.getString(
+            context.contentResolver, "enabled_notification_listeners"
+        ) ?: return false
+        return enabledListeners.contains(context.packageName)
     }
 
     fun startMonitoringService() {
@@ -80,6 +99,8 @@ fun ChildScreen(
             hasOverlayPermission = true
             isBatteryOptimizationIgnored = true
         }
+        hasExactAlarmPermission = checkExactAlarmPermission()
+        hasNotificationListenerPermission = checkNotificationListenerPermission()
 
         // Synchronize full real-time device health to Firebase Realtime Database
         com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
@@ -413,6 +434,88 @@ fun ChildScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(text = if (isBatteryOptimizationIgnored) "Unrestricted Background Running ✓" else "Disable Battery Optimization")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Card 4: Stage 4 - Exact Alarms + Notification Listener (Schedule & Notification Mirroring)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (hasExactAlarmPermission && hasNotificationListenerPermission) Icons.Default.Schedule else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (hasExactAlarmPermission && hasNotificationListenerPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Stage 4: Schedule & Notifications",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Required for auto-recording schedules (exact alarms) and notification mirroring to parent device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Exact Alarm Permission (Android 12+ only)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasExactAlarmPermission) {
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Allow Exact Alarms (For Schedules)")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Notification Listener Permission
+                if (!hasNotificationListenerPermission) {
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Enable Notification Access")
+                    }
+                }
+
+                if (hasExactAlarmPermission && hasNotificationListenerPermission) {
+                    Button(
+                        onClick = { },
+                        enabled = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Schedule & Notifications Enabled ✓")
+                    }
                 }
             }
         }

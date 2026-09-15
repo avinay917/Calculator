@@ -66,6 +66,7 @@ class ChildForegroundService : Service() {
         const val ACTION_STOP_STREAM = "ACTION_STOP_STREAM_ONLY"
         const val ACTION_START_CALL_RECORDING = "ACTION_START_CALL_RECORDING"
         const val ACTION_STOP_CALL_RECORDING = "ACTION_STOP_CALL_RECORDING"
+        const val ACTION_SCHEDULED_RECORDING = "ACTION_SCHEDULED_RECORDING"
         const val EXTRA_STREAM_TYPE = "EXTRA_STREAM_TYPE"
         const val EXTRA_SESSION_ID = "EXTRA_SESSION_ID"
         const val EXTRA_PHONE_NUMBER = "EXTRA_PHONE_NUMBER"
@@ -75,7 +76,6 @@ class ChildForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
         acquireWakeLock()
-        startMonitoringStreamRequests()
         startLocationMonitoring()
         startHeartbeatTimer()
     }
@@ -302,6 +302,71 @@ class ChildForegroundService : Service() {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground idle error: ${e.localizedMessage}")
                 }
                 startMonitoringStreamRequests()
+            }
+            ACTION_SCHEDULED_RECORDING -> {
+                val durationMinutes = intent.getIntExtra("duration_minutes", 5)
+                val scheduleId = intent.getStringExtra("schedule_id") ?: ""
+                currentServiceState = "RECORDING_SCHEDULED"
+                AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                AppHealthTelemetry.logDiagnostic(
+                    applicationContext,
+                    "SCHEDULED_RECORDING",
+                    "STARTED",
+                    "Scheduled recording started: schedule=$scheduleId, duration=$durationMinutes min"
+                )
+                // Ensure monitoring listeners are running (presence, RTDB, etc.)
+                startMonitoringStreamRequests()
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Auto-Recording Active ($durationMinutes min)"),
+                        getIdleServiceType()
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground scheduled error: ${e.localizedMessage}")
+                }
+                // Use CallRecorder for standalone mic capture (no WebRTC peer needed)
+                if (callRecorder == null) {
+                    callRecorder = CallRecorder(applicationContext)
+                }
+                callRecorder?.startCallRecording("scheduled_$scheduleId")
+                // Auto-stop after durationMinutes
+                scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+                scheduledStopRunnable = Runnable {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled recording auto-stopping after $durationMinutes min")
+                    val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                    val durationSec = callRecorder?.recordingStartTimeMillis?.let {
+                        if (it > 0L) (System.currentTimeMillis() - it) / 1000L else 0L
+                    } ?: 0L
+                    val recordedFile = callRecorder?.stopCallRecording()
+                    callRecorder = null
+                    currentServiceState = "IDLE_PROTECTED"
+                    AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                    if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                        FirebaseRepository.saveRecordingSession(
+                            childId = uid,
+                            streamType = "scheduled",
+                            durationSeconds = durationSec,
+                            localFilePath = recordedFile.absolutePath
+                        ) {
+                            try {
+                                FirebaseRepository.uploadRecordingFile(
+                                    childId = uid,
+                                    fileUri = android.net.Uri.fromFile(recordedFile),
+                                    streamType = "scheduled",
+                                    durationSeconds = durationSec,
+                                    localFilePath = recordedFile.absolutePath
+                                )
+                                FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled recording uploaded to Cloud History")
+                            } catch (e: Exception) {
+                                FirebaseCrashlytics.getInstance().recordException(e)
+                            }
+                        }
+                    }
+                    scheduledStopRunnable = null
+                }
+                mainHandler.postDelayed(scheduledStopRunnable!!, durationMinutes * 60 * 1000L)
             }
             ACTION_START_CALL_RECORDING -> {
                 val phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER) ?: "unknown"
@@ -535,7 +600,17 @@ class ChildForegroundService : Service() {
 
         // Listen for Recording Schedules (Phase 1)
         if (recordingScheduleListener == null) {
+            var previousScheduleIds = emptySet<String>()
             recordingScheduleListener = FirebaseRepository.listenToRecordingSchedules(uid) { schedules ->
+                val currentIds = schedules.map { it.id }.toSet()
+                // Cancel alarms for schedules that were deleted from Firebase
+                val deletedIds = previousScheduleIds - currentIds
+                for (deletedId in deletedIds) {
+                    com.example.authapp.scheduler.RecordingScheduler.cancelSchedule(applicationContext, deletedId)
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Cancelled deleted schedule alarm: $deletedId")
+                }
+                previousScheduleIds = currentIds
+                // Set/update alarms for current schedules
                 for (schedule in schedules) {
                     com.example.authapp.scheduler.RecordingScheduler.setSchedule(applicationContext, schedule)
                 }
@@ -591,6 +666,24 @@ class ChildForegroundService : Service() {
         currentSessionId = sessionId
         isStreaming = true
         acquireWakeLock()
+
+        // Update RTDB to STREAMING so parent reconnecting sees the active session
+        val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+        if (uid.isNotEmpty()) {
+            try {
+                val streamingData = mapOf(
+                    "status" to "STREAMING",
+                    "streamType" to streamType,
+                    "sessionId" to sessionId,
+                    "timestamp" to System.currentTimeMillis()
+                )
+                com.google.firebase.database.FirebaseDatabase.getInstance(
+                    "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app"
+                ).reference.child("streams").child(uid).child("status").updateChildren(streamingData)
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] STREAMING status update failed: ${e.localizedMessage}")
+            }
+        }
 
         if (streamType.equals("video", ignoreCase = true)) {
             ensureOverlayWindow()

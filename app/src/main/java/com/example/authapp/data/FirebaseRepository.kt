@@ -329,10 +329,17 @@ object FirebaseRepository {
         onCommand: (isRecording: Boolean, streamType: String) -> Unit
     ): ValueEventListener {
         val ref = database.reference.child("streams").child(childId).child("recordCommand")
+        var lastProcessedTimestamp = 0L
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val isRecording = snapshot.child("isRecording").getValue(Boolean::class.java) ?: false
+                // Guard: skip if node does not exist or has no real data
+                if (!snapshot.exists() || !snapshot.hasChild("isRecording")) return
+                val isRecording = snapshot.child("isRecording").getValue(Boolean::class.java) ?: return
                 val streamType = snapshot.child("streamType").getValue(String::class.java) ?: "audio"
+                // Deduplication: ignore duplicate events with same timestamp
+                val ts = snapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                if (ts > 0L && ts == lastProcessedTimestamp) return
+                if (ts > 0L) lastProcessedTimestamp = ts
                 onCommand(isRecording, streamType)
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -350,7 +357,7 @@ object FirebaseRepository {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val status = snapshot.child("status").getValue(String::class.java)
-                if (status == "REQUESTED") {
+                if (status == "REQUESTED" || status == "STREAMING") {
                     val streamType = snapshot.child("streamType").getValue(String::class.java) ?: "audio"
                     val sessionId = snapshot.child("sessionId").getValue(String::class.java)
                         ?: "session_${childId}"
