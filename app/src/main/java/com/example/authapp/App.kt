@@ -6,11 +6,9 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.FirebaseDatabase
 import com.example.authapp.utils.Logger
-import dagger.hilt.android.HiltAndroidApp
 import java.io.PrintWriter
 import java.io.StringWriter
 
-@HiltAndroidApp
 class App : Application() {
     override fun onCreate() {
         super.onCreate()

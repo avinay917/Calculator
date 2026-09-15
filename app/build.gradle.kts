@@ -7,7 +7,6 @@ plugins {
   alias(libs.plugins.firebase.crashlytics)
   alias(libs.plugins.firebase.perf)
   kotlin("kapt")
-  id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -122,11 +121,6 @@ dependencies {
   implementation(libs.firebase.perf)
   implementation(libs.firebase.storage)
   implementation(libs.webrtc)
-
-  // Hilt for Dependency Injection
-  implementation("com.google.dagger:hilt-android:2.48")
-  kapt("com.google.dagger:hilt-compiler:2.48")
-  implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
   // Encryption at rest
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
