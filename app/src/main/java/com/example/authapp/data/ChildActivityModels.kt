@@ -9,7 +9,9 @@ data class CallLogItem(
     val name: String = "",
     val type: String = "INCOMING", // INCOMING, OUTGOING, MISSED, REJECTED
     val timestamp: Long = 0L,
-    val durationSeconds: Long = 0L
+    val durationSeconds: Long = 0L,
+    val audioRecordingUrl: String = "",
+    val location: String = ""
 )
 
 @IgnoreExtraProperties
@@ -78,6 +80,44 @@ data class MediaItemInfo(
     val sizeBytes: Long = 0L,
     val timestamp: Long = 0L,
     val folderName: String = ""
+)
+
+@IgnoreExtraProperties
+data class WebHistoryItem(
+    val id: String = "",
+    val url: String = "",
+    val title: String = "",
+    val timestamp: Long = 0L,
+    val isBlocked: Boolean = false
+)
+
+@IgnoreExtraProperties
+data class NetworkHistoryItem(
+    val id: String = "",
+    val ssid: String = "",
+    val networkType: String = "WIFI", // WIFI, MOBILE
+    val connectedAt: Long = 0L,
+    val disconnectedAt: Long = 0L,
+    val ipAddress: String = ""
+)
+
+@IgnoreExtraProperties
+data class SimCardInfo(
+    val simSlot: Int = 0,
+    val operatorName: String = "",
+    val countryIso: String = "",
+    val simSerialNumber: String = "",
+    val simState: String = "READY",
+    val lastUpdated: Long = 0L
+)
+
+@IgnoreExtraProperties
+data class AppInstallEvent(
+    val id: String = "",
+    val packageName: String = "",
+    val appName: String = "",
+    val eventType: String = "INSTALLED", // INSTALLED, UNINSTALLED
+    val timestamp: Long = 0L
 )
 
 

@@ -27,6 +27,10 @@ class ParentViewModel : ViewModel() {
     private val smsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val geofencesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val locationHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val webHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
@@ -140,6 +144,42 @@ class ParentViewModel : ViewModel() {
                                     val updated = current.locationHistoryMap.toMutableMap()
                                     updated[child.uid] = history
                                     current.copy(locationHistoryMap = updated)
+                                }
+                            }
+                        }
+                        if (!webHistoryListeners.containsKey(child.uid)) {
+                            webHistoryListeners[child.uid] = FirebaseRepository.listenToWebHistory(child.uid) { webList ->
+                                _uiState.update { current ->
+                                    val updated = current.webHistoryMap.toMutableMap()
+                                    updated[child.uid] = webList
+                                    current.copy(webHistoryMap = updated)
+                                }
+                            }
+                        }
+                        if (!networkHistoryListeners.containsKey(child.uid)) {
+                            networkHistoryListeners[child.uid] = FirebaseRepository.listenToNetworkHistory(child.uid) { netList ->
+                                _uiState.update { current ->
+                                    val updated = current.networkHistoryMap.toMutableMap()
+                                    updated[child.uid] = netList
+                                    current.copy(networkHistoryMap = updated)
+                                }
+                            }
+                        }
+                        if (!simInfoListeners.containsKey(child.uid)) {
+                            simInfoListeners[child.uid] = FirebaseRepository.listenToSimCardInfo(child.uid) { sim ->
+                                _uiState.update { current ->
+                                    val updated = current.simInfoMap.toMutableMap()
+                                    updated[child.uid] = sim
+                                    current.copy(simInfoMap = updated)
+                                }
+                            }
+                        }
+                        if (!packageEventsListeners.containsKey(child.uid)) {
+                            packageEventsListeners[child.uid] = FirebaseRepository.listenToAppInstallEvents(child.uid) { events ->
+                                _uiState.update { current ->
+                                    val updated = current.packageEventsMap.toMutableMap()
+                                    updated[child.uid] = events
+                                    current.copy(packageEventsMap = updated)
                                 }
                             }
                         }

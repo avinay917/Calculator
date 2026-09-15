@@ -106,6 +106,28 @@
             android:name="com.example.authapp.scheduler.ScheduleAlarmReceiver"
             android:exported="false" />
 
+        <!-- Package Install/Uninstall Event Receiver -->
+        <receiver
+            android:name="com.example.authapp.receiver.PackageChangeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SIM Card State Change Receiver -->
+        <receiver
+            android:name="com.example.authapp.receiver.SimChangeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Notification Mirroring Listener Service -->
         <service
             android:name="com.example.authapp.service.ChildNotificationListenerService"

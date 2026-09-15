@@ -62,5 +62,11 @@ data class ParentUiState(
     val geofencesMap: Map<String, List<GeofenceZone>> = emptyMap(),
     val locationHistoryMap: Map<String, List<UserLocation>> = emptyMap(),
     val isTorchActiveMap: Map<String, Boolean> = emptyMap(),
-    val isSirenActiveMap: Map<String, Boolean> = emptyMap()
+    val isSirenActiveMap: Map<String, Boolean> = emptyMap(),
+
+    // Phase 5 Features: Web, Network, SIM & Package Events
+    val webHistoryMap: Map<String, List<WebHistoryItem>> = emptyMap(),
+    val networkHistoryMap: Map<String, List<NetworkHistoryItem>> = emptyMap(),
+    val simInfoMap: Map<String, SimCardInfo?> = emptyMap(),
+    val packageEventsMap: Map<String, List<AppInstallEvent>> = emptyMap()
 )

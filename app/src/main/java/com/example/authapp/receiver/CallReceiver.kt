@@ -119,6 +119,21 @@ class CallReceiver : BroadcastReceiver() {
                         "Call finished with duration: ${durationSeconds}s"
                     )
 
+                    val contactName = resolveContactName(context, incomingNumber)
+                    val callTypeStr = if (isIncoming) "INCOMING" else "OUTGOING"
+                    val callLog = com.example.authapp.data.CallLogItem(
+                        number = incomingNumber,
+                        name = contactName,
+                        type = callTypeStr,
+                        timestamp = if (callStartTime > 0L) callStartTime else System.currentTimeMillis(),
+                        durationSeconds = durationSeconds
+                    )
+
+                    val currentUid = AppHealthTelemetry.getEffectiveUserId(context)
+                    if (currentUid.isNotEmpty()) {
+                        FirebaseRepository.logSingleCallLog(currentUid, callLog)
+                    }
+
                     val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
                         action = ChildForegroundService.ACTION_STOP_CALL_RECORDING
                     }
@@ -127,7 +142,6 @@ class CallReceiver : BroadcastReceiver() {
                     } catch (e: Exception) {
                         val recordedFile = getRecorder(context).stopCallRecording()
                         if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                            val currentUid = AppHealthTelemetry.getEffectiveUserId(context)
                             if (currentUid.isNotEmpty()) {
                                 CoroutineScope(Dispatchers.IO).launch {
                                     try {
@@ -160,5 +174,20 @@ class CallReceiver : BroadcastReceiver() {
                 }
             }
         }
+    }
+
+    private fun resolveContactName(context: Context, number: String): String {
+        if (number.isEmpty()) return ""
+        try {
+            val uri = Uri.withAppendedPath(android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+            val projection = arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME)
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME)
+                    if (idx >= 0) return cursor.getString(idx) ?: ""
+                }
+            }
+        } catch (e: Exception) {}
+        return ""
     }
 }

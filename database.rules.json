@@ -116,6 +116,30 @@
         ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
         ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
       }
+    },
+    "web_history": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "network_history": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "sim_info": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "package_events": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
     }
   }
 }

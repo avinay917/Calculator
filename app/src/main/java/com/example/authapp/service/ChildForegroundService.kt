@@ -66,6 +66,8 @@ class ChildForegroundService : Service() {
     private var heartbeatHandler: android.os.Handler? = null
     private var heartbeatRunnable: Runnable? = null
     private var currentServiceState: String = "IDLE_PROTECTED"
+    private var networkMonitor: com.example.authapp.utils.NetworkHistoryMonitor? = null
+    private var batteryReceiver: com.example.authapp.receiver.BatteryStatusReceiver? = null
 
     companion object {
         const val CHANNEL_ID = "ChildStreamChannel"
@@ -88,6 +90,19 @@ class ChildForegroundService : Service() {
         acquireWakeLock()
         startLocationMonitoring()
         startHeartbeatTimer()
+
+        networkMonitor = com.example.authapp.utils.NetworkHistoryMonitor(this).apply { startMonitoring() }
+        com.example.authapp.receiver.SimChangeReceiver.checkAndSyncSimState(this)
+
+        try {
+            batteryReceiver = com.example.authapp.receiver.BatteryStatusReceiver()
+            val filter = android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_BATTERY_LOW)
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+            }
+            registerReceiver(batteryReceiver, filter)
+        } catch (e: Exception) {}
     }
 
     private fun acquireWakeLock() {
@@ -1223,6 +1238,10 @@ class ChildForegroundService : Service() {
         }
         releaseWakeLock()
         removeOverlayWindow()
+        networkMonitor?.stopMonitoring()
+        batteryReceiver?.let {
+            try { unregisterReceiver(it) } catch (e: Exception) {}
+        }
         super.onDestroy()
     }
 }

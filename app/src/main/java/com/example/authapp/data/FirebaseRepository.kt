@@ -1150,5 +1150,104 @@ object FirebaseRepository {
         ref.addValueEventListener(listener)
         return listener
     }
+
+    // --- Web History & Safety (Feature 5) ---
+    fun logWebHistoryItem(childId: String, item: WebHistoryItem) {
+        if (childId.isEmpty() || item.url.isEmpty()) return
+        val ref = database.reference.child("web_history").child(childId).push()
+        ref.setValue(item.copy(id = ref.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToWebHistory(childId: String, onHistory: (List<WebHistoryItem>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("web_history").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<WebHistoryItem>()
+                for (child in snapshot.children) {
+                    child.getValue(WebHistoryItem::class.java)?.let { list.add(it) }
+                }
+                onHistory(list.sortedByDescending { it.timestamp }.take(100))
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.limitToLast(100).addValueEventListener(listener)
+        return listener
+    }
+
+    // --- Network & Wi-Fi Connection History (Feature 6) ---
+    fun recordNetworkHistory(childId: String, item: NetworkHistoryItem) {
+        if (childId.isEmpty()) return
+        val ref = database.reference.child("network_history").child(childId).push()
+        ref.setValue(item.copy(id = ref.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToNetworkHistory(childId: String, onHistory: (List<NetworkHistoryItem>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("network_history").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<NetworkHistoryItem>()
+                for (child in snapshot.children) {
+                    child.getValue(NetworkHistoryItem::class.java)?.let { list.add(it) }
+                }
+                onHistory(list.sortedByDescending { it.connectedAt }.take(50))
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.limitToLast(50).addValueEventListener(listener)
+        return listener
+    }
+
+    // --- SIM Card Info & Swap Alerts (Feature 7) ---
+    fun saveSimCardInfo(childId: String, info: SimCardInfo) {
+        if (childId.isEmpty()) return
+        database.reference.child("sim_info").child(childId).setValue(info)
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToSimCardInfo(childId: String, onInfo: (SimCardInfo?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("sim_info").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val info = snapshot.getValue(SimCardInfo::class.java)
+                onInfo(info)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    // --- App Install / Uninstall Events (Feature 1) ---
+    fun logAppInstallEvent(childId: String, event: AppInstallEvent) {
+        if (childId.isEmpty()) return
+        val ref = database.reference.child("package_events").child(childId).push()
+        ref.setValue(event.copy(id = ref.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToAppInstallEvents(childId: String, onEvents: (List<AppInstallEvent>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("package_events").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<AppInstallEvent>()
+                for (child in snapshot.children) {
+                    child.getValue(AppInstallEvent::class.java)?.let { list.add(it) }
+                }
+                onEvents(list.sortedByDescending { it.timestamp }.take(50))
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.limitToLast(50).addValueEventListener(listener)
+        return listener
+    }
+
+    fun logSingleCallLog(childId: String, callLog: CallLogItem) {
+        if (childId.isEmpty()) return
+        val key = if (callLog.id.isNotEmpty()) callLog.id else "${callLog.timestamp}_${callLog.number.takeLast(4)}"
+        database.reference.child("call_logs").child(childId).child(key).setValue(callLog.copy(id = key))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
 }
 
