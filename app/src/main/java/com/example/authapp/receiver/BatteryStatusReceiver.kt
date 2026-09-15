@@ -44,7 +44,7 @@ class BatteryStatusReceiver : BroadcastReceiver() {
                     severity = "INFO"
                 )
                 FirebaseRepository.pushSecurityAlert(childId, alert)
-                AppHealthTelemetry.recordDeviceHealth(context)
+                AppHealthTelemetry.syncDeviceHealth(context)
             }
             Intent.ACTION_POWER_DISCONNECTED -> {
                 val alert = SecurityAlert(
@@ -55,7 +55,7 @@ class BatteryStatusReceiver : BroadcastReceiver() {
                     severity = "INFO"
                 )
                 FirebaseRepository.pushSecurityAlert(childId, alert)
-                AppHealthTelemetry.recordDeviceHealth(context)
+                AppHealthTelemetry.syncDeviceHealth(context)
             }
         }
     }
