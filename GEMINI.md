@@ -85,3 +85,12 @@
 1. **VP8 Video Only**: Never use H264 or VP9 without VP8 fallback; Samsung Exynos chips fail WebRTC decode unless VP8 is first.
 2. **Overlay Permission**: `SYSTEM_ALERT_WINDOW` is mandatory for background camera on Android 10+.
 3. **No Local Gradle Builds**: Test and build strictly via GitHub Actions CI/CD (`gh run list`).
+
+---
+
+## 6. Communication & Explanation Rules
+1. **PURI BAATCHEET HINDI MEIN**: Saari explanations, updates aur summary Hindi/Hinglish mein deni hai ("English mein kuch bhi nahi").
+2. **STEP-BY-STEP UPDATES**: Har ek action aur code change ke waqt user ko pehle Hindi mein batao:
+   - "Ab main yeh kaam kar raha hoon..."
+   - "Is change se yeh problem fix ho rahi hai..."
+   - Har step clear Hindi mein explain karte hue aage badho.
