@@ -6,7 +6,6 @@ plugins {
   alias(libs.plugins.google.services)
   alias(libs.plugins.firebase.crashlytics)
   alias(libs.plugins.firebase.perf)
-  kotlin("kapt")
 }
 
 android {
@@ -133,11 +132,6 @@ dependencies {
   implementation("com.squareup.retrofit2:converter-gson:2.11.0")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-  // Room for offline caching
-  implementation("androidx.room:room-runtime:2.6.1")
-  kapt("androidx.room:room-compiler:2.6.1")
-  implementation("androidx.room:room-ktx:2.6.1")
 
   // Biometric authentication
   implementation("androidx.biometric:biometric:1.1.0")
