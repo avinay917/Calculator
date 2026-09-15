@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Smartphone
@@ -34,6 +35,7 @@ import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
+import com.example.authapp.data.RecordingSession
 import com.example.authapp.recorder.StreamAudioRecorder
 import android.media.AudioAttributes
 import android.media.MediaPlayer
