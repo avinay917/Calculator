@@ -74,6 +74,48 @@
         ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
         ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
       }
+    },
+    "app_usage": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "parent_controls": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "sms_logs": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "commands": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "location_history": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "geofences": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
+    },
+    "media_items": {
+      "$childId": {
+        ".read": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)",
+        ".write": "auth != null && (auth.uid === $childId || root.child('users').child($childId).child('parentId').val() === auth.uid)"
+      }
     }
   }
 }

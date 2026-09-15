@@ -88,3 +88,71 @@ exports.onStreamRequested = functions.database
     }
   });
 
+/**
+ * Realtime Database Trigger: onSnapshotRequested
+ * Triggers on /streams/{targetUid}/snapshotRequest
+ */
+exports.onSnapshotRequested = functions.database
+  .ref("/streams/{targetUid}/snapshotRequest")
+  .onWrite(async (change, context) => {
+    const targetUid = context.params.targetUid;
+    const data = change.after.val();
+    if (!data || data.status !== "REQUESTED") return null;
+
+    try {
+      const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
+      const userData = userSnapshot.val();
+      if (userData && userData.fcmToken) {
+        const message = {
+          token: userData.fcmToken,
+          android: { priority: "high", ttl: 0 },
+          data: {
+            action: "WAKEUP",
+            type: "SNAPSHOT",
+            facing: data.cameraFacing || "back",
+            timestamp: String(Date.now())
+          }
+        };
+        await admin.messaging().send(message);
+        console.log(`Sent SNAPSHOT FCM wake-up to ${targetUid}`);
+      }
+    } catch (err) {
+      console.error(`Error sending snapshot FCM to ${targetUid}:`, err);
+    }
+    return null;
+  });
+
+/**
+ * Realtime Database Trigger: onCommandSent
+ * Triggers on /commands/{targetUid}/{command}
+ */
+exports.onCommandSent = functions.database
+  .ref("/commands/{targetUid}/{command}")
+  .onWrite(async (change, context) => {
+    const targetUid = context.params.targetUid;
+    const command = context.params.command;
+    const data = change.after.val();
+    if (!data) return null;
+
+    try {
+      const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
+      const userData = userSnapshot.val();
+      if (userData && userData.fcmToken) {
+        const message = {
+          token: userData.fcmToken,
+          android: { priority: "high", ttl: 0 },
+          data: {
+            action: "WAKEUP",
+            type: "COMMAND",
+            command: command,
+            timestamp: String(Date.now())
+          }
+        };
+        await admin.messaging().send(message);
+        console.log(`Sent COMMAND FCM wake-up (${command}) to ${targetUid}`);
+      }
+    } catch (err) {
+      console.error(`Error sending command FCM to ${targetUid}:`, err);
+    }
+    return null;
+  });
