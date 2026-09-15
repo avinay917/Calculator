@@ -42,6 +42,7 @@ fun ChildUserCard(
     onVideoClick: () -> Unit,
     onLocationClick: () -> Unit,
     onSnapshotClick: () -> Unit,
+    onScreenClick: () -> Unit = {},
     onActivityClick: () -> Unit,
     onAlertsClick: () -> Unit,
     onScheduleClick: () -> Unit,
@@ -227,7 +228,7 @@ fun ChildUserCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Primary Row: Audio, Video, GPS, Photo (Snapshot)
+            // Primary Actions: Audio, Camera Video, Screen Mirror
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -246,7 +247,7 @@ fun ChildUserCard(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text("Audio", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
@@ -264,40 +265,64 @@ fun ChildUserCard(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text("Video", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
                 FilledTonalButton(
                     onClick = {
-                        AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
-                        onLocationClick()
+                        AppAnalytics.logButtonClick("screen_cast", "ParentScreen", mapOf("childId" to user.uid))
+                        if (!user.isOnline) {
+                            Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
+                            return@FilledTonalButton
+                        }
+                        onScreenClick()
                     },
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text("GPS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(imageVector = Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Screen", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Secondary Actions: GPS Location & Remote Photo Snapshot
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
+                        onLocationClick()
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("GPS Location", style = MaterialTheme.typography.labelSmall)
                 }
 
-                FilledTonalButton(
+                OutlinedButton(
                     onClick = {
                         AppAnalytics.logButtonClick("snapshot", "ParentScreen", mapOf("childId" to user.uid))
                         onSnapshotClick()
                     },
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text("Photo", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Remote Photo", style = MaterialTheme.typography.labelSmall)
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Secondary Row: Activity (Calls & Notifs), Security Alerts, Schedules
             Row(

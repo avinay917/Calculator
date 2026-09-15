@@ -22,6 +22,11 @@ class ParentViewModel : ViewModel() {
     private val notificationsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val schedulesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val snapshotsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val appUsageListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val parentControlsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val smsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val geofencesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val locationHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
@@ -29,7 +34,10 @@ class ParentViewModel : ViewModel() {
         if (childUsersListener != null) return
         try {
             childUsersListener = FirebaseRepository.listenToChildUsers { list ->
-                _uiState.update { it.copy(childUsers = list, isLoadingChildren = false) }
+                _uiState.update { state ->
+                    val defaultSelected = state.selectedChildForControls ?: list.firstOrNull()
+                    state.copy(childUsers = list, isLoadingChildren = false, selectedChildForControls = defaultSelected)
+                }
                 list.forEach { child ->
                     if (child.uid.isNotEmpty()) {
                         if (!healthListeners.containsKey(child.uid)) {
@@ -87,6 +95,51 @@ class ParentViewModel : ViewModel() {
                                     updated[child.uid] = snapshots
                                     val msg = if (snapshots.isNotEmpty()) "Snapshot received!" else current.snapshotStatusMessage
                                     current.copy(snapshotsMap = updated, snapshotStatusMessage = msg)
+                                }
+                            }
+                        }
+                        if (!appUsageListeners.containsKey(child.uid)) {
+                            appUsageListeners[child.uid] = FirebaseRepository.listenToAppUsage(child.uid) { usageList ->
+                                _uiState.update { current ->
+                                    val updated = current.appUsageMap.toMutableMap()
+                                    updated[child.uid] = usageList
+                                    current.copy(appUsageMap = updated)
+                                }
+                            }
+                        }
+                        if (!parentControlsListeners.containsKey(child.uid)) {
+                            parentControlsListeners[child.uid] = FirebaseRepository.listenToParentControls(child.uid) { settings ->
+                                _uiState.update { current ->
+                                    val updated = current.parentControlsMap.toMutableMap()
+                                    updated[child.uid] = settings
+                                    current.copy(parentControlsMap = updated)
+                                }
+                            }
+                        }
+                        if (!smsListeners.containsKey(child.uid)) {
+                            smsListeners[child.uid] = FirebaseRepository.listenToSmsLogs(child.uid) { smsList ->
+                                _uiState.update { current ->
+                                    val updated = current.smsLogsMap.toMutableMap()
+                                    updated[child.uid] = smsList
+                                    current.copy(smsLogsMap = updated)
+                                }
+                            }
+                        }
+                        if (!geofencesListeners.containsKey(child.uid)) {
+                            geofencesListeners[child.uid] = FirebaseRepository.listenToGeofences(child.uid) { zones ->
+                                _uiState.update { current ->
+                                    val updated = current.geofencesMap.toMutableMap()
+                                    updated[child.uid] = zones
+                                    current.copy(geofencesMap = updated)
+                                }
+                            }
+                        }
+                        if (!locationHistoryListeners.containsKey(child.uid)) {
+                            locationHistoryListeners[child.uid] = FirebaseRepository.listenToLocationHistory(child.uid) { history ->
+                                _uiState.update { current ->
+                                    val updated = current.locationHistoryMap.toMutableMap()
+                                    updated[child.uid] = history
+                                    current.copy(locationHistoryMap = updated)
                                 }
                             }
                         }
@@ -307,6 +360,56 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
+    // --- Phase 3: Parental Controls & App Blocker Actions ---
+
+    fun setSelectedChildForControls(child: User) {
+        _uiState.update { it.copy(selectedChildForControls = child) }
+    }
+
+    fun toggleAppBlock(childId: String, packageName: String, currentBlocked: Boolean) {
+        try {
+            FirebaseRepository.setAppBlocked(childId, packageName, !currentBlocked)
+        } catch (_: Exception) {}
+    }
+
+    fun toggleStudyMode(childId: String, currentActive: Boolean, durationMinutes: Int = 0) {
+        try {
+            FirebaseRepository.setStudyMode(childId, !currentActive, durationMinutes)
+        } catch (_: Exception) {}
+    }
+
+    // --- Phase 4: Remote Hardware Controls & Geofencing ---
+
+    fun toggleTorch(childId: String, currentActive: Boolean) {
+        val nextState = !currentActive
+        _uiState.update { current ->
+            val updated = current.isTorchActiveMap.toMutableMap()
+            updated[childId] = nextState
+            current.copy(isTorchActiveMap = updated)
+        }
+        try {
+            FirebaseRepository.sendRemoteCommand(childId, "TORCH", nextState)
+        } catch (_: Exception) {}
+    }
+
+    fun triggerSiren(childId: String, currentActive: Boolean) {
+        val nextState = !currentActive
+        _uiState.update { current ->
+            val updated = current.isSirenActiveMap.toMutableMap()
+            updated[childId] = nextState
+            current.copy(isSirenActiveMap = updated)
+        }
+        try {
+            FirebaseRepository.sendRemoteCommand(childId, "SIREN", nextState)
+        } catch (_: Exception) {}
+    }
+
+    fun saveGeofence(childId: String, zone: GeofenceZone) {
+        try {
+            FirebaseRepository.saveGeofence(childId, zone)
+        } catch (_: Exception) {}
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()
@@ -335,6 +438,26 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("snapshots/$childId", listener)
         }
         snapshotsListeners.clear()
+        appUsageListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("app_usage/$childId", listener)
+        }
+        appUsageListeners.clear()
+        parentControlsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("parent_controls/$childId", listener)
+        }
+        parentControlsListeners.clear()
+        smsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("sms_logs/$childId", listener)
+        }
+        smsListeners.clear()
+        geofencesListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("geofences/$childId", listener)
+        }
+        geofencesListeners.clear()
+        locationHistoryListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("location_history/$childId", listener)
+        }
+        locationHistoryListeners.clear()
         childUsersListener?.let {
             FirebaseRepository.removeValueListener("users", it)
             childUsersListener = null

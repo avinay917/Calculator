@@ -39,7 +39,9 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Security
 import com.example.authapp.data.RecordingSession
+import com.example.authapp.ui.components.ChildControlsView
 import com.example.authapp.ui.components.ChildLocationDialog
 import com.example.authapp.ui.components.ChildUserCard
 import com.example.authapp.ui.components.ChildSnapshotDialog
@@ -353,6 +355,12 @@ fun ParentScreen(
                 NavigationBarItem(
                     selected = uiState.selectedTab == 1,
                     onClick = { viewModel.selectTab(1) },
+                    icon = { Icon(Icons.Default.Security, contentDescription = "Controls") },
+                    label = { Text("Controls") }
+                )
+                NavigationBarItem(
+                    selected = uiState.selectedTab == 2,
+                    onClick = { viewModel.selectTab(2) },
                     icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
                     label = { Text("Cloud History") }
                 )
@@ -505,6 +513,10 @@ fun ParentScreen(
                                         viewModel.startStream(child, "video")
                                         Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
                                     },
+                                    onScreenClick = {
+                                        viewModel.startStream(child, "video")
+                                        Toast.makeText(context, "Requesting Live Screen Mirror from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                    },
                                     onLocationClick = {
                                         viewModel.openLocationDialog(child)
                                     },
@@ -525,6 +537,49 @@ fun ParentScreen(
                         }
                     }
                 }
+            } else if (uiState.selectedTab == 1) {
+                val selectedChild = uiState.selectedChildForControls ?: uiState.childUsers.firstOrNull()
+                val activeUsage = if (selectedChild != null) uiState.appUsageMap[selectedChild.uid] ?: emptyList() else emptyList()
+                val activeSettings = if (selectedChild != null) uiState.parentControlsMap[selectedChild.uid] else null
+
+                ChildControlsView(
+                    childUsers = uiState.childUsers,
+                    selectedChild = selectedChild,
+                    onSelectChild = { viewModel.setSelectedChildForControls(it) },
+                    appUsageList = activeUsage,
+                    parentControls = activeSettings,
+                    isTorchActive = if (selectedChild != null) uiState.isTorchActiveMap[selectedChild.uid] == true else false,
+                    isSirenActive = if (selectedChild != null) uiState.isSirenActiveMap[selectedChild.uid] == true else false,
+                    onToggleTorch = {
+                        if (selectedChild != null) {
+                            val cur = uiState.isTorchActiveMap[selectedChild.uid] == true
+                            viewModel.toggleTorch(selectedChild.uid, cur)
+                            Toast.makeText(context, if (!cur) "Turning Torch ON..." else "Turning Torch OFF...", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onToggleSiren = {
+                        if (selectedChild != null) {
+                            val cur = uiState.isSirenActiveMap[selectedChild.uid] == true
+                            viewModel.triggerSiren(selectedChild.uid, cur)
+                            Toast.makeText(context, if (!cur) "Triggering Emergency Siren..." else "Stopping Siren...", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onToggleAppBlock = { pkg, isBlocked ->
+                        if (selectedChild != null) {
+                            viewModel.toggleAppBlock(selectedChild.uid, pkg, isBlocked)
+                            val action = if (isBlocked) "Unlocked" else "Locked"
+                            Toast.makeText(context, "App $action successfully", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onToggleStudyMode = { isActive, durationMins ->
+                        if (selectedChild != null) {
+                            viewModel.toggleStudyMode(selectedChild.uid, isActive, durationMins)
+                            val stateText = if (isActive) "Deactivated" else "Activated"
+                            Toast.makeText(context, "Study Mode $stateText", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
                 CloudRecordingsView(
                     recordings = uiState.allRecordings,
@@ -575,12 +630,13 @@ fun ParentScreen(
                 )
             }
 
-            // Call Logs & Notifications Activity Dialog (Phase 2)
+            // Call Logs, SMS & Notifications Activity Dialog (Phase 2 & 4)
             uiState.activeActivityDialogChild?.let { childUser ->
                 ChildActivityDialog(
                     childUser = childUser,
                     callLogs = uiState.callLogsMap[childUser.uid] ?: emptyList(),
                     notifications = uiState.notificationsMap[childUser.uid] ?: emptyList(),
+                    smsLogs = uiState.smsLogsMap[childUser.uid] ?: emptyList(),
                     onDismiss = { viewModel.closeActivityDialog() }
                 )
             }

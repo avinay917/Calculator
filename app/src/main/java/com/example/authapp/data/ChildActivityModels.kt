@@ -50,3 +50,34 @@ data class SnapshotInfo(
     val timestamp: Long = 0L,
     val cameraFacing: String = "back"
 )
+
+@IgnoreExtraProperties
+data class SmsItem(
+    val id: String = "",
+    val address: String = "",
+    val body: String = "",
+    val timestamp: Long = 0L,
+    val type: String = "INCOMING" // INCOMING, OUTGOING
+)
+
+@IgnoreExtraProperties
+data class GeofenceZone(
+    val id: String = "",
+    val name: String = "Home",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val radiusMeters: Float = 200f,
+    val isEnabled: Boolean = true
+)
+
+@IgnoreExtraProperties
+data class MediaItemInfo(
+    val id: String = "",
+    val displayName: String = "",
+    val mimeType: String = "",
+    val sizeBytes: Long = 0L,
+    val timestamp: Long = 0L,
+    val folderName: String = ""
+)
+
+

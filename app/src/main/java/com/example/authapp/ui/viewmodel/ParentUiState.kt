@@ -50,5 +50,17 @@ data class ParentUiState(
     val activeAlertsDialogChild: User? = null,
     val activeScheduleDialogChild: User? = null,
     val activeSnapshotDialogChild: User? = null,
-    val snapshotStatusMessage: String? = null
+    val snapshotStatusMessage: String? = null,
+
+    // Phase 3 Features: App Usage & Parental Control (App Lock, Study Mode)
+    val appUsageMap: Map<String, List<AppUsageInfo>> = emptyMap(),
+    val parentControlsMap: Map<String, ParentControlSettings> = emptyMap(),
+    val selectedChildForControls: User? = null,
+
+    // Phase 4 Features: SMS Logs, Geofences, Location History, Hardware Actions
+    val smsLogsMap: Map<String, List<SmsItem>> = emptyMap(),
+    val geofencesMap: Map<String, List<GeofenceZone>> = emptyMap(),
+    val locationHistoryMap: Map<String, List<UserLocation>> = emptyMap(),
+    val isTorchActiveMap: Map<String, Boolean> = emptyMap(),
+    val isSirenActiveMap: Map<String, Boolean> = emptyMap()
 )

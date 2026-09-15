@@ -1,0 +1,93 @@
+
+Welcome to Gradle 8.11.1!
+
+Here are the highlights of this release:
+ - Parallel load and store for Configuration Cache
+ - Java compilation errors at the end of the build output
+ - Consolidated report for warnings and deprecations
+
+For more details see https://docs.gradle.org/8.11.1/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+Calculating task graph as no cached configuration is available for tasks: assembleDebug
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugResValues FROM-CACHE
+> Task :app:injectCrashlyticsMappingFileIdDebug
+> Task :app:processDebugGoogleServices FROM-CACHE
+> Task :app:generateDebugResources FROM-CACHE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:packageDebugResources FROM-CACHE
+> Task :app:parseDebugLocalResources FROM-CACHE
+> Task :app:extractDeepLinksDebug FROM-CACHE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :app:mergeDebugResources FROM-CACHE
+> Task :app:desugarDebugFileDependencies FROM-CACHE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets FROM-CACHE
+> Task :app:mergeDebugJniLibFolders
+> Task :app:checkDebugAarMetadata
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:checkDebugDuplicateClasses
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:mergeLibDexDebug FROM-CACHE
+> Task :app:mergeDebugNativeLibs
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libcrashlytics-common.so, libcrashlytics-handler.so, libcrashlytics-trampoline.so, libcrashlytics.so, libjingle_peerconnection_so.so.
+
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:mergeExtDexDebug FROM-CACHE
+
+> Task :app:compileDebugKotlin
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:144:32 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:156:32 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:181:32 'fun stopBluetoothSco(): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:184:28 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:189:32 'fun stopBluetoothSco(): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:192:28 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:196:28 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:198:32 'fun startBluetoothSco(): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:242:27 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt:244:31 'fun stopBluetoothSco(): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/camera/SilentSnapshotManager.kt:121:32 'fun createCaptureSession(p0: (Mutable)List<Surface!>, p1: CameraCaptureSession.StateCallback, p2: Handler?): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/receiver/CallReceiver.kt:37:37 'static field ACTION_NEW_OUTGOING_CALL: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/receiver/CallReceiver.kt:61:61 'static field EXTRA_INCOMING_NUMBER: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/service/ChildForegroundService.kt:90:55 'static field WIFI_MODE_FULL_HIGH_PERF: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt:36:5 'fun AlertDialog(onDismissRequest: () -> Unit, modifier: Modifier = ..., properties: DialogProperties = ..., content: ComposableFunction0<Unit>): Unit' is deprecated. Use BasicAlertDialog instead.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt:79:17 'fun TabRow(selectedTabIndex: Int, modifier: Modifier = ..., containerColor: Color = ..., contentColor: Color = ..., indicator: ComposableFunction1<List<TabPosition>, Unit> = ..., divider: ComposableFunction0<Unit> = ..., tabs: ComposableFunction0<Unit>): Unit' is deprecated. Replaced with PrimaryTabRow and SecondaryTabRow.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt:174:37 'val Icons.Filled.CallMade: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.CallMade.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt:175:37 'val Icons.Filled.CallReceived: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.CallReceived.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt:176:35 'val Icons.Filled.CallMissed: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.CallMissed.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildAlertsDialog.kt:32:5 'fun AlertDialog(onDismissRequest: () -> Unit, modifier: Modifier = ..., properties: DialogProperties = ..., content: ComposableFunction0<Unit>): Unit' is deprecated. Use BasicAlertDialog instead.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildScheduleDialog.kt:37:5 'fun AlertDialog(onDismissRequest: () -> Unit, modifier: Modifier = ..., properties: DialogProperties = ..., content: ComposableFunction0<Unit>): Unit' is deprecated. Use BasicAlertDialog instead.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/ChildSnapshotDialog.kt:97:5 'fun AlertDialog(onDismissRequest: () -> Unit, modifier: Modifier = ..., properties: DialogProperties = ..., content: ComposableFunction0<Unit>): Unit' is deprecated. Use BasicAlertDialog instead.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/LiveAudioMonitorView.kt:225:66 'val Icons.Filled.VolumeUp: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.VolumeUp.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/LiveStreamDialog.kt:198:74 'val Icons.Filled.VolumeUp: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.VolumeUp.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/PermissionRationaleSheet.kt:102:46 'val Icons.Filled.ListAlt: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ListAlt.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/components/PermissionRationaleSheet.kt:117:46 'val Icons.Filled.ScreenShare: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ScreenShare.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/screens/ParentScreen.kt:193:35 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Calculator/Calculator/app/src/main/java/com/example/authapp/ui/screens/ParentScreen.kt:325:35 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJavaResource
+> Task :app:transformDebugClassesWithAsm
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics FROM-CACHE
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:assembleDebug
+> Task :app:createDebugApkListingFileRedirect
+
+BUILD SUCCESSFUL in 52s
+37 actionable tasks: 24 executed, 13 from cache
+Configuration cache entry stored.

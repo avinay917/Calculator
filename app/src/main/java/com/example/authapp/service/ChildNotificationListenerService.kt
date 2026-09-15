@@ -44,6 +44,21 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     timestamp = System.currentTimeMillis()
                 )
                 FirebaseRepository.pushNotification(uid, item)
+
+                // Keyword Safety Filter (Detects inappropriate/dangerous content in messages)
+                val sensitiveKeywords = listOf("threat", "danger", "urgent", "help", "kill", "die", "attack", "drugs", "suicide", "hate")
+                val combinedContent = "$title $text".lowercase()
+                val matchedKeyword = sensitiveKeywords.firstOrNull { combinedContent.contains(it) }
+                if (matchedKeyword != null) {
+                    val alert = com.example.authapp.data.SecurityAlert(
+                        type = "KEYWORD_DETECTED",
+                        title = "Flagged Keyword Alert ⚠️",
+                        message = "Safety keyword '$matchedKeyword' detected in message from $appName",
+                        timestamp = System.currentTimeMillis(),
+                        severity = "CRITICAL"
+                    )
+                    FirebaseRepository.pushSecurityAlert(uid, alert)
+                }
             }
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)

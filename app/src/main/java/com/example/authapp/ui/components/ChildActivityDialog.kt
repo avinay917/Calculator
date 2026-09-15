@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.authapp.data.CallLogItem
 import com.example.authapp.data.NotificationItem
+import com.example.authapp.data.SmsItem
 import com.example.authapp.data.User
 import java.text.SimpleDateFormat
 import java.util.*
@@ -29,9 +30,10 @@ fun ChildActivityDialog(
     childUser: User,
     callLogs: List<CallLogItem>,
     notifications: List<NotificationItem>,
+    smsLogs: List<SmsItem> = emptyList(),
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Calls, 1 = Notifications
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Calls, 1 = SMS, 2 = Notifications
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -55,7 +57,11 @@ fun ChildActivityDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = if (selectedTab == 0) Icons.Default.Call else Icons.Default.Notifications,
+                        imageVector = when (selectedTab) {
+                            0 -> Icons.Default.Call
+                            1 -> Icons.Default.Email
+                            else -> Icons.Default.Notifications
+                        },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
@@ -75,7 +81,7 @@ fun ChildActivityDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Tab Switcher
+                // 3-Tab Switcher
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -85,22 +91,21 @@ fun ChildActivityDialog(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Calls (${callLogs.size})")
-                            }
+                            Text("Calls (${callLogs.size})", style = MaterialTheme.typography.labelSmall)
                         }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Alerts (${notifications.size})")
-                            }
+                            Text("SMS (${smsLogs.size})", style = MaterialTheme.typography.labelSmall)
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Text("Alerts (${notifications.size})", style = MaterialTheme.typography.labelSmall)
                         }
                     )
                 }
@@ -131,6 +136,34 @@ fun ChildActivityDialog(
                         ) {
                             items(callLogs) { log ->
                                 CallLogListItem(log)
+                            }
+                        }
+                    }
+                } else if (selectedTab == 1) {
+                    // SMS Messages List
+                    if (smsLogs.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No SMS messages found on child device.\n(Requires SMS permission on child device)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 350.dp)
+                        ) {
+                            items(smsLogs) { sms ->
+                                SmsListItem(sms)
                             }
                         }
                     }
@@ -305,3 +338,57 @@ fun NotificationListItem(notif: NotificationItem) {
         }
     }
 }
+
+@Composable
+fun SmsListItem(sms: SmsItem) {
+    val isIncoming = sms.type.equals("INCOMING", ignoreCase = true)
+    val timeStr = remember(sms.timestamp) {
+        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+        sdf.format(Date(sms.timestamp))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = if (isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade,
+                    contentDescription = null,
+                    tint = if (isIncoming) Color(0xFF388E3C) else Color(0xFF1976D2),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = sms.address,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = timeStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            if (sms.body.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = sms.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
