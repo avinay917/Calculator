@@ -994,172 +994,6 @@ object FirebaseRepository {
         database.reference.child("parent_controls").child(childId).updateChildren(data)
     }
 
-    fun deleteRecordingSchedule(childId: String, scheduleId: String) {
-        if (childId.isEmpty() || scheduleId.isEmpty()) return
-        database.reference.child("schedules").child(childId).child(scheduleId).removeValue()
-    }
-
-    fun listenToRecordingSchedules(childId: String, onSchedules: (List<RecordingSchedule>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("schedules").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<RecordingSchedule>()
-                for (child in snapshot.children) {
-                    child.getValue(RecordingSchedule::class.java)?.let { list.add(it) }
-                }
-                onSchedules(list)
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
-
-    // --- Remote Snapshots ---
-    fun requestSnapshot(childId: String, cameraFacing: String = "back") {
-        val data = mapOf(
-            "requestedAt" to System.currentTimeMillis(),
-            "cameraFacing" to cameraFacing,
-            "status" to "REQUESTED"
-        )
-        database.reference.child("streams").child(childId).child("snapshotRequest").setValue(data)
-    }
-
-    fun listenToSnapshotRequest(childId: String, onRequested: (cameraFacing: String) -> Unit): ValueEventListener {
-        val ref = database.reference.child("streams").child(childId).child("snapshotRequest")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val status = snapshot.child("status").getValue(String::class.java)
-                if (status == "REQUESTED") {
-                    val facing = snapshot.child("cameraFacing").getValue(String::class.java) ?: "back"
-                    onRequested(facing)
-                    ref.child("status").setValue("PROCESSING")
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
-
-    fun uploadSnapshot(
-        childId: String,
-        fileUri: Uri,
-        cameraFacing: String,
-        onSuccess: (SnapshotInfo) -> Unit,
-        onFailure: (String) -> Unit
-    ) {
-        val timestamp = System.currentTimeMillis()
-        val storageRef = storage.reference.child("snapshots/$childId/$timestamp.jpg")
-        storageRef.putFile(fileUri)
-            .addOnSuccessListener {
-                storageRef.downloadUrl.addOnSuccessListener { downloadUrl ->
-                    val snapshotRef = database.reference.child("snapshots").child(childId).push()
-                    val info = SnapshotInfo(
-                        id = snapshotRef.key ?: "",
-                        downloadUrl = downloadUrl.toString(),
-                        timestamp = timestamp,
-                        cameraFacing = cameraFacing
-                    )
-                    snapshotRef.setValue(info).addOnSuccessListener {
-                        database.reference.child("streams").child(childId).child("snapshotRequest").removeValue()
-                        onSuccess(info)
-                    }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "DB Error") }
-                }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "URL Error") }
-            }
-            .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Upload Error") }
-    }
-
-    fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("snapshots").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<SnapshotInfo>()
-                for (child in snapshot.children) {
-                    child.getValue(SnapshotInfo::class.java)?.let { list.add(it) }
-                }
-                onSnapshots(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
-
-    // --- Reactive Clean Architecture Flow Extensions (Best Practice) ---
-    fun listenToChildUsersFlow(): Flow<List<User>> = callbackFlow {
-        val listener = listenToChildUsers { trySend(it) }
-        awaitClose { removeValueListener("users", listener) }
-    }
-
-    fun listenToDeviceHealthFlow(childId: String): Flow<DeviceHealth?> = callbackFlow {
-        val listener = listenToDeviceHealth(childId) { trySend(it) }
-        awaitClose { removeValueListener("device_health/$childId", listener) }
-    }
-
-    fun listenToSecurityAlertsFlow(childId: String): Flow<List<SecurityAlert>> = callbackFlow {
-        val listener = listenToSecurityAlerts(childId) { trySend(it) }
-        awaitClose { removeValueListener("alerts/$childId", listener) }
-    }
-
-    fun listenToCallLogsFlow(childId: String): Flow<List<CallLogItem>> = callbackFlow {
-        val listener = listenToCallLogs(childId) { trySend(it) }
-        awaitClose { removeValueListener("call_logs/$childId", listener) }
-    }
-
-    fun listenToNotificationsFlow(childId: String): Flow<List<NotificationItem>> = callbackFlow {
-        val listener = listenToNotifications(childId) { trySend(it) }
-        awaitClose { removeValueListener("notifications/$childId", listener) }
-    }
-
-    fun listenToRecordingSchedulesFlow(childId: String): Flow<List<RecordingSchedule>> = callbackFlow {
-        val listener = listenToRecordingSchedules(childId) { trySend(it) }
-        awaitClose { removeValueListener("schedules/$childId", listener) }
-    }
-
-    // --- Parental Controls & App Usage Tracking (Phase 3) ---
-
-    fun syncAppUsage(childId: String, appUsageList: List<AppUsageInfo>) {
-        if (childId.isEmpty()) return
-        database.reference.child("app_usage").child(childId).setValue(appUsageList)
-            .addOnFailureListener { e ->
-                crashlytics.recordException(e)
-            }
-    }
-
-    fun listenToAppUsage(childId: String, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("app_usage").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<AppUsageInfo>()
-                for (item in snapshot.children) {
-                    item.getValue(AppUsageInfo::class.java)?.let { list.add(it) }
-                }
-                onUsageUpdated(list.sortedByDescending { it.totalTimeInForegroundMinutes })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
-
-    fun setAppBlocked(childId: String, packageName: String, isBlocked: Boolean) {
-        if (childId.isEmpty() || packageName.isEmpty()) return
-        val sanitizedKey = packageName.replace(".", "_")
-        database.reference.child("parent_controls").child(childId).child("blockedPackages").child(sanitizedKey).setValue(isBlocked)
-    }
-
-    fun setStudyMode(childId: String, isActive: Boolean, durationMinutes: Int = 0) {
-        if (childId.isEmpty()) return
-        val untilTimestamp = if (isActive && durationMinutes > 0) System.currentTimeMillis() + (durationMinutes * 60 * 1000L) else 0L
-        val data = mapOf(
-            "isStudyModeActive" to isActive,
-            "studyModeUntilTimestamp" to untilTimestamp,
-            "lastUpdated" to System.currentTimeMillis()
-        )
-        database.reference.child("parent_controls").child(childId).updateChildren(data)
-    }
-
     fun listenToParentControls(childId: String, onControlsUpdated: (ParentControlSettings) -> Unit): ValueEventListener {
         val ref = database.reference.child("parent_controls").child(childId)
         val listener = object : ValueEventListener {
@@ -1174,7 +1008,6 @@ object FirebaseRepository {
                 for (child in snapshot.child("blockedPackages").children) {
                     val rawPkg = child.key ?: continue
                     val isBlocked = child.getValue(Boolean::class.java) ?: false
-                    // Un-sanitize key if needed
                     val pkg = rawPkg.replace("_", ".")
                     blockedMap[pkg] = isBlocked
                     blockedMap[rawPkg] = isBlocked
@@ -1194,11 +1027,6 @@ object FirebaseRepository {
         }
         ref.addValueEventListener(listener)
         return listener
-    }
-
-    fun listenToSnapshotsFlow(childId: String): Flow<List<SnapshotInfo>> = callbackFlow {
-        val listener = listenToSnapshots(childId) { trySend(it) }
-        awaitClose { removeValueListener("snapshots/$childId", listener) }
     }
 
     // --- SMS Logs Sync (Phase 4) ---
