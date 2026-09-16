@@ -38,6 +38,7 @@ class ParentViewModel : ViewModel() {
     private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val whatsAppListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val commandsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
@@ -274,6 +275,15 @@ class ParentViewModel : ViewModel() {
                                 }
                             }
                             firestoreRegistrations.add(fsPkg)
+                        }
+                        if (!whatsAppListeners.containsKey(child.uid)) {
+                            whatsAppListeners[child.uid] = FirebaseRepository.listenToWhatsAppLogs(child.uid) { waList ->
+                                _uiState.update { current ->
+                                    val updated = current.whatsAppLogsMap.toMutableMap()
+                                    updated[child.uid] = waList
+                                    current.copy(whatsAppLogsMap = updated)
+                                }
+                            }
                         }
                         if (!commandsListeners.containsKey(child.uid)) {
                             val cmdListener = FirebaseRepository.listenToRemoteCommands(child.uid) { command, value ->
@@ -672,6 +682,10 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("package_events/$childId", listener)
         }
         packageEventsListeners.clear()
+        whatsAppListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("whatsapp_logs/$childId", listener)
+        }
+        whatsAppListeners.clear()
         commandsListeners.forEach { (childId, listener) ->
             FirebaseRepository.removeValueListener("commands/$childId", listener)
         }

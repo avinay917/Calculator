@@ -1672,5 +1672,31 @@ object FirebaseRepository {
         database.reference.child("users").child(childUid).child("parentId").addValueEventListener(listener)
         return listener
     }
+
+    // --- WhatsApp Chat & Status Monitoring ---
+    fun pushWhatsAppLog(childId: String, item: WhatsAppLogItem) {
+        val ref = database.reference.child("whatsapp_logs").child(childId).push()
+        val toSave = item.copy(id = ref.key ?: "")
+        ref.setValue(toSave)
+    }
+
+    fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener {
+        val ref = database.reference.child("whatsapp_logs").child(childId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<WhatsAppLogItem>()
+                for (child in snapshot.children) {
+                    child.getValue(WhatsAppLogItem::class.java)?.let { list.add(it) }
+                }
+                onLogs(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                FirebaseCrashlytics.getInstance().log("[Firebase whatsapp_logs cancelled] ${error.message}")
+            }
+        }
+        ref.limitToLast(100).addValueEventListener(listener)
+        return listener
+    }
 }
+
 

@@ -70,5 +70,6 @@ data class ParentUiState(
     val webHistoryMap: Map<String, List<WebHistoryItem>> = emptyMap(),
     val networkHistoryMap: Map<String, List<NetworkHistoryItem>> = emptyMap(),
     val simInfoMap: Map<String, SimCardInfo?> = emptyMap(),
-    val packageEventsMap: Map<String, List<AppInstallEvent>> = emptyMap()
+    val packageEventsMap: Map<String, List<AppInstallEvent>> = emptyMap(),
+    val whatsAppLogsMap: Map<String, List<WhatsAppLogItem>> = emptyMap()
 )

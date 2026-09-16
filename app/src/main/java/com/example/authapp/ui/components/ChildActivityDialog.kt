@@ -35,9 +35,10 @@ fun ChildActivityDialog(
     networkHistory: List<NetworkHistoryItem> = emptyList(),
     simInfo: SimCardInfo? = null,
     packageEvents: List<AppInstallEvent> = emptyList(),
+    whatsAppLogs: List<WhatsAppLogItem> = emptyList(),
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=Web, 3=Apps, 4=SIM & Network, 5=Notifications
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications
     var searchQuery by remember { mutableStateOf("") }
     var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -111,6 +112,11 @@ fun ChildActivityDialog(
         else packageEvents.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
     }
 
+    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery) {
+        if (searchQuery.isBlank()) whatsAppLogs
+        else whatsAppLogs.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
+    }
+
     val filteredNotifications = remember(notifications, searchQuery) {
         if (searchQuery.isBlank()) notifications
         else notifications.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.title.contains(searchQuery, ignoreCase = true) || it.text.contains(searchQuery, ignoreCase = true) }
@@ -139,7 +145,7 @@ fun ChildActivityDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Call Logs, Communications & Network Events",
+                                    text = "Call Logs, WhatsApp Chats & Status, Communications",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -167,7 +173,7 @@ fun ChildActivityDialog(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search calls, numbers, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = { Text("Search calls, WhatsApp, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
@@ -206,25 +212,31 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
-                            text = { Text("Web (${filteredWebHistory.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            text = { Text("WhatsApp (${filteredWhatsAppLogs.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal, color = if (selectedTab == 2) Color(0xFF25D366) else Color.Unspecified) },
+                            icon = { Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF25D366)) }
                         )
                         Tab(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
-                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            text = { Text("Web (${filteredWebHistory.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 4,
                             onClick = { selectedTab = 4 },
-                            text = { Text("SIM & Network", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.SignalCellularAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 5,
                             onClick = { selectedTab = 5 },
-                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("SIM & Network", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.SignalCellularAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 6,
+                            onClick = { selectedTab = 6 },
+                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                     }
@@ -273,6 +285,21 @@ fun ChildActivityDialog(
                                 }
                             }
                             2 -> {
+                                if (filteredWhatsAppLogs.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Chat, if (searchQuery.isNotEmpty()) "No matching WhatsApp logs found" else "No WhatsApp chats or status captured yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(filteredWhatsAppLogs) { waItem ->
+                                            WhatsAppListItem(waItem)
+                                        }
+                                    }
+                                }
+                            }
+                            3 -> {
                                 if (filteredWebHistory.isEmpty()) {
                                     EmptyStateBox(Icons.Default.Language, if (searchQuery.isNotEmpty()) "No matching web history found" else "No web browsing history yet")
                                 } else {
@@ -287,7 +314,7 @@ fun ChildActivityDialog(
                                     }
                                 }
                             }
-                            3 -> {
+                            4 -> {
                                 if (filteredPackageEvents.isEmpty()) {
                                     EmptyStateBox(Icons.Default.Apps, if (searchQuery.isNotEmpty()) "No matching app events found" else "No app install/uninstall events yet")
                                 } else {
@@ -302,7 +329,7 @@ fun ChildActivityDialog(
                                     }
                                 }
                             }
-                            4 -> {
+                            5 -> {
                                 UnifiedSimAndNetworkView(simInfo = simInfo, networkHistory = networkHistory)
                             }
                             else -> {
@@ -899,3 +926,96 @@ fun NotificationListItem(notif: NotificationItem) {
         }
     }
 }
+
+@Composable
+fun WhatsAppListItem(item: WhatsAppLogItem) {
+    val timeStr = remember(item.timestamp) {
+        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+        sdf.format(Date(item.timestamp))
+    }
+
+    val typeColor = when (item.type.uppercase()) {
+        "STATUS" -> Color(0xFF00A884)
+        "AUDIO" -> Color(0xFF34B7F1)
+        "PHOTO", "VIDEO" -> Color(0xFF9C27B0)
+        else -> Color(0xFF25D366)
+    }
+
+    val typeIcon = when (item.type.uppercase()) {
+        "STATUS" -> Icons.Default.CameraAlt
+        "AUDIO" -> Icons.Default.Mic
+        "PHOTO" -> Icons.Default.Image
+        "VIDEO" -> Icons.Default.Videocam
+        else -> Icons.Default.Chat
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(typeColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = typeIcon,
+                        contentDescription = null,
+                        tint = typeColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.senderName.ifEmpty { "WhatsApp Contact" },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = typeColor.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = item.type.uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = typeColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = item.messageText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = timeStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        }
+    }
+}
+

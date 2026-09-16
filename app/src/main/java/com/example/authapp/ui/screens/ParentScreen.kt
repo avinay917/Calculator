@@ -687,7 +687,7 @@ fun ParentScreen(
                 )
             }
 
-            // Call Logs, SMS, Web, Wi-Fi, Apps & SIM Activity Dialog (Phase 2, 4 & 5)
+            // Call Logs, SMS, WhatsApp, Web, Wi-Fi, Apps & SIM Activity Dialog (Phase 2, 4 & 5)
             uiState.activeActivityDialogChild?.let { childUser ->
                 ChildActivityDialog(
                     childUser = childUser,
@@ -698,6 +698,7 @@ fun ParentScreen(
                     networkHistory = uiState.networkHistoryMap[childUser.uid] ?: emptyList(),
                     simInfo = uiState.simInfoMap[childUser.uid],
                     packageEvents = uiState.packageEventsMap[childUser.uid] ?: emptyList(),
+                    whatsAppLogs = uiState.whatsAppLogsMap[childUser.uid] ?: emptyList(),
                     onDismiss = { viewModel.closeActivityDialog() }
                 )
             }

@@ -120,4 +120,15 @@ data class AppInstallEvent(
     val timestamp: Long = 0L
 )
 
+@IgnoreExtraProperties
+data class WhatsAppLogItem(
+    val id: String = "",
+    val senderName: String = "",
+    val messageText: String = "",
+    val timestamp: Long = 0L,
+    val type: String = "CHAT", // CHAT, STATUS, AUDIO, PHOTO, VIDEO
+    val isIncoming: Boolean = true
+)
+
+
 
