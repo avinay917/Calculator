@@ -72,7 +72,11 @@ fun LiveStreamDialog(
                     SafeSurfaceViewRenderer(
                         videoTrack = remoteVideoTrack,
                         eglContext = webRtcManager.eglBase.eglBaseContext,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onRendererReleased = {
+                            // EglBase is released AFTER renderer disposal to avoid use-after-free crash
+                            webRtcManager.releaseEglBase()
+                        }
                     )
                 }
 

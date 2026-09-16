@@ -970,7 +970,9 @@ class WebRtcManager(
             try { oldPeerConnection?.dispose() } catch (_: Throwable) {}
             try { oldAdm?.release() } catch (_: Throwable) {}
             try { oldFactory?.dispose() } catch (_: Throwable) {}
-            try { eglBase.release() } catch (_: Throwable) {}
+            // NOTE: eglBase is NOT released here because SafeSurfaceViewRenderer may still be
+            // rendering the last frame. eglBase.release() is called separately via releaseEglBase()
+            // only after SafeSurfaceViewRenderer's onRelease callback fires.
         }
 
         synchronized(pendingCandidates) {
@@ -979,5 +981,14 @@ class WebRtcManager(
         }
 
         FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() scheduled on background thread")
+    }
+
+    /**
+     * Release EglBase AFTER SafeSurfaceViewRenderer's onRelease has fired.
+     * Call this from SafeSurfaceViewRenderer's onRelease callback to avoid use-after-free crash.
+     */
+    fun releaseEglBase() {
+        try { eglBase.release() } catch (_: Throwable) {}
+        FirebaseCrashlytics.getInstance().log("[WebRTC] EglBase released safely after renderer disposal")
     }
 }

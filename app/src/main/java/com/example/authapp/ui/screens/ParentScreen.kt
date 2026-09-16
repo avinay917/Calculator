@@ -323,7 +323,6 @@ fun ParentScreen(
                 liveAudioLevel = 0f
                 remoteVideoTrack = null
                 remoteAudioTrack = null
-                webRtcManager = null
                 candidateHandler.removeCallbacksAndMessages(null)
                 val remaining = synchronized(candidateBuffer) {
                     val list = candidateBuffer.toList()
@@ -358,6 +357,9 @@ fun ParentScreen(
                 try {
                     manager?.stopStream()
                 } catch (_: Throwable) {}
+                // CRITICAL: webRtcManager = null AFTER stopStream so SafeSurfaceViewRenderer
+                // can still call releaseEglBase() via onRendererReleased callback
+                webRtcManager = null
             }
         } else {
             onDispose { }

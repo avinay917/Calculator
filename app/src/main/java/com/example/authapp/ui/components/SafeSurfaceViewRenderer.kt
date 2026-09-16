@@ -11,26 +11,30 @@ import org.webrtc.*
 private class SurfaceRendererState(
     var isInitialized: Boolean = false,
     var attachedTrack: VideoTrack? = null,
-    var pendingTrack: VideoTrack? = null
+    var pendingTrack: VideoTrack? = null,
+    var onReleasedCallback: (() -> Unit)? = null
 )
 
 @Composable
 fun SafeSurfaceViewRenderer(
     videoTrack: VideoTrack?,
     eglContext: EglBase.Context?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRendererReleased: (() -> Unit)? = null
 ) {
     if (eglContext == null) return
 
     AndroidView(
         factory = { ctx ->
-            val state = SurfaceRendererState()
+            val state = SurfaceRendererState(onReleasedCallback = onRendererReleased)
             SurfaceViewRenderer(ctx).apply {
                 tag = state
                 setEnableHardwareScaler(false)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
-                setZOrderMediaOverlay(true)
+                // CRITICAL: setZOrderMediaOverlay(false) — Dialog ke andar true hone par
+                // SurfaceView ek wrong Z-order window banata hai jo native EGL crash karta hai
+                setZOrderMediaOverlay(false)
 
                 try {
                     init(eglContext, object : RendererCommon.RendererEvents {
@@ -135,7 +139,10 @@ fun SafeSurfaceViewRenderer(
             } catch (t: Throwable) {
                 FirebaseCrashlytics.getInstance().recordException(t)
             }
+            // CRITICAL: eglBase release MUST happen AFTER renderer.release() to avoid use-after-free
+            try { state?.onReleasedCallback?.invoke() } catch (_: Throwable) {}
         },
         modifier = modifier
     )
 }
+
