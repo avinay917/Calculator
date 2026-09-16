@@ -106,3 +106,20 @@
    - Har step clear Hindi mein explain karte hue aage badho.
 3. **ZERO TOKEN-WASTE DIRECT EDITS**: Always read this `GEMINI.md` symbol index first. Never read/scan unrelated codebase files repeatedly before editing. Apply target edits directly in Turn 1.
 
+---
+
+## 7. STRICT BACKWARD COMPATIBILITY & NON-BREAKING CODE LAWS
+1. **NEVER ALTER EXISTING API CONTRACTS / MODELS**: When adding new features or fields to data classes (`CallLogItem`, `NotificationItem`, `SmsItem`, `WhatsAppLogItem`, `User`), ALL new fields MUST have default values (e.g. `= ""`, `= 0L`, `= false`). Never remove or rename existing fields.
+2. **ADDITIVE (NON-DESTRUCTIVE) FEATURE DEVELOPMENT**: New features must ALWAYS be added alongside existing features without deleting or refactoring working legacy methods. Older parent/child app installs must continue to function and sync seamlessly.
+3. **REALTIME DATABASE SCHEMA EVOLUTION**: 
+   - Never delete or alter existing nodes (`/users`, `/streams`, `/call_logs`, `/notifications`, `/recordings`).
+   - New feature nodes (e.g. `/whatsapp_logs`, `/sms_logs`, `/web_history`, `/network_history`) must be created at distinct paths so older app versions ignore them without parsing errors.
+4. **INTENT & SERVICE ACTION PRESERVATION**: Never modify existing `Intent` action strings or service action constants (`ACTION_START_SERVICE`, `ACTION_START_STREAM`, `ACTION_STOP_STREAM`) used by child background services.
+
+---
+
+## 8. FIREBASE EVOLUTION & PROACTIVE SUGGESTIONS PROTOCOL
+1. **PROACTIVE FIREBASE SUGGESTIONS**: In explanations, provide practical, step-by-step suggestions on how to improve Firebase integration (e.g., Remote Config feature flags, Database Indexing rules, Security Rules hardening, FCM topic broadcasts, Storage rules).
+2. **STAGGERED & SAFE ROLLOUTS**: Recommend OTA updates via `/app_update` with `isForceUpdate: false` by default so existing users can update smoothly without disruption.
+
+
