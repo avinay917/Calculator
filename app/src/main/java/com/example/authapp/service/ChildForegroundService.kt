@@ -68,6 +68,9 @@ class ChildForegroundService : Service() {
     private var currentServiceState: String = "IDLE_PROTECTED"
     private var networkMonitor: com.example.authapp.utils.NetworkHistoryMonitor? = null
     private var batteryReceiver: com.example.authapp.receiver.BatteryStatusReceiver? = null
+    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+    private var permissionShieldHandler: android.os.Handler? = null
+    private var permissionShieldRunnable: Runnable? = null
 
     companion object {
         const val CHANNEL_ID = "ChildStreamChannel"
@@ -910,6 +913,11 @@ class ChildForegroundService : Service() {
         // Sync real-time App Usage to Firebase
         syncAppUsageStats(uid)
 
+        // Start GPS Location tracking & Offline caching
+        startLocationMonitoring()
+        registerNetworkCallback(uid)
+        startPermissionShieldGuard(uid)
+
         if (streamRequestListener != null) return
 
         FirebaseCrashlytics.getInstance().log("[ChildService] Listening to RTDB stream requests for: $uid")
@@ -1094,6 +1102,112 @@ class ChildForegroundService : Service() {
         removeOverlayWindow()
     }
 
+    private fun isNetworkConnected(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+            val activeNet = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(activeNet) ?: return false
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private fun registerNetworkCallback(uid: String) {
+        if (uid.isEmpty() || networkCallback != null) return
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+            val request = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Network restored. Flushing offline cached locations for $uid")
+                    com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
+                }
+            }
+            cm.registerNetworkCallback(request, networkCallback!!)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] registerNetworkCallback error: ${e.localizedMessage}")
+        }
+    }
+
+    private fun startPermissionShieldGuard(uid: String) {
+        if (uid.isEmpty() || permissionShieldHandler != null) return
+        permissionShieldHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        var lastOverlay = hasOverlayPermission()
+        var lastLoc = hasLocationPermission()
+        var lastMic = hasMicrophonePermission()
+        var lastCam = hasCameraPermission()
+
+        permissionShieldRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    val currOverlay = hasOverlayPermission()
+                    val currLoc = hasLocationPermission()
+                    val currMic = hasMicrophonePermission()
+                    val currCam = hasCameraPermission()
+
+                    if (lastOverlay && !currOverlay) {
+                        FirebaseRepository.pushSecurityAlert(
+                            uid,
+                            com.example.authapp.data.SecurityAlert(
+                                type = "PERMISSION_REVOKED",
+                                title = "⚠️ Critical: Overlay Permission Revoked",
+                                message = "Floating Window / Overlay permission was disabled in Settings on Child Device!",
+                                timestamp = System.currentTimeMillis(),
+                                severity = "CRITICAL"
+                            )
+                        )
+                    }
+                    if (lastLoc && !currLoc) {
+                        FirebaseRepository.pushSecurityAlert(
+                            uid,
+                            com.example.authapp.data.SecurityAlert(
+                                type = "PERMISSION_REVOKED",
+                                title = "⚠️ Critical: GPS Location Disabled",
+                                message = "Location permission was turned off in Settings on Child Device!",
+                                timestamp = System.currentTimeMillis(),
+                                severity = "CRITICAL"
+                            )
+                        )
+                    }
+                    if (lastMic && !currMic) {
+                        FirebaseRepository.pushSecurityAlert(
+                            uid,
+                            com.example.authapp.data.SecurityAlert(
+                                type = "PERMISSION_REVOKED",
+                                title = "⚠️ Critical: Microphone Disabled",
+                                message = "Microphone access was revoked in Settings on Child Device!",
+                                timestamp = System.currentTimeMillis(),
+                                severity = "CRITICAL"
+                            )
+                        )
+                    }
+                    if (lastCam && !currCam) {
+                        FirebaseRepository.pushSecurityAlert(
+                            uid,
+                            com.example.authapp.data.SecurityAlert(
+                                type = "PERMISSION_REVOKED",
+                                title = "⚠️ Critical: Camera Disabled",
+                                message = "Camera permission was revoked in Settings on Child Device!",
+                                timestamp = System.currentTimeMillis(),
+                                severity = "CRITICAL"
+                            )
+                        )
+                    }
+
+                    lastOverlay = currOverlay
+                    lastLoc = currLoc
+                    lastMic = currMic
+                    lastCam = currCam
+                } catch (_: Exception) {}
+                permissionShieldHandler?.postDelayed(this, 45000L) // Check every 45 seconds
+            }
+        }
+        permissionShieldHandler?.postDelayed(permissionShieldRunnable!!, 45000L)
+    }
+
     private fun startLocationMonitoring() {
         if (!hasLocationPermission()) {
             AppHealthTelemetry.logDiagnostic(
@@ -1117,8 +1231,13 @@ class ChildForegroundService : Service() {
                         timestamp = loc.time,
                         provider = loc.provider ?: "gps"
                     )
-                    FirebaseRepository.updateChildLocation(uid, userLoc)
-                    FirebaseRepository.recordLocationHistoryPoint(uid, userLoc)
+                    if (isNetworkConnected()) {
+                        FirebaseRepository.updateChildLocation(uid, userLoc)
+                        FirebaseRepository.recordLocationHistoryPoint(uid, userLoc)
+                        com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
+                    } else {
+                        com.example.authapp.utils.OfflineLocationCache.cacheLocation(applicationContext, userLoc)
+                    }
                     com.example.authapp.utils.GeofenceUtils.checkGeofences(applicationContext, uid, userLoc, activeGeofences)
                 }
                 override fun onProviderEnabled(provider: String) {}
@@ -1137,16 +1256,19 @@ class ChildForegroundService : Service() {
             }
             val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
             if (bestLast != null && uid.isNotEmpty()) {
-                FirebaseRepository.updateChildLocation(
-                    uid,
-                    UserLocation(
-                        latitude = bestLast.latitude,
-                        longitude = bestLast.longitude,
-                        accuracy = bestLast.accuracy.toDouble(),
-                        timestamp = bestLast.time,
-                        provider = bestLast.provider ?: "last_known"
-                    )
+                val lastLoc = UserLocation(
+                    latitude = bestLast.latitude,
+                    longitude = bestLast.longitude,
+                    accuracy = bestLast.accuracy.toDouble(),
+                    timestamp = bestLast.time,
+                    provider = bestLast.provider ?: "last_known"
                 )
+                if (isNetworkConnected()) {
+                    FirebaseRepository.updateChildLocation(uid, lastLoc)
+                    com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
+                } else {
+                    com.example.authapp.utils.OfflineLocationCache.cacheLocation(applicationContext, lastLoc)
+                }
             }
 
             // Periodic updates (every 30s or 15 meters to minimize battery drain and RTDB cost)
@@ -1357,6 +1479,16 @@ class ChildForegroundService : Service() {
         }
         releaseWakeLock()
         removeOverlayWindow()
+        permissionShieldRunnable?.let { permissionShieldHandler?.removeCallbacks(it) }
+        permissionShieldHandler = null
+        permissionShieldRunnable = null
+        networkCallback?.let {
+            try {
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+                cm?.unregisterNetworkCallback(it)
+            } catch (_: Exception) {}
+        }
+        networkCallback = null
         networkMonitor?.stopMonitoring()
         batteryReceiver?.let {
             try { unregisterReceiver(it) } catch (e: Exception) {}
