@@ -681,13 +681,13 @@ fun ParentScreen(
             }
 
             // Live Location Map/Dialog (Phase 1 & 2)
-            uiState.activeLocationDialogChild?.let { childUser ->
+            uiState.locationDialogChild?.let { childUser ->
                 ChildLocationDialog(
                     childUser = childUser,
-                    childLocation = uiState.locationMap[childUser.uid],
-                    isRefreshingLocation = false,
+                    childLocation = uiState.childLocation,
+                    isRefreshingLocation = uiState.isRefreshingLocation,
                     onDismiss = { viewModel.closeLocationDialog() },
-                    onRefreshLocation = { viewModel.requestChildLocation(childUser.uid) }
+                    onRefreshLocation = { viewModel.requestLocationRefresh(childUser.uid) }
                 )
             }
 
@@ -757,5 +757,6 @@ fun ParentScreen(
             }
         }
     }
+}
 }
 
