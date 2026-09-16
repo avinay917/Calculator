@@ -9,7 +9,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -435,7 +437,7 @@ fun ParentScreen(
                                         .size(56.dp)
                                         .clip(CircleShape)
                                         .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .androidx.compose.foundation.clickable {
+                                        .clickable {
                                             scope.launch { drawerState.open() }
                                         },
                                     contentAlignment = Alignment.Center
@@ -667,29 +669,25 @@ fun ParentScreen(
             } else {
                 CloudRecordingsView(
                     recordings = uiState.allRecordings,
+                    childUsers = uiState.childUsers,
                     isLoading = uiState.isLoadingRecordings,
-                    currentlyPlayingRecId = uiState.currentlyPlayingRecId,
-                    onPlayRecording = { rec -> playAudioFile(rec) },
-                    onDeleteRecording = { recId ->
-                        viewModel.deleteRecording(recId)
-                        Toast.makeText(context, "Recording deleted", Toast.LENGTH_SHORT).show()
-                    },
-                    selectedFilter = uiState.recordingFilter,
+                    currentFilter = uiState.recordingFilter,
                     onFilterChange = { filter -> viewModel.setRecordingFilter(filter) },
+                    currentlyPlayingRecId = uiState.currentlyPlayingRecId,
+                    onPlayRecording = { rec -> playRecording(rec) },
+                    onStopPlayback = { stopPlayback() },
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             // Live Location Map/Dialog (Phase 1 & 2)
             uiState.activeLocationDialogChild?.let { childUser ->
-                val location = uiState.locationMap[childUser.uid]
-                val pathHistory = uiState.locationHistoryMap[childUser.uid] ?: emptyList()
                 ChildLocationDialog(
                     childUser = childUser,
-                    location = location,
-                    locationHistory = pathHistory,
-                    onRequestLocation = { viewModel.requestChildLocation(childUser.uid) },
-                    onDismiss = { viewModel.closeLocationDialog() }
+                    childLocation = uiState.locationMap[childUser.uid],
+                    isRefreshingLocation = false,
+                    onDismiss = { viewModel.closeLocationDialog() },
+                    onRefreshLocation = { viewModel.requestChildLocation(childUser.uid) }
                 )
             }
 
@@ -759,6 +757,5 @@ fun ParentScreen(
             }
         }
     }
-}
 }
 

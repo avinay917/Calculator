@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Chat
 
 @Composable
 fun ChildUserCard(
@@ -369,7 +370,7 @@ fun ChildUserCard(
                             contentColor = Color.White
                         )
                     ) {
-                        Icon(imageVector = androidx.compose.material.icons.Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("WhatsApp", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
                     }
