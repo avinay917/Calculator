@@ -58,7 +58,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 this.action = ChildForegroundService.ACTION_STOP_STREAM
             }
             try {
-                startService(intent)
+                ContextCompat.startForegroundService(this, intent)
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop stream: ${e.localizedMessage}")
                 FirebaseCrashlytics.getInstance().recordException(e)
