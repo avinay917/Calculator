@@ -1,4 +1,4 @@
-﻿package com.example.authapp.receiver
+package com.example.authapp.receiver
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -52,11 +52,11 @@ class SmsCommandReceiver : BroadcastReceiver() {
             }
             // 2. Emergency Siren Commands
             else if (upperBody.contains("#CALC#SIREN_OFF") || upperBody.contains("#SIREN_OFF")) {
-                RemoteActionsManager.stopSiren(context)
+                RemoteActionsManager.stopSiren()
                 sendSmsReply(context, senderAddress, "🚨 Emergency Siren stopped on child device.")
                 logSmsAlert(childId, "Siren Stopped via SMS Command from $senderAddress")
             } else if (upperBody.contains("#CALC#SIREN") || upperBody.contains("#SIREN_ON") || upperBody.contains("#SIREN")) {
-                RemoteActionsManager.startSiren(context)
+                RemoteActionsManager.playSiren(context, 30)
                 sendSmsReply(context, senderAddress, "🚨 Emergency Siren activated on child device at MAX volume.")
                 logSmsAlert(childId, "Siren Triggered via SMS Command from $senderAddress")
             }
