@@ -239,12 +239,12 @@ fun LiveAudioMonitorView(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // 3. Bluetooth Earbuds
+                        // 3. Bluetooth Earbuds / Headset
                         if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
                             FilterChip(
                                 selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
                                 onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
-                                label = { Text("Earbuds", style = MaterialTheme.typography.labelSmall) },
+                                label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                 },
@@ -257,7 +257,7 @@ fun LiveAudioMonitorView(
                             FilterChip(
                                 selected = currentAudioRoute == AudioOutputRoute.HEADSET,
                                 onClick = { onAudioRouteSelect(AudioOutputRoute.HEADSET) },
-                                label = { Text("Earphones", style = MaterialTheme.typography.labelSmall) },
+                                label = { Text("Wired", style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                 },

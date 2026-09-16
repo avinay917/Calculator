@@ -79,11 +79,29 @@ fun ParentScreen(
     val isBluetoothConnected by audioRouteManager.isBluetoothConnected.collectAsStateWithLifecycle()
     val isHeadsetConnected by audioRouteManager.isHeadsetConnected.collectAsStateWithLifecycle()
 
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            audioRouteManager.checkAndAutoRoute()
+        }
+    }
+
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var liveAudioLevel by remember { mutableFloatStateOf(0f) }
     var showPairingDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (!audioRouteManager.hasBluetoothPermission()) {
+                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
+        viewModel.loadChildUsers()
+        viewModel.loadAllRecordings()
+    }
 
     LaunchedEffect(uiState.userFeedbackMessage) {
         uiState.userFeedbackMessage?.let { msg ->
@@ -172,10 +190,7 @@ fun ParentScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadChildUsers()
-        viewModel.loadAllRecordings()
-    }
+
 
     LaunchedEffect(uiState.audioSensitivity, remoteAudioTrack) {
         remoteAudioTrack?.setVolume(calculateSafeAudioGain(uiState.audioSensitivity))

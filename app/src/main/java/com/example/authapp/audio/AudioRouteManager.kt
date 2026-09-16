@@ -1,6 +1,10 @@
 package com.example.authapp.audio
 
 import android.Manifest
+import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,9 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class AudioOutputRoute {
     SPEAKER,   // Main loudspeaker
-    EARPIECE,  // Phone earpiece receiver
-    BLUETOOTH, // Wireless Bluetooth headset / earbuds
-    HEADSET    // Wired 3.5mm or USB-C headset / earphones
+    EARPIECE,  // Phone earpiece receiver (kaan ke paas)
+    BLUETOOTH, // Wireless Bluetooth earbuds / headset
+    HEADSET    // Wired 3.5mm or USB-C earphones
 }
 
 class AudioRouteManager(context: Context) {
@@ -48,7 +52,7 @@ class AudioRouteManager(context: Context) {
         }
     }
 
-    private fun hasBluetoothPermission(): Boolean {
+    fun hasBluetoothPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(
                 appContext,
@@ -80,6 +84,9 @@ class AudioRouteManager(context: Context) {
             val filter = IntentFilter().apply {
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED)
                 @Suppress("DEPRECATION")
                 addAction(AudioManager.ACTION_HEADSET_PLUG)
             }
@@ -107,15 +114,29 @@ class AudioRouteManager(context: Context) {
         try {
             val am = audioManager ?: return
 
-            val hasBt: Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            var hasBt = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (hasBluetoothPermission()) {
-                    am.availableCommunicationDevices.any { isBluetoothDevice(it.type) } ||
-                    am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { isBluetoothDevice(it.type) }
-                } else false
+                    hasBt = am.availableCommunicationDevices.any { isBluetoothDevice(it.type) } ||
+                            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { isBluetoothDevice(it.type) }
+                }
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { isBluetoothDevice(it.type) }
-            } else {
-                false
+                hasBt = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { isBluetoothDevice(it.type) }
+            }
+
+            // Fallback check via BluetoothAdapter if system permissions allow
+            if (!hasBt && hasBluetoothPermission()) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val btAdapter = BluetoothAdapter.getDefaultAdapter()
+                    if (btAdapter != null && btAdapter.isEnabled) {
+                        val headsetConnected = btAdapter.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothProfile.STATE_CONNECTED
+                        val a2dpConnected = btAdapter.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_CONNECTED
+                        if (headsetConnected || a2dpConnected) {
+                            hasBt = true
+                        }
+                    }
+                } catch (_: SecurityException) {}
             }
 
             val hasHeadset: Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -164,6 +185,11 @@ class AudioRouteManager(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 when (route) {
                     AudioOutputRoute.SPEAKER -> {
+                        try {
+                            am.stopBluetoothSco()
+                            am.isBluetoothScoOn = false
+                        } catch (_: Exception) {}
+
                         val speaker = am.availableCommunicationDevices.firstOrNull {
                             it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
                         }
@@ -176,6 +202,11 @@ class AudioRouteManager(context: Context) {
                         _currentRoute.value = AudioOutputRoute.SPEAKER
                     }
                     AudioOutputRoute.EARPIECE -> {
+                        try {
+                            am.stopBluetoothSco()
+                            am.isBluetoothScoOn = false
+                        } catch (_: Exception) {}
+
                         val earpiece = am.availableCommunicationDevices.firstOrNull {
                             it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
                         }
@@ -195,13 +226,15 @@ class AudioRouteManager(context: Context) {
                         if (btComm != null) {
                             am.setCommunicationDevice(btComm)
                             am.isSpeakerphoneOn = false
-                            _currentRoute.value = AudioOutputRoute.BLUETOOTH
                         } else {
-                            // Fallback to clearing communication device so OS routes audio to standard Bluetooth A2DP/BLE device
                             am.clearCommunicationDevice()
                             am.isSpeakerphoneOn = false
-                            _currentRoute.value = AudioOutputRoute.BLUETOOTH
+                            try {
+                                am.startBluetoothSco()
+                                am.isBluetoothScoOn = true
+                            } catch (_: Exception) {}
                         }
+                        _currentRoute.value = AudioOutputRoute.BLUETOOTH
                     }
                     AudioOutputRoute.HEADSET -> {
                         val wiredComm = am.availableCommunicationDevices.firstOrNull { isWiredHeadsetDevice(it.type) }
@@ -237,11 +270,10 @@ class AudioRouteManager(context: Context) {
                         try {
                             am.startBluetoothSco()
                             am.isBluetoothScoOn = true
-                            _currentRoute.value = AudioOutputRoute.BLUETOOTH
                         } catch (_: Exception) {
                             am.isSpeakerphoneOn = false
-                            _currentRoute.value = AudioOutputRoute.BLUETOOTH
                         }
+                        _currentRoute.value = AudioOutputRoute.BLUETOOTH
                     }
                     AudioOutputRoute.HEADSET -> {
                         try {

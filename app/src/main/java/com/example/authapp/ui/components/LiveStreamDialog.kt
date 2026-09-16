@@ -213,22 +213,22 @@ fun LiveStreamDialog(
                                     FilterChip(
                                         selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
                                         onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
-                                        label = { Text("Earbuds", style = MaterialTheme.typography.labelSmall) },
+                                        label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
                                         leadingIcon = {
                                             Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                         },
-                                        modifier = Modifier.weight(0.8f)
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                                 if (isHeadsetConnected || currentAudioRoute == AudioOutputRoute.HEADSET) {
                                     FilterChip(
                                         selected = currentAudioRoute == AudioOutputRoute.HEADSET,
                                         onClick = { onAudioRouteSelect(AudioOutputRoute.HEADSET) },
-                                        label = { Text("Earphones", style = MaterialTheme.typography.labelSmall) },
+                                        label = { Text("Wired", style = MaterialTheme.typography.labelSmall) },
                                         leadingIcon = {
                                             Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                         },
-                                        modifier = Modifier.weight(0.8f)
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
