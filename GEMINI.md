@@ -48,24 +48,28 @@
 
 ### D. Parent UI & State Management
 - **Dashboard Screen**: `app/src/main/java/com/example/authapp/ui/screens/ParentScreen.kt`
-- **Live Stream Dialog**: `app/src/main/java/com/example/authapp/ui/components/LiveStreamDialog.kt`
-  - Uses `SafeSurfaceViewRenderer` for WebRTC video rendering.
-  - Controls: Mute/unmute mic, camera toggle (front/back), full-screen toggle, stop stream.
+  - Launches `LiveStreamActivity` via Intent when `activeSessionId` is non-null.
+- **Dedicated Live Stream Activity Window**: `app/src/main/java/com/example/authapp/ui/activity/LiveStreamActivity.kt`
+  - Separate Window Activity for WebRTC video/audio cast. Eliminates Samsung Exynos GPU SurfaceFlinger crashes.
+- **Live Stream View/Dialog**: `app/src/main/java/com/example/authapp/ui/components/LiveStreamDialog.kt`
+  - Uses `SafeSurfaceViewRenderer` for WebRTC video rendering with `setZOrderMediaOverlay(false)` and `onRendererReleased` callback.
+- **Child Activity Dialog**: `app/src/main/java/com/example/authapp/ui/components/ChildActivityDialog.kt`
+  - Activity Center for Calls, SMS, WhatsApp (Chats & Status), Web History, Apps, SIM & Network, Notifications.
 - **Parent ViewModel**: `app/src/main/java/com/example/authapp/ui/viewmodel/ParentViewModel.kt`
-  - `requestLiveStream(childId: String, type: StreamType)`
-  - `stopLiveStream(childId: String)`
-  - `switchCamera(childId: String, sessionId: String)`
+  - `startStream(child, streamType)`, `clearActiveSessionId()`, `stopStream()`
+  - Real-time Firebase listeners for `callLogsMap`, `whatsAppLogsMap`, `smsLogsMap`, `notificationsMap`, `webHistoryMap`, `networkHistoryMap`, `simInfoMap`, `packageEventsMap`.
 
-### E. FCM Push & Wakeup
-- **Service**: `app/src/main/java/com/example/authapp/service/MyFirebaseMessagingService.kt`
-  - Handles high-priority data payloads: `START_STREAM`, `STOP_STREAM`, `WAKEUP`, `TAKE_SNAPSHOT`.
-- **Cloud Functions Trigger**: `functions/index.js`
-  - Triggers on `/streams/{targetUid}/status`.
-  - When status changes to `REQUESTED`, sends high-priority FCM notification to the child's registered `fcmToken`.
+### E. WhatsApp Monitoring & Notification Interceptor
+- **Service**: `app/src/main/java/com/example/authapp/service/ChildNotificationListenerService.kt`
+  - Captures notifications from `com.whatsapp`, `com.whatsapp.w4b`.
+  - Categorizes into `CHAT`, `STATUS`, `AUDIO`, `PHOTO`, `VIDEO` and pushes to `/whatsapp_logs/{childId}` via `FirebaseRepository.pushWhatsAppLog()`.
 
-### F. Silent Snapshot & Call Recording
-- **Snapshot**: `app/src/main/java/com/example/authapp/camera/SilentSnapshotManager.kt` (`takeSilentPhoto(context, facing, onComplete)`)
-- **Call Recorder**: `app/src/main/java/com/example/authapp/recorder/CallRecorder.kt` (MediaRecorder background recording with storage upload).
+### F. Bluetooth Audio & Device Controls
+- **Audio Routing**: `app/src/main/java/com/example/authapp/audio/AudioRouteManager.kt` (BT headset auto-routing & permissions).
+- **SMS Commands**: `app/src/main/java/com/example/authapp/receiver/SmsCommandReceiver.kt` (`#CALC#LOC`, `#CALC#SIREN`, `#CALC#TORCH_ON/OFF`).
+- **Offline Location Cache**: `app/src/main/java/com/example/authapp/utils/OfflineLocationCache.kt`.
+- **FCM Push & Wakeup**: `app/src/main/java/com/example/authapp/service/MyFirebaseMessagingService.kt` (`START_STREAM`, `STOP_STREAM`, `WAKEUP`, `TAKE_SNAPSHOT`).
+- **Cloud Functions**: `functions/index.js` (FCM trigger on `/streams/{targetUid}/status`).
 
 ---
 
@@ -76,15 +80,21 @@
 - `/recordings/{childId}/{recId}`: `{ downloadUrl: string, timestamp: number, duration: number, type: "call"|"stream" }`
 - `/snapshots/{childId}`: `{ status: "REQUESTED"|"COMPLETED", downloadUrl: string, timestamp: number }`
 - `/call_logs/{childId}`: `{ logs: [...] }`
+- `/whatsapp_logs/{childId}`: `{ logs: [{ senderName, messageText, timestamp, type, isIncoming }] }`
+- `/sms_logs/{childId}`: `{ logs: [...] }`
 - `/notifications/{childId}`: `{ notifications: [...] }`
+- `/web_history/{childId}`: `{ history: [...] }`
+- `/network_history/{childId}`: `{ history: [...] }`
+- `/sim_info/{childId}`: `{ operatorName, countryIso, simState, lastUpdated }`
 - `/app_update`: `{ latestVersion: string, downloadUrl: string }`
 
 ---
 
 ## 5. Critical Technical Constraints
 1. **VP8 Video Only**: Never use H264 or VP9 without VP8 fallback; Samsung Exynos chips fail WebRTC decode unless VP8 is first.
-2. **Overlay Permission**: `SYSTEM_ALERT_WINDOW` is mandatory for background camera on Android 10+.
-3. **No Local Gradle Builds**: Test and build strictly via GitHub Actions CI/CD (`gh run list`).
+2. **Dedicated Activity for Live Video**: Always launch `LiveStreamActivity` for WebRTC live video/audio cast to avoid SurfaceFlinger GPU crashes.
+3. **Overlay Permission**: `SYSTEM_ALERT_WINDOW` is mandatory for background camera on Android 10+.
+4. **No Local Gradle Builds**: Test and build strictly via GitHub Actions CI/CD (`gh run list`).
 
 ---
 
@@ -94,3 +104,5 @@
    - "Ab main yeh kaam kar raha hoon..."
    - "Is change se yeh problem fix ho rahi hai..."
    - Har step clear Hindi mein explain karte hue aage badho.
+3. **ZERO TOKEN-WASTE DIRECT EDITS**: Always read this `GEMINI.md` symbol index first. Never read/scan unrelated codebase files repeatedly before editing. Apply target edits directly in Turn 1.
+
