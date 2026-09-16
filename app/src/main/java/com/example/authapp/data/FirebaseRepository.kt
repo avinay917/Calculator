@@ -97,6 +97,7 @@ object FirebaseRepository {
         fullName: String,
         email: String,
         password: String,
+        role: String = "child",
         onResult: (success: Boolean, errorMessage: String?) -> Unit
     ) {
         auth.createUserWithEmailAndPassword(email, password)
@@ -107,7 +108,7 @@ object FirebaseRepository {
                         uid = uid,
                         name = fullName,
                         email = email,
-                        role = "child", // Default role assigned to all newly created accounts
+                        role = if (role.lowercase() == "parent") "parent" else "child", // Explicit role assignment
                         isOnline = false
                     )
                     database.reference.child("users").child(uid).setValue(user)
@@ -532,7 +533,7 @@ object FirebaseRepository {
             streamType = streamType,
             durationSeconds = durationSeconds,
             status = "SAVED",
-            storageUrl = if (localFilePath.isNotEmpty()) "file://$localFilePath" else "gs://apnasatthilko.appspot.com/recordings/$childId/$recId.mp4",
+            storageUrl = if (localFilePath.isNotEmpty()) "file://$localFilePath" else "",
             localFilePath = localFilePath
         )
         database.reference.child("recordings").child(childId).child(recId).setValue(session)
@@ -1567,6 +1568,18 @@ object FirebaseRepository {
                     onResult(false, null, "Invalid pairing code. Please check code on Parent app.")
                     return
                 }
+                val isUsed = snapshot.child("isUsed").getValue(Boolean::class.java) ?: false
+                if (isUsed) {
+                    onResult(false, null, "Pairing code has already been used. Please generate a new code.")
+                    return
+                }
+                val createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: 0L
+                val ageMs = System.currentTimeMillis() - createdAt
+                if (createdAt > 0L && ageMs > 15 * 60 * 1000L) { // 15-minute expiration limit
+                    onResult(false, null, "Pairing code has expired. Please generate a new 6-digit code on Parent app.")
+                    return
+                }
+
                 val parentUid = snapshot.child("parentUid").getValue(String::class.java)
                 val parentEmail = snapshot.child("parentEmail").getValue(String::class.java) ?: "Parent"
                 if (parentUid.isNullOrEmpty()) {
@@ -1581,7 +1594,13 @@ object FirebaseRepository {
                     .addOnCompleteListener { updateTask ->
                         if (updateTask.isSuccessful) {
                             try {
-                                database.reference.child("pairing_codes").child(trimmedCode).child("linkedChildUid").setValue(childUid)
+                                database.reference.child("pairing_codes").child(trimmedCode).updateChildren(
+                                    mapOf(
+                                        "linkedChildUid" to childUid,
+                                        "isUsed" to true,
+                                        "linkedAt" to ServerValue.TIMESTAMP
+                                    )
+                                )
                             } catch (_: Exception) {}
                             try {
                                 firestore.collection("users").document(childUid)

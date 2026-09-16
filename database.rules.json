@@ -3,12 +3,14 @@
     "users": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null"
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)"
       }
     },
     "streams": {
-      ".read": "auth != null",
-      ".write": "auth != null"
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+      }
     },
     "signaling": {
       "$sessionId": {
@@ -17,8 +19,10 @@
       }
     },
     "recordings": {
-      ".read": "auth != null",
-      ".write": "auth != null"
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+      }
     },
     "app_update": {
       ".read": true,

@@ -96,15 +96,30 @@ fun ChildUserCard(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (user.isOnline) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                ) {
-                    Text(
-                        text = if (user.isOnline) "🟢 Online" else "⚪ Offline",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (user.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (user.isOnline) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (user.isOnline) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (user.isOnline) Color(0xFF16A34A) else Color(0xFF9CA3AF))
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (user.isOnline) "Online" else "Offline",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (user.isOnline) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 

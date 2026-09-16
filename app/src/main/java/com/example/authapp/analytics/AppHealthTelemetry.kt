@@ -128,6 +128,17 @@ object AppHealthTelemetry {
         )
 
         try {
+            val now = System.currentTimeMillis()
+            val prefs = context.getSharedPreferences("telemetry_throttle_prefs", Context.MODE_PRIVATE)
+            val lastSync = prefs.getLong("last_health_sync_$uid", 0L)
+            val lastState = prefs.getString("last_health_state_$uid", "")
+
+            // Only skip write if state is unchanged and less than 60 seconds have elapsed
+            if (serviceState == lastState && (now - lastSync) < 60_000L) {
+                return
+            }
+
+            prefs.edit().putLong("last_health_sync_$uid", now).putString("last_health_state_$uid", serviceState).apply()
             database.reference.child("device_health").child(uid).updateChildren(healthData)
 
             if (batteryPercent in 1..15 && !isCharging) {

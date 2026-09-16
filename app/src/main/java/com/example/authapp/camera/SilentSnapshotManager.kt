@@ -92,8 +92,33 @@ class SilentSnapshotManager(private val context: Context) {
                                     buffer.get(bytes)
 
                                     val outFile = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.jpg")
-                                    FileOutputStream(outFile).use { fos ->
-                                        fos.write(bytes)
+                                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                    if (bitmap != null) {
+                                        // Downscale to max 1280x720 while maintaining aspect ratio
+                                        val maxDim = 1280
+                                        val width = bitmap.width
+                                        val height = bitmap.height
+                                        val (newWidth, newHeight) = if (width > maxDim || height > maxDim) {
+                                            if (width > height) {
+                                                Pair(maxDim, (maxDim * height.toFloat() / width).toInt())
+                                            } else {
+                                                Pair((maxDim * width.toFloat() / height).toInt(), maxDim)
+                                            }
+                                        } else {
+                                            Pair(width, height)
+                                        }
+                                        val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                                        FileOutputStream(outFile).use { fos ->
+                                            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos)
+                                        }
+                                        if (scaledBitmap != bitmap) {
+                                            scaledBitmap.recycle()
+                                        }
+                                        bitmap.recycle()
+                                    } else {
+                                        FileOutputStream(outFile).use { fos ->
+                                            fos.write(bytes)
+                                        }
                                     }
                                     onCaptured(outFile)
                                 } catch (e: Exception) {

@@ -41,8 +41,10 @@
 # WebRTC (io.getstream:stream-webrtc-android)
 # ============================
 -keep class org.webrtc.** { *; }
+-keepclassmembers class org.webrtc.** { *; }
 -dontwarn org.webrtc.**
 -keep class io.getstream.webrtc.** { *; }
+-keepclassmembers class io.getstream.webrtc.** { *; }
 -dontwarn io.getstream.webrtc.**
 
 # WebRTC JNI native bindings - must never be stripped

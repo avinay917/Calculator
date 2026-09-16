@@ -144,9 +144,9 @@ class AudioRouteManager(context: Context) {
     private fun isBluetoothDevice(type: Int): Boolean {
         return type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-               type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+               (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && type == AudioDeviceInfo.TYPE_BLE_HEADSET) ||
                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && type == AudioDeviceInfo.TYPE_BLE_SPEAKER) ||
-               type == AudioDeviceInfo.TYPE_HEARING_AID
+               (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && type == AudioDeviceInfo.TYPE_HEARING_AID)
     }
 
     private fun isWiredHeadsetDevice(type: Int): Boolean {

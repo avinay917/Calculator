@@ -91,10 +91,12 @@
             android:foregroundServiceType="dataSync|location|microphone|camera" />
 
         <!-- Device Boot Receiver to Restore Protection -->
+        <!-- Protected against 3rd-party intent spoofing via RECEIVE_BOOT_COMPLETED permission -->
         <receiver
             android:name="com.example.authapp.receiver.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

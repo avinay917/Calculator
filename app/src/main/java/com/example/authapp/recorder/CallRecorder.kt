@@ -112,7 +112,10 @@ class CallRecorder(private val context: Context) {
         try {
             mediaRecorder?.apply {
                 try {
-                    stop()
+                    val durationMs = if (recordingStartTimeMillis > 0L) System.currentTimeMillis() - recordingStartTimeMillis else 0L
+                    if (durationMs > 500L) { // Only stop if recorded for more than 0.5s to prevent stop failed IllegalStateException
+                        stop()
+                    }
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[CallRecorder] Stop failed: ${e.localizedMessage}")
                 }

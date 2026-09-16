@@ -3,6 +3,7 @@ package com.example.authapp.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.authapp.data.*
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ParentViewModel : ViewModel() {
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(throwable)
+        _uiState.update { it.copy(userFeedbackMessage = "Network operation failed: ${throwable.localizedMessage}") }
+    }
+
     private val _uiState = MutableStateFlow(ParentUiState())
     val uiState: StateFlow<ParentUiState> = _uiState.asStateFlow()
 
@@ -341,7 +347,7 @@ class ParentViewModel : ViewModel() {
     fun onRecordingStarted() {
         _uiState.update { it.copy(isRecording = true, recordingDurationSeconds = 0L) }
         recordingTimerJob?.cancel()
-        recordingTimerJob = viewModelScope.launch {
+        recordingTimerJob = viewModelScope.launch(coroutineExceptionHandler) {
             while (true) {
                 delay(1000L)
                 _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }

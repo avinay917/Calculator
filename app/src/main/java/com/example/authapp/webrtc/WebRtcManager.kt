@@ -237,8 +237,8 @@ class WebRtcManager(
                 }
 
                 if (!started) {
-                    try { capturer.dispose() } catch (e: Exception) {}
-                    try { surfaceTextureHelper?.dispose() } catch (e: Exception) {}
+                    try { capturer.dispose() } catch (_: Exception) {}
+                    try { surfaceTextureHelper?.dispose() } catch (_: Exception) {}
                     surfaceTextureHelper = null
                     videoCapturer = null
 
@@ -265,10 +265,24 @@ class WebRtcManager(
                     videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
                     videoTrack?.setEnabled(true)
                     videoTrack?.let { vt ->
-                        peerConnection?.addTransceiver(
+                        val transceiver = peerConnection?.addTransceiver(
                             vt,
                             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
                         )
+                        // Adaptive Bitrate Configuration: Limit video stream max bitrate to 1Mbps to prevent network congestion
+                        try {
+                            val sender = transceiver?.sender
+                            val parameters = sender?.parameters
+                            if (parameters != null && parameters.encodings.isNotEmpty()) {
+                                for (encoding in parameters.encodings) {
+                                    encoding.maxBitrateBps = 1000 * 1000 // 1 Mbps max bitrate for 480p/720p
+                                    encoding.minBitrateBps = 150 * 1000  // 150 Kbps fallback for weak network
+                                }
+                                sender.parameters = parameters
+                            }
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().log("[WebRTC] Adaptive bitrate config notice: ${e.localizedMessage}")
+                        }
                     }
                     FirebaseCrashlytics.getInstance().log("[WebRTC] Video track added to PeerConnection via transceiver (started=$started)")
                 } else {
@@ -918,52 +932,45 @@ class WebRtcManager(
         isCameraRunning = false
         stopAudioLevelMonitoring()
 
-        // Release audio effects
-        try { hardwareAgc?.release() } catch (_: Throwable) {}
-        hardwareAgc = null
-        try { hardwareNs?.release() } catch (_: Throwable) {}
-        hardwareNs = null
-        try { loudnessEnhancer?.release() } catch (_: Throwable) {}
-        loudnessEnhancer = null
+        val oldCapturer = videoCapturer
+        val oldSurfaceHelper = surfaceTextureHelper
+        val oldVideoTrack = videoTrack
+        val oldVideoSource = videoSource
+        val oldAudioTrack = audioTrack
+        val oldAudioSource = audioSource
+        val oldPeerConnection = peerConnection
+        val oldAdm = audioDeviceModule
+        val oldFactory = factory
 
-        // Stop and dispose camera capturer safely
-        try { videoCapturer?.stopCapture() } catch (_: Throwable) {}
-        try { videoCapturer?.dispose() } catch (_: Throwable) {}
         videoCapturer = null
-
-        // Dispose surface texture helper
-        try { surfaceTextureHelper?.dispose() } catch (_: Throwable) {}
         surfaceTextureHelper = null
-
-        // Dispose video track & source
-        try { videoTrack?.setEnabled(false); videoTrack?.dispose() } catch (_: Throwable) {}
         videoTrack = null
-        try { videoSource?.dispose() } catch (_: Throwable) {}
         videoSource = null
-
-        // Dispose audio track & source
-        try { audioTrack?.setEnabled(false); audioTrack?.dispose() } catch (_: Throwable) {}
         audioTrack = null
-        try { audioSource?.dispose() } catch (_: Throwable) {}
         audioSource = null
-
-        // Close peer connection
-        try { peerConnection?.dispose() } catch (_: Throwable) {}
         peerConnection = null
-
-        // Release audio device module
-        try { audioDeviceModule?.release() } catch (_: Throwable) {}
         audioDeviceModule = null
-
-        // Dispose factory
-        try { factory?.dispose() } catch (_: Throwable) {}
         factory = null
 
-        // Release EGL context
-        try {
-            eglBase.release()
-        } catch (t: Throwable) {
-            FirebaseCrashlytics.getInstance().log("[WebRTC] eglBase release error: ${t.localizedMessage}")
+        // Offload native C++ cleanup to background executor to prevent UI thread blocking
+        java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+            try { hardwareAgc?.release() } catch (_: Throwable) {}
+            try { hardwareNs?.release() } catch (_: Throwable) {}
+            try { loudnessEnhancer?.release() } catch (_: Throwable) {}
+
+            try { oldCapturer?.stopCapture() } catch (_: Throwable) {}
+            try { oldCapturer?.dispose() } catch (_: Throwable) {}
+            try { oldSurfaceHelper?.dispose() } catch (_: Throwable) {}
+
+            try { oldVideoTrack?.setEnabled(false); oldVideoTrack?.dispose() } catch (_: Throwable) {}
+            try { oldVideoSource?.dispose() } catch (_: Throwable) {}
+            try { oldAudioTrack?.setEnabled(false); oldAudioTrack?.dispose() } catch (_: Throwable) {}
+            try { oldAudioSource?.dispose() } catch (_: Throwable) {}
+
+            try { oldPeerConnection?.dispose() } catch (_: Throwable) {}
+            try { oldAdm?.release() } catch (_: Throwable) {}
+            try { oldFactory?.dispose() } catch (_: Throwable) {}
+            try { eglBase.release() } catch (_: Throwable) {}
         }
 
         synchronized(pendingCandidates) {
@@ -971,6 +978,6 @@ class WebRtcManager(
             isRemoteDescriptionSet = false
         }
 
-        FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() complete — all resources cleanly released")
+        FirebaseCrashlytics.getInstance().log("[WebRTC] stopStream() scheduled on background thread")
     }
 }
