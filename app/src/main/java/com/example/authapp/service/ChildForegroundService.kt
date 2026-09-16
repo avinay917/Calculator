@@ -1108,7 +1108,7 @@ class ChildForegroundService : Service() {
                     val userLoc = UserLocation(
                         latitude = loc.latitude,
                         longitude = loc.longitude,
-                        accuracy = loc.accuracy,
+                        accuracy = loc.accuracy.toDouble(),
                         timestamp = loc.time,
                         provider = loc.provider ?: "gps"
                     )
@@ -1137,7 +1137,7 @@ class ChildForegroundService : Service() {
                     UserLocation(
                         latitude = bestLast.latitude,
                         longitude = bestLast.longitude,
-                        accuracy = bestLast.accuracy,
+                        accuracy = bestLast.accuracy.toDouble(),
                         timestamp = bestLast.time,
                         provider = bestLast.provider ?: "last_known"
                     )
@@ -1203,7 +1203,7 @@ class ChildForegroundService : Service() {
                             UserLocation(
                                 latitude = loc.latitude,
                                 longitude = loc.longitude,
-                                accuracy = loc.accuracy,
+                                accuracy = loc.accuracy.toDouble(),
                                 timestamp = loc.time,
                                 provider = loc.provider ?: "gps_refresh"
                             )
