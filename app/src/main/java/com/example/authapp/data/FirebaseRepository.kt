@@ -640,6 +640,7 @@ object FirebaseRepository {
             }
             override fun onCancelled(error: DatabaseError) {
                 FirebaseCrashlytics.getInstance().log("[Firebase allRecordings cancelled] ${error.message}")
+                onRecordingsUpdated(emptyList())
             }
         }
         database.reference.child("recordings").limitToLast(50).addValueEventListener(listener)
@@ -1522,7 +1523,8 @@ object FirebaseRepository {
                 if (!existingCode.isNullOrBlank()) {
                     database.reference.child("pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(codeSnap: DataSnapshot) {
-                            if (codeSnap.exists()) {
+                            val isUsed = codeSnap.child("isUsed").getValue(Boolean::class.java) ?: false
+                            if (codeSnap.exists() && !isUsed) {
                                 onComplete(existingCode, null)
                             } else {
                                 createNewPairingCode(parentUid, parentEmail, onComplete)
@@ -1541,6 +1543,10 @@ object FirebaseRepository {
                 createNewPairingCode(parentUid, parentEmail, onComplete)
             }
         })
+    }
+
+    fun generateNewParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        createNewPairingCode(parentUid, parentEmail, onComplete)
     }
 
     private fun createNewPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {

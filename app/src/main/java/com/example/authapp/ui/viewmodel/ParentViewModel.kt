@@ -38,6 +38,8 @@ class ParentViewModel : ViewModel() {
     private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val commandsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
@@ -273,6 +275,27 @@ class ParentViewModel : ViewModel() {
                             }
                             firestoreRegistrations.add(fsPkg)
                         }
+                        if (!commandsListeners.containsKey(child.uid)) {
+                            val cmdListener = FirebaseRepository.listenToRemoteCommands(child.uid) { command, value ->
+                                val isActive = (value == true || value == "true")
+                                _uiState.update { current ->
+                                    when (command) {
+                                        "TORCH" -> {
+                                            val updated = current.isTorchActiveMap.toMutableMap()
+                                            updated[child.uid] = isActive
+                                            current.copy(isTorchActiveMap = updated)
+                                        }
+                                        "SIREN" -> {
+                                            val updated = current.isSirenActiveMap.toMutableMap()
+                                            updated[child.uid] = isActive
+                                            current.copy(isSirenActiveMap = updated)
+                                        }
+                                        else -> current
+                                    }
+                                }
+                            }
+                            commandsListeners[child.uid] = cmdListener
+                        }
                     }
                 }
             }
@@ -421,20 +444,34 @@ class ParentViewModel : ViewModel() {
 
     fun selectTab(tabIndex: Int) {
         _uiState.update { it.copy(selectedTab = tabIndex) }
-        if (tabIndex == 1) {
+        if (tabIndex == 2) {
             loadAllRecordings()
         }
     }
 
     fun loadAllRecordings() {
-        if (recordingsListener != null) return
+        val children = _uiState.value.childUsers
+        if (children.isEmpty()) {
+            _uiState.update { it.copy(allRecordings = emptyList(), isLoadingRecordings = false) }
+            return
+        }
         _uiState.update { it.copy(isLoadingRecordings = true) }
-        try {
-            recordingsListener = FirebaseRepository.listenToAllRecordings { list ->
-                _uiState.update { it.copy(allRecordings = list, isLoadingRecordings = false) }
+        var pendingCount = children.size
+        children.forEach { child ->
+            if (child.uid.isNotEmpty()) {
+                FirebaseRepository.listenToRecordings(child.uid) { list ->
+                    synchronized(childRecordingsMap) {
+                        childRecordingsMap[child.uid] = list
+                        val merged = childRecordingsMap.values.flatten().sortedByDescending { it.startTime }
+                        _uiState.update { it.copy(allRecordings = merged, isLoadingRecordings = false) }
+                    }
+                }
+            } else {
+                pendingCount--
+                if (pendingCount <= 0) {
+                    _uiState.update { it.copy(isLoadingRecordings = false) }
+                }
             }
-        } catch (e: Exception) {
-            _uiState.update { it.copy(isLoadingRecordings = false) }
         }
     }
 
@@ -635,6 +672,10 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("package_events/$childId", listener)
         }
         packageEventsListeners.clear()
+        commandsListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("commands/$childId", listener)
+        }
+        commandsListeners.clear()
         firestoreRegistrations.forEach { it.remove() }
         firestoreRegistrations.clear()
         childUsersListener?.let {

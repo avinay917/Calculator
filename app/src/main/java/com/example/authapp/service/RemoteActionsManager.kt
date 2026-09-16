@@ -38,8 +38,11 @@ object RemoteActionsManager {
         }
     }
 
-    fun playSiren(context: Context, durationSeconds: Int = 30) {
+    private var onSirenFinishedCallback: (() -> Unit)? = null
+
+    fun playSiren(context: Context, durationSeconds: Int = 30, onFinished: (() -> Unit)? = null) {
         stopSiren()
+        onSirenFinishedCallback = onFinished
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             audioManager?.setStreamVolume(
@@ -72,6 +75,8 @@ object RemoteActionsManager {
             FirebaseCrashlytics.getInstance().log("[RemoteAction] Emergency Siren triggered for $durationSeconds s")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[RemoteAction] Siren error: ${e.localizedMessage}")
+            onSirenFinishedCallback?.invoke()
+            onSirenFinishedCallback = null
         }
     }
 
@@ -84,5 +89,7 @@ object RemoteActionsManager {
         } catch (_: Exception) {}
         mediaPlayer = null
         isSirenPlaying = false
+        onSirenFinishedCallback?.invoke()
+        onSirenFinishedCallback = null
     }
 }

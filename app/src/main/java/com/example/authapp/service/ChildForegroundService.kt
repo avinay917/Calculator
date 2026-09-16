@@ -870,8 +870,15 @@ class ChildForegroundService : Service() {
                     }
                     "SIREN" -> {
                         val enable = value == true || value == "true"
-                        if (enable) RemoteActionsManager.playSiren(applicationContext, 30)
-                        else RemoteActionsManager.stopSiren()
+                        if (enable) {
+                            RemoteActionsManager.playSiren(applicationContext, 30) {
+                                try {
+                                    FirebaseRepository.sendRemoteCommand(uid, "SIREN", false)
+                                } catch (_: Exception) {}
+                            }
+                        } else {
+                            RemoteActionsManager.stopSiren()
+                        }
                     }
                 }
             }

@@ -63,6 +63,21 @@ fun PairingCodeDialog(
         }
     }
 
+    fun generateNewCode() {
+        if (currentUid.isEmpty()) return
+        isLoading = true
+        errorMessage = null
+        FirebaseRepository.generateNewParentPairingCode(currentUid, parentEmail) { code, err ->
+            isLoading = false
+            if (code != null) {
+                pairingCode = code
+                Toast.makeText(context, "New pairing code generated!", Toast.LENGTH_SHORT).show()
+            } else {
+                errorMessage = err ?: "Failed to generate pairing code"
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         loadCode()
     }
@@ -266,13 +281,26 @@ fun PairingCodeDialog(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(14.dp))
-                            Button(
-                                onClick = { copyToClipboard(code) },
-                                shape = RoundedCornerShape(12.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Copy Code")
+                                Button(
+                                    onClick = { copyToClipboard(code) },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Copy Code")
+                                }
+                                OutlinedButton(
+                                    onClick = { generateNewCode() },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("New Code")
+                                }
                             }
                         }
                     }
