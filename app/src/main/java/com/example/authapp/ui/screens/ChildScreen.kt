@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -46,13 +47,15 @@ fun ChildScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val currentChildUid = remember { com.example.authapp.data.FirebaseRepository.currentUser?.uid ?: "" }
+    val currentChildUid = com.example.authapp.data.FirebaseRepository.currentUser?.uid ?: ""
     var linkedParentId by remember { mutableStateOf("") }
     var pairingCodeInput by remember { mutableStateOf("") }
     var isPairingLoading by remember { mutableStateOf(false) }
     var pairingMessage by remember { mutableStateOf<String?>(null) }
     var isPairingError by remember { mutableStateOf(false) }
     var showChangePairingForm by remember { mutableStateOf(false) }
+    var showPairingSuccessDialog by remember { mutableStateOf(false) }
+    var pairedParentEmail by remember { mutableStateOf("") }
 
     DisposableEffect(currentChildUid) {
         if (currentChildUid.isEmpty()) return@DisposableEffect onDispose {}
@@ -359,8 +362,10 @@ fun ChildScreen(
                                     isPairingLoading = false
                                     if (success) {
                                         isPairingError = false
-                                        pairingMessage = "Connected to ${parentEmail ?: "Parent"} successfully!"
+                                        pairedParentEmail = parentEmail ?: "Parent"
+                                        pairingMessage = "Connected to $pairedParentEmail successfully!"
                                         showChangePairingForm = false
+                                        showPairingSuccessDialog = true
                                         pairingCodeInput = ""
                                         com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
                                     } else {
@@ -605,6 +610,42 @@ fun ChildScreen(
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
             Text("Sign Out", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        if (showPairingSuccessDialog) {
+            AlertDialog(
+                onDismissRequest = { showPairingSuccessDialog = false },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(52.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Device Paired Successfully!",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = "This phone is now securely connected with $pairedParentEmail. Background protection and remote monitoring are fully active.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showPairingSuccessDialog = false },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Continue")
+                    }
+                }
+            )
         }
     }
 }

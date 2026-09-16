@@ -85,6 +85,13 @@ fun ParentScreen(
     var liveAudioLevel by remember { mutableFloatStateOf(0f) }
     var showPairingDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(uiState.userFeedbackMessage) {
+        uiState.userFeedbackMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            viewModel.clearUserFeedbackMessage()
+        }
+    }
+
     fun toggleRecording(streamType: String) {
         val childId = uiState.activeChildId ?: return
         if (uiState.isRecording) {
@@ -655,6 +662,7 @@ fun ParentScreen(
                     childUser = childUser,
                     snapshots = uiState.snapshotsMap[childUser.uid] ?: emptyList(),
                     statusMessage = uiState.snapshotStatusMessage,
+                    isCapturing = uiState.isSnapshotCapturing,
                     onRequestSnapshot = { facing ->
                         viewModel.requestSnapshot(childUser.uid, facing)
                     },

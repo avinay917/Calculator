@@ -21,6 +21,7 @@ data class ParentUiState(
     // Recording state
     val isRecording: Boolean = false,
     val recordingDurationSeconds: Long = 0L,
+    val userFeedbackMessage: String? = null,
 
     // Location tracking dialog
     val locationDialogChild: User? = null,
@@ -51,6 +52,7 @@ data class ParentUiState(
     val activeScheduleDialogChild: User? = null,
     val activeSnapshotDialogChild: User? = null,
     val snapshotStatusMessage: String? = null,
+    val isSnapshotCapturing: Boolean = false,
 
     // Phase 3 Features: App Usage & Parental Control (App Lock, Study Mode)
     val appUsageMap: Map<String, List<AppUsageInfo>> = emptyMap(),

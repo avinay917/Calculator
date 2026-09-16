@@ -924,6 +924,31 @@ object FirebaseRepository {
             .addOnFailureListener { e -> onFailure(e.localizedMessage ?: "Upload Error") }
     }
 
+    fun reportSnapshotError(childId: String, error: String) {
+        val data = mapOf<String, Any>(
+            "status" to "FAILED",
+            "error" to error,
+            "failedAt" to System.currentTimeMillis()
+        )
+        database.reference.child("streams").child(childId).child("snapshotRequest").updateChildren(data)
+    }
+
+    fun listenToSnapshotRequestStatus(childId: String, onStatusChanged: (status: String, error: String?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("streams").child(childId).child("snapshotRequest")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java) ?: ""
+                val error = snapshot.child("error").getValue(String::class.java)
+                if (status.isNotEmpty()) {
+                    onStatusChanged(status, error)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
     fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener {
         val ref = database.reference.child("snapshots").child(childId)
         val listener = object : ValueEventListener {
@@ -1556,6 +1581,9 @@ object FirebaseRepository {
                     .addOnCompleteListener { updateTask ->
                         if (updateTask.isSuccessful) {
                             try {
+                                database.reference.child("pairing_codes").child(trimmedCode).child("linkedChildUid").setValue(childUid)
+                            } catch (_: Exception) {}
+                            try {
                                 firestore.collection("users").document(childUid)
                                     .set(mapOf("parentId" to parentUid), SetOptions.merge())
                             } catch (_: Exception) {}
@@ -1570,6 +1598,21 @@ object FirebaseRepository {
                 onResult(false, null, error.message)
             }
         })
+    }
+
+    fun listenToPairingCodeStatus(code: String, onLinked: (childUid: String) -> Unit): ValueEventListener {
+        val ref = database.reference.child("pairing_codes").child(code).child("linkedChildUid")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val childUid = snapshot.getValue(String::class.java)
+                if (!childUid.isNullOrEmpty()) {
+                    onLinked(childUid)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
     }
 
     fun listenToChildParentLink(childUid: String, onParentIdUpdated: (String) -> Unit): ValueEventListener {

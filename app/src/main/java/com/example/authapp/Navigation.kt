@@ -1,8 +1,12 @@
 package com.example.authapp
 
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -26,9 +30,11 @@ fun MainNavigation() {
         }
     }
     val backStack = rememberNavBackStack(initialNavKey)
+    var isConfiguringSession by remember { mutableStateOf(false) }
 
     fun navigateBasedOnRole(email: String) {
         val uid = FirebaseRepository.currentUser?.uid ?: return
+        isConfiguringSession = true
         FirebaseRepository.getUserRoleOnce(uid) { role ->
             com.example.authapp.data.AppPreferences.saveUserSession(context, uid, email, role)
             com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
@@ -38,6 +44,7 @@ fun MainNavigation() {
             } else {
                 backStack.add(ChildNavKey(email = email))
             }
+            isConfiguringSession = false
         }
     }
 
@@ -49,7 +56,8 @@ fun MainNavigation() {
         }
     }
 
-    NavDisplay(
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
         entryProvider = entryProvider {
@@ -118,7 +126,33 @@ fun MainNavigation() {
                     },
                     modifier = Modifier.safeDrawingPadding()
                 )
-            }
         }
     )
+
+    if (isConfiguringSession) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background.copy(alpha = 0.94f)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(46.dp), strokeWidth = 3.dp)
+                Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = "Signing you in...",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Configuring your dashboard & permissions...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
 }

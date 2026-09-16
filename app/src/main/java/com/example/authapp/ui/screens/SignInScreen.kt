@@ -88,17 +88,17 @@ fun SignInScreen(
             isLoading = true
             com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_in", "SignInScreen")
             com.example.authapp.data.FirebaseRepository.signIn(email, password) { success, errorMsg ->
-                isLoading = false
                 if (success) {
                     if (rememberMe) {
                         authPrefs.edit().putBoolean("remember_me", true).putString("saved_email", email.trim()).apply()
                     } else {
                         authPrefs.edit().clear().apply()
                     }
-                    Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Sign In Successful! Loading dashboard...", Toast.LENGTH_SHORT).show()
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_in", "success", mapOf("email" to email))
                     onSignInSuccess(email)
                 } else {
+                    isLoading = false
                     errorMessage = errorMsg ?: "Authentication failed"
                     com.example.authapp.analytics.AppAnalytics.logActionFailure("sign_in", "SignInScreen", errorMsg ?: "Authentication failed")
                 }

@@ -90,6 +90,7 @@ fun ChildSnapshotDialog(
     childUser: User,
     snapshots: List<SnapshotInfo>,
     statusMessage: String?,
+    isCapturing: Boolean = false,
     onRequestSnapshot: (cameraFacing: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -164,21 +165,43 @@ fun ChildSnapshotDialog(
                             ) {
                                 Button(
                                     onClick = { onRequestSnapshot("back") },
+                                    enabled = !isCapturing,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Rear Camera")
+                                    if (isCapturing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Capturing...", style = MaterialTheme.typography.labelSmall)
+                                    } else {
+                                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Rear Camera")
+                                    }
                                 }
                                 FilledTonalButton(
                                     onClick = { onRequestSnapshot("front") },
+                                    enabled = !isCapturing,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Front Selfie")
+                                    if (isCapturing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Capturing...", style = MaterialTheme.typography.labelSmall)
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Front Selfie")
+                                    }
                                 }
                             }
                         }
@@ -186,17 +209,60 @@ fun ChildSnapshotDialog(
 
                     if (!statusMessage.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
+                        val isError = statusMessage.contains("Failed", ignoreCase = true) ||
+                                      statusMessage.contains("Error", ignoreCase = true) ||
+                                      statusMessage.contains("not respond", ignoreCase = true)
+                        val isSuccess = statusMessage.contains("successfully", ignoreCase = true) ||
+                                        statusMessage.contains("received", ignoreCase = true)
+
+                        val containerColor = when {
+                            isError -> MaterialTheme.colorScheme.errorContainer
+                            isSuccess -> androidx.compose.ui.graphics.Color(0xFFE8F5E9)
+                            else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        }
+                        val contentColor = when {
+                            isError -> MaterialTheme.colorScheme.onErrorContainer
+                            isSuccess -> androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                            else -> MaterialTheme.colorScheme.primary
+                        }
+
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = statusMessage,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                if (isCapturing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = contentColor
+                                    )
+                                } else if (isSuccess) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = contentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                } else if (isError) {
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = contentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = statusMessage,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = contentColor
+                                )
+                            }
                         }
                     }
 

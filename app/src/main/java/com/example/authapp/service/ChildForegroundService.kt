@@ -654,11 +654,13 @@ class ChildForegroundService : Service() {
                                 },
                                 onFailure = { err ->
                                     FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
+                                    FirebaseRepository.reportSnapshotError(uid, err)
                                 }
                             )
                         },
                         onError = { err ->
                             FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
+                            FirebaseRepository.reportSnapshotError(uid, err)
                         }
                     )
                 }
@@ -806,11 +808,13 @@ class ChildForegroundService : Service() {
                             },
                             onFailure = { err ->
                                 FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
+                                FirebaseRepository.reportSnapshotError(uid, err)
                             }
                         )
                     },
                     onError = { err ->
                         FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
+                        FirebaseRepository.reportSnapshotError(uid, err)
                     }
                 )
             }

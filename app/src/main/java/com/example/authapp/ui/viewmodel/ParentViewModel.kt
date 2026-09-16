@@ -22,6 +22,7 @@ class ParentViewModel : ViewModel() {
     private val notificationsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val schedulesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val snapshotsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val snapshotStatusListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val appUsageListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val parentControlsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val smsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
@@ -117,9 +118,31 @@ class ParentViewModel : ViewModel() {
                             snapshotsListeners[child.uid] = FirebaseRepository.listenToSnapshots(child.uid) { snapshots ->
                                 _uiState.update { current ->
                                     val updated = current.snapshotsMap.toMutableMap()
+                                    val oldSize = current.snapshotsMap[child.uid]?.size ?: 0
                                     updated[child.uid] = snapshots
-                                    val msg = if (snapshots.isNotEmpty()) "Snapshot received!" else current.snapshotStatusMessage
-                                    current.copy(snapshotsMap = updated, snapshotStatusMessage = msg)
+                                    val msg = if (snapshots.size > oldSize && current.isSnapshotCapturing) {
+                                        "New photo captured successfully!"
+                                    } else current.snapshotStatusMessage
+                                    current.copy(
+                                        snapshotsMap = updated,
+                                        snapshotStatusMessage = msg,
+                                        isSnapshotCapturing = if (snapshots.size > oldSize) false else current.isSnapshotCapturing
+                                    )
+                                }
+                            }
+                        }
+                        if (!snapshotStatusListeners.containsKey(child.uid)) {
+                            snapshotStatusListeners[child.uid] = FirebaseRepository.listenToSnapshotRequestStatus(child.uid) { status, error ->
+                                if (status == "FAILED") {
+                                    snapshotTimeoutJob?.cancel()
+                                    _uiState.update { it.copy(
+                                        isSnapshotCapturing = false,
+                                        snapshotStatusMessage = "Snapshot failed: ${error ?: "Camera error or device busy"}"
+                                    ) }
+                                } else if (status == "PROCESSING") {
+                                    _uiState.update { it.copy(
+                                        snapshotStatusMessage = "Child device is capturing photo..."
+                                    ) }
                                 }
                             }
                         }
@@ -273,7 +296,8 @@ class ParentViewModel : ViewModel() {
                 onError = { err ->
                     _uiState.update {
                         it.copy(
-                            streamStatusText = "Request failed: ${err.localizedMessage}"
+                            streamStatusText = "Request failed: ${err.localizedMessage}",
+                            userFeedbackMessage = "Stream request failed: ${err.localizedMessage ?: "Device error"}"
                         )
                     }
                 }
@@ -284,10 +308,15 @@ class ParentViewModel : ViewModel() {
                     activeStreamType = typeNormalized,
                     activeChildId = child.uid,
                     activeChildName = child.name.ifEmpty { "Child Device" },
-                    streamStatusText = "Stream request failed"
+                    streamStatusText = "Stream request failed: ${e.localizedMessage}",
+                    userFeedbackMessage = "Stream request error: ${e.localizedMessage}"
                 )
             }
         }
+    }
+
+    fun clearUserFeedbackMessage() {
+        _uiState.update { it.copy(userFeedbackMessage = null) }
     }
 
     fun updateStreamStatus(status: String) {
@@ -432,20 +461,41 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(activeScheduleDialogChild = null) }
     }
 
+    private var snapshotTimeoutJob: kotlinx.coroutines.Job? = null
+
     fun openSnapshotDialog(child: User) {
-        _uiState.update { it.copy(activeSnapshotDialogChild = child, snapshotStatusMessage = null) }
+        _uiState.update { it.copy(activeSnapshotDialogChild = child, snapshotStatusMessage = null, isSnapshotCapturing = false) }
     }
 
     fun closeSnapshotDialog() {
-        _uiState.update { it.copy(activeSnapshotDialogChild = null, snapshotStatusMessage = null) }
+        snapshotTimeoutJob?.cancel()
+        _uiState.update { it.copy(activeSnapshotDialogChild = null, snapshotStatusMessage = null, isSnapshotCapturing = false) }
     }
 
     fun requestSnapshot(childId: String, cameraFacing: String = "back") {
-        _uiState.update { it.copy(snapshotStatusMessage = "Requesting $cameraFacing snapshot...") }
+        if (_uiState.value.isSnapshotCapturing) return // Debounce: prevent duplicate parallel requests
+        _uiState.update { it.copy(
+            snapshotStatusMessage = "Requesting $cameraFacing photo from child device...",
+            isSnapshotCapturing = true
+        ) }
+        snapshotTimeoutJob?.cancel()
+        snapshotTimeoutJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(18000) // 18 seconds timeout
+            if (_uiState.value.isSnapshotCapturing) {
+                _uiState.update { it.copy(
+                    isSnapshotCapturing = false,
+                    snapshotStatusMessage = "Child device did not respond within 18s. Verify child phone is online."
+                ) }
+            }
+        }
         try {
             FirebaseRepository.requestSnapshot(childId, cameraFacing)
         } catch (e: Exception) {
-            _uiState.update { it.copy(snapshotStatusMessage = "Failed: ${e.localizedMessage}") }
+            snapshotTimeoutJob?.cancel()
+            _uiState.update { it.copy(
+                isSnapshotCapturing = false,
+                snapshotStatusMessage = "Request Failed: ${e.localizedMessage}"
+            ) }
         }
     }
 
@@ -539,6 +589,10 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("snapshots/$childId", listener)
         }
         snapshotsListeners.clear()
+        snapshotStatusListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("streams/$childId/snapshotRequest", listener)
+        }
+        snapshotStatusListeners.clear()
         appUsageListeners.forEach { (childId, listener) ->
             FirebaseRepository.removeValueListener("app_usage/$childId", listener)
         }

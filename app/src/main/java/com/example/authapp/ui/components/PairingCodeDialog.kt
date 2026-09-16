@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.QrCode
@@ -41,6 +42,7 @@ fun PairingCodeDialog(
     var pairingCode by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLinkedSuccess by remember { mutableStateOf(false) }
 
     fun loadCode() {
         if (currentUid.isEmpty()) {
@@ -50,6 +52,7 @@ fun PairingCodeDialog(
         }
         isLoading = true
         errorMessage = null
+        isLinkedSuccess = false
         FirebaseRepository.getOrGenerateParentPairingCode(currentUid, parentEmail) { code, err ->
             isLoading = false
             if (code != null) {
@@ -62,6 +65,30 @@ fun PairingCodeDialog(
 
     LaunchedEffect(Unit) {
         loadCode()
+    }
+
+    // Live listener on pairing code: immediately detect when child phone links!
+    DisposableEffect(pairingCode) {
+        val code = pairingCode
+        val listener = if (!code.isNullOrEmpty()) {
+            FirebaseRepository.listenToPairingCodeStatus(code) { linkedChildUid ->
+                if (linkedChildUid.isNotEmpty()) {
+                    isLinkedSuccess = true
+                }
+            }
+        } else null
+        onDispose {
+            if (!code.isNullOrEmpty() && listener != null) {
+                FirebaseRepository.removeValueListener("pairing_codes/$code/linkedChildUid", listener)
+            }
+        }
+    }
+
+    if (isLinkedSuccess) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(2000)
+            onDismiss()
+        }
     }
 
     fun copyToClipboard(code: String) {
@@ -163,6 +190,38 @@ fun PairingCodeDialog(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Retry")
                             }
+                        }
+                    }
+                } else if (isLinkedSuccess) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFFE8F5E9)),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Child Device Linked!",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Child phone has been successfully paired. Redirecting to dashboard...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.ui.graphics.Color(0xFF1B5E20),
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 } else {
