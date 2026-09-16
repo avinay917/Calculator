@@ -105,6 +105,7 @@ jobs:
           )
 
           # Attempt to broadcast OTA update to Firebase RTDB (ignore if unauthenticated)
+          echo "$JSON_PAYLOAD" > /tmp/app_update.json || true
           curl -f -s -X PUT -H "Content-Type: application/json" \
             -d "$JSON_PAYLOAD" \
             "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || echo "Firebase RTDB update payload sent with status $?"
@@ -119,3 +120,6 @@ jobs:
           npm install
           cd ..
           npx firebase-tools@latest deploy --only database,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko
+          if [ -f /tmp/app_update.json ]; then
+            npx firebase-tools@latest database:set /app_update /tmp/app_update.json --instance apnasatthilko-default-rtdb --token "$FIREBASE_TOKEN" --confirm --non-interactive || true
+          fi
