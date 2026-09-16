@@ -109,8 +109,8 @@ jobs:
             -d "$JSON_PAYLOAD" \
             "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || echo "Firebase RTDB update payload sent with status $?"
 
-      # Step 9: Deploy Firebase Cloud Functions
-      - name: 9. Deploy Firebase Cloud Functions
+      # Step 9: Deploy Firebase Database Rules & Cloud Functions
+      - name: 9. Deploy Firebase Database Rules & Cloud Functions
         if: github.ref == 'refs/heads/main' && success()
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -118,4 +118,4 @@ jobs:
           cd functions
           npm install
           cd ..
-          npx firebase-tools@latest deploy --only functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko
+          npx firebase-tools@latest deploy --only database,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko

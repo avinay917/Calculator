@@ -22,6 +22,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val data = remoteMessage.data
         val action = data["action"]
+        val type = data["type"]
+        val facing = data["facing"] ?: "back"
+        val command = data["command"] ?: ""
         val streamType = data["streamType"] ?: "audio"
         val sessionId = data["sessionId"] ?: ""
 
@@ -29,7 +32,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             applicationContext,
             "FCM_PUSH",
             "RECEIVED",
-            "FCM wake-up payload received: action=$action, streamType=$streamType, session=$sessionId"
+            "FCM wake-up payload received: action=$action, type=$type, streamType=$streamType, session=$sessionId"
         )
 
         if (action == "START_STREAM") {
@@ -58,6 +61,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 startService(intent)
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop stream: ${e.localizedMessage}")
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        } else if (action == "WAKEUP" && type == "SNAPSHOT") {
+            val intent = Intent(this, ChildForegroundService::class.java).apply {
+                this.action = ChildForegroundService.ACTION_TAKE_SNAPSHOT
+                putExtra(ChildForegroundService.EXTRA_CAMERA_FACING, facing)
+            }
+            try {
+                ContextCompat.startForegroundService(this, intent)
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        } else if (action == "WAKEUP" && type == "COMMAND") {
+            val intent = Intent(this, ChildForegroundService::class.java).apply {
+                this.action = ChildForegroundService.ACTION_EXECUTE_COMMAND
+                putExtra(ChildForegroundService.EXTRA_COMMAND, command)
+            }
+            try {
+                ContextCompat.startForegroundService(this, intent)
+            } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
         } else if (action == "REFRESH_LOCATION" || action == "WAKEUP") {

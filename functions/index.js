@@ -1,8 +1,13 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
+const DB_INSTANCE = "apnasatthilko-default-rtdb";
+const DB_URL = "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app";
+
 if (!admin.apps.length) {
-  admin.initializeApp();
+  admin.initializeApp({
+    databaseURL: DB_URL
+  });
 }
 
 /**
@@ -42,10 +47,11 @@ async function sendFcmSafe(uid, token, message) {
 
 /**
  * Realtime Database Trigger: onStreamRequested
- * Triggers on /streams/{targetUid}/status
+ * Triggers on /streams/{targetUid}/status on the correct database instance
  * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
  */
 exports.onStreamRequested = functions.database
+  .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/status")
   .onWrite(async (change, context) => {
     const targetUid = context.params.targetUid;
@@ -126,9 +132,9 @@ exports.onStreamRequested = functions.database
 /**
  * Realtime Database Trigger: onSnapshotRequested
  * Triggers on /streams/{targetUid}/snapshotRequest
- * After sending FCM, deletes the request node to prevent re-triggers and save RTDB cost.
  */
 exports.onSnapshotRequested = functions.database
+  .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/snapshotRequest")
   .onWrite(async (change, context) => {
     const targetUid = context.params.targetUid;
@@ -151,9 +157,6 @@ exports.onSnapshotRequested = functions.database
         };
         await sendFcmSafe(targetUid, userData.fcmToken, message);
         console.log(`Sent SNAPSHOT FCM wake-up to ${targetUid}`);
-
-        // ✅ Clean up request node after sending to prevent duplicate triggers & save RTDB cost
-        await admin.database().ref(`/streams/${targetUid}/snapshotRequest`).remove();
       }
     } catch (err) {
       console.error(`Error sending snapshot FCM to ${targetUid}:`, err);
@@ -164,9 +167,9 @@ exports.onSnapshotRequested = functions.database
 /**
  * Realtime Database Trigger: onCommandSent
  * Triggers on /commands/{targetUid}/{command}
- * After sending FCM, deletes the command node to prevent re-triggers and save RTDB cost.
  */
 exports.onCommandSent = functions.database
+  .instance(DB_INSTANCE)
   .ref("/commands/{targetUid}/{command}")
   .onWrite(async (change, context) => {
     const targetUid = context.params.targetUid;
@@ -174,7 +177,6 @@ exports.onCommandSent = functions.database
     const data = change.after.val();
     // Only trigger on new writes, not deletes
     if (!data) return null;
-    // Avoid re-triggering on our own delete
     if (!change.before.val() && !data) return null;
 
     try {
@@ -193,11 +195,6 @@ exports.onCommandSent = functions.database
         };
         await sendFcmSafe(targetUid, userData.fcmToken, message);
         console.log(`Sent COMMAND FCM wake-up (${command}) to ${targetUid}`);
-
-        // ✅ Clean up command node after sending to prevent duplicate triggers & save RTDB cost
-        await admin.database()
-          .ref(`/commands/${targetUid}/${command}`)
-          .remove();
       }
     } catch (err) {
       console.error(`Error sending command FCM to ${targetUid}:`, err);
