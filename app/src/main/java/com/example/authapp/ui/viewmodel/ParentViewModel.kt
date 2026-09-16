@@ -394,6 +394,10 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(isRecording = false, recordingDurationSeconds = 0L) }
     }
 
+    fun clearActiveSessionId() {
+        _uiState.update { it.copy(activeSessionId = null) }
+    }
+
     fun stopStream() {
         val current = _uiState.value
         val sessionId = current.activeSessionId

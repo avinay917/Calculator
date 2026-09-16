@@ -75,6 +75,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Dedicated Live Video / Audio Stream Window Activity -->
+        <activity
+            android:name="com.example.authapp.ui.activity.LiveStreamActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:theme="@style/Theme.AuthApp" />
+
         <!-- FCM Service for Waking Up Device -->
         <service
             android:name="com.example.authapp.service.MyFirebaseMessagingService"

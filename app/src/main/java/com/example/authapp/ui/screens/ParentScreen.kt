@@ -87,10 +87,6 @@ fun ParentScreen(
         }
     }
 
-    var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
-    var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
-    var remoteAudioTrack by remember { mutableStateOf<AudioTrack?>(null) }
-    var liveAudioLevel by remember { mutableFloatStateOf(0f) }
     var showPairingDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -192,178 +188,24 @@ fun ParentScreen(
 
 
 
-    LaunchedEffect(uiState.audioSensitivity, remoteAudioTrack) {
-        remoteAudioTrack?.setVolume(calculateSafeAudioGain(uiState.audioSensitivity))
-    }
-
-    // WebRTC connection lifecycle tied to activeSessionId
-    DisposableEffect(uiState.activeSessionId) {
+    // Dedicated Activity Launcher for Live Video/Audio Stream
+    LaunchedEffect(uiState.activeSessionId) {
         val sessionId = uiState.activeSessionId
         val childId = uiState.activeChildId
+        val childName = uiState.activeChildName ?: "Child Device"
+        val streamType = uiState.activeStreamType?.lowercase() ?: "video"
         if (sessionId != null && childId != null) {
-            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-            viewModel.updateStreamStatus("Connecting to child device...")
-
-            var sdpOfferListener: com.google.firebase.database.ValueEventListener? = null
-            var candidateListener: com.google.firebase.database.ChildEventListener? = null
-            var manager: WebRtcManager? = null
-
-            val candidateBuffer = mutableListOf<Map<String, Any>>()
-            val candidateHandler = android.os.Handler(android.os.Looper.getMainLooper())
-
-            try {
-                FirebaseCrashlytics.getInstance().log("[ParentScreen] Initializing WebRtcManager receiver for session: $sessionId")
-                manager = WebRtcManager(context.applicationContext, isReceiverOnly = true)
-                webRtcManager = manager
-
-                try {
-                    val audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                    audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ParentScreen] AudioManager init error: ${e.localizedMessage}")
-                }
-
-                FirebaseRepository.fetchIceServers { iceServers ->
-                    try {
-                        audioRouteManager.checkAndAutoRoute()
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().log("[ParentScreen] audioRouteManager error: ${e.localizedMessage}")
-                    }
-
-                    manager.startReceiver(
-                        iceServers = iceServers,
-                        onIceCandidate = { candidate ->
-                            try {
-                                val candMap = mapOf(
-                                    "sdpMid" to candidate.sdpMid,
-                                    "sdpMLineIndex" to candidate.sdpMLineIndex,
-                                    "sdp" to candidate.sdp
-                                )
-                                synchronized(candidateBuffer) {
-                                    candidateBuffer.add(candMap)
-                                }
-                                candidateHandler.removeCallbacksAndMessages(null)
-                                candidateHandler.postDelayed({
-                                    val batch = synchronized(candidateBuffer) {
-                                        val list = candidateBuffer.toList()
-                                        candidateBuffer.clear()
-                                        list
-                                    }
-                                    if (batch.isNotEmpty()) {
-                                        FirebaseRepository.sendIceCandidatesBatch(sessionId, batch, isParent = true)
-                                    }
-                                }, 500L)
-                            } catch (e: Exception) {
-                                FirebaseCrashlytics.getInstance().recordException(e)
-                            }
-                        },
-                    onRemoteVideoTrack = { track ->
-                        mainHandler.post {
-                            viewModel.updateStreamStatus("Live Video Streaming 🟢")
-                            remoteVideoTrack = track
-                            AppAnalytics.logFeatureUsage("video_cast", "connected")
-                        }
-                    },
-                    onRemoteAudioTrack = { track ->
-                        mainHandler.post {
-                            if (uiState.activeStreamType.equals("audio", ignoreCase = true)) {
-                                viewModel.updateStreamStatus("Live Audio Streaming 🟢")
-                            }
-                            remoteAudioTrack = track
-                            try {
-                                track.setEnabled(true)
-                                track.setVolume(calculateSafeAudioGain(uiState.audioSensitivity))
-                                if (!isBluetoothConnected) {
-                                    audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
-                                }
-                            } catch (e: Exception) {
-                                FirebaseCrashlytics.getInstance().recordException(e)
-                            }
-                            AppAnalytics.logFeatureUsage("audio_cast", "connected")
-                        }
-                    }
-                )
-
-                manager.startAudioLevelMonitoring { level ->
-                    mainHandler.post {
-                        liveAudioLevel = level
-                    }
-                }
-
-                // Listen for SDP Offer from Child
-                sdpOfferListener = FirebaseRepository.listenToSdpOffer(sessionId) { sdpOffer ->
-                    mainHandler.post {
-                        viewModel.updateStreamStatus("Child Offer Received, establishing connection...")
-                    }
-                    try {
-                        manager.setRemoteOfferAndCreateAnswer(sdpOffer) { sdpAnswer ->
-                            FirebaseRepository.sendSdpAnswer(sessionId, sdpAnswer.description)
-                        }
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
-                    }
-                }
-
-                // Listen for ICE Candidates from Child
-                candidateListener = FirebaseRepository.listenToCandidates(sessionId, listenToParentCandidates = false) { sdpMid, sdpMLineIndex, sdp ->
-                    try {
-                        manager.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().recordException(e)
-                    }
-                }
-                } // end fetchIceServers
-            } catch (t: Throwable) {
-                FirebaseCrashlytics.getInstance().recordException(t)
-                AppHealthTelemetry.logDiagnostic(context, "LIVE_STREAM_RECEIVER", "FAILED", "Receiver initialization failed: ${t.localizedMessage}", t.message)
-                viewModel.updateStreamStatus("Failed to start stream: ${t.localizedMessage}")
-            }
-
-            onDispose {
-                liveAudioLevel = 0f
-                remoteVideoTrack = null
-                remoteAudioTrack = null
-                candidateHandler.removeCallbacksAndMessages(null)
-                val remaining = synchronized(candidateBuffer) {
-                    val list = candidateBuffer.toList()
-                    candidateBuffer.clear()
-                    list
-                }
-                if (remaining.isNotEmpty()) {
-                    FirebaseRepository.sendIceCandidatesBatch(sessionId, remaining, isParent = true)
-                }
-                FirebaseRepository.cleanupSignalingData(sessionId, childId)
-                try {
-                    sdpOfferListener?.let {
-                        FirebaseRepository.removeSdpOfferListener(sessionId, it)
-                    }
-                } catch (_: Exception) {}
-                try {
-                    candidateListener?.let {
-                        FirebaseRepository.removeCandidateListener(sessionId, listenToParentCandidates = false, it)
-                    }
-                } catch (_: Exception) {}
-                try {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                    audioManager?.mode = AudioManager.MODE_NORMAL
-                    audioManager?.isSpeakerphoneOn = false
-                } catch (_: Exception) {}
-                try {
-                    if (uiState.isRecording) {
-                        FirebaseRepository.requestRemoteRecording(childId, false, uiState.activeStreamType?.lowercase() ?: "audio")
-                        viewModel.onRecordingStopped()
-                    }
-                } catch (_: Exception) {}
-                try {
-                    manager?.stopStream()
-                } catch (_: Throwable) {}
-                // CRITICAL: webRtcManager = null AFTER stopStream so SafeSurfaceViewRenderer
-                // can still call releaseEglBase() via onRendererReleased callback
-                webRtcManager = null
-            }
-        } else {
-            onDispose { }
+            val intent = com.example.authapp.ui.activity.LiveStreamActivity.createIntent(
+                context = context,
+                sessionId = sessionId,
+                childId = childId,
+                childName = childName,
+                streamType = streamType
+            )
+            context.startActivity(intent)
+            viewModel.clearActiveSessionId()
         }
+    }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -737,39 +579,5 @@ fun ParentScreen(
             }
         }
     }
-
-    // Active Stream Fullscreen Screen (Overlay directly in Activity Window)
-        uiState.activeSessionId?.let {
-            LiveStreamDialog(
-                activeStreamType = uiState.activeStreamType,
-                activeChildName = uiState.activeChildName,
-                streamStatusText = uiState.streamStatusText,
-                isFrontCamera = uiState.isFrontCamera,
-                isRecording = uiState.isRecording,
-                recordingDurationSeconds = uiState.recordingDurationSeconds,
-                audioSensitivity = uiState.audioSensitivity,
-                remoteVideoTrack = remoteVideoTrack,
-                webRtcManager = webRtcManager,
-                audioLevel = liveAudioLevel,
-                onDismiss = {
-                    if (uiState.isRecording) {
-                        toggleRecording(uiState.activeStreamType ?: "audio")
-                    }
-                    viewModel.stopStream()
-                    AppAnalytics.logButtonClick("disconnect_stream", "ParentScreen")
-                },
-                onFlipCamera = {
-                    viewModel.toggleCameraFacing()
-                    Toast.makeText(context, "Switching Camera...", Toast.LENGTH_SHORT).show()
-                    AppAnalytics.logButtonClick("flip_camera", "ParentScreen")
-                },
-                onToggleRecording = { type -> toggleRecording(type) },
-                onSensitivityChange = { viewModel.setAudioSensitivity(it) },
-                currentAudioRoute = currentAudioRoute,
-                isBluetoothConnected = isBluetoothConnected,
-                isHeadsetConnected = isHeadsetConnected,
-                onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
-            )
-        }
-    }
 }
+
