@@ -88,6 +88,8 @@ fun ParentScreen(
     }
 
     var showPairingDialog by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -95,7 +97,7 @@ fun ParentScreen(
                 bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
             }
         }
-        viewModel.loadChildUsers()
+        viewModel.loadChildUsers(context)
         viewModel.loadAllRecordings()
     }
 
@@ -186,8 +188,6 @@ fun ParentScreen(
         }
     }
 
-
-
     // Dedicated Activity Launcher for Live Video/Audio Stream
     LaunchedEffect(uiState.activeSessionId) {
         val sessionId = uiState.activeSessionId
@@ -207,62 +207,246 @@ fun ParentScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = uiState.selectedTab == 0,
-                    onClick = { viewModel.selectTab(0) },
-                    icon = { Icon(Icons.Default.Sensors, contentDescription = "Live Monitor") },
-                    label = { Text("Live Monitor") }
-                )
-                NavigationBarItem(
-                    selected = uiState.selectedTab == 1,
-                    onClick = { viewModel.selectTab(1) },
-                    icon = { Icon(Icons.Default.Security, contentDescription = "Controls") },
-                    label = { Text("Controls") }
-                )
-                NavigationBarItem(
-                    selected = uiState.selectedTab == 2,
-                    onClick = { viewModel.selectTab(2) },
-                    icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
-                    label = { Text("Cloud History") }
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            if (uiState.selectedTab == 0) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.width(320.dp)
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp)
+                        .padding(16.dp)
                 ) {
-                    // Header
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    // Profile Header
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(16.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.SupervisorAccount,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SupervisorAccount,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "User Settings",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = email,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "CONNECTED CHILD DEVICES",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (uiState.childUsers.isEmpty()) {
+                        Text(
+                            text = "No child devices paired yet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            uiState.childUsers.forEach { child ->
+                                val isSelected = uiState.selectedChildForControls?.uid == child.uid
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    onClick = {
+                                        viewModel.setSelectedChildForControls(child)
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Smartphone,
+                                            contentDescription = null,
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = child.name.ifEmpty { "Child Device" },
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                            Text(
+                                                text = if (child.isOnline) "● Online" else "● Offline",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (child.isOnline) androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isSelected) {
+                                            Text("Active", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            showPairingDialog = true
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("+ Pair New Child Device")
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "APP & SYSTEM SETTINGS",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Manual App Update Trigger Button
+                    val curVersionCode = remember { com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context) }
+                    Button(
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            viewModel.checkForUpdatesManually(context)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Check for App Updates (v$curVersionCode)")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onSignOut()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign Out")
+                    }
+                }
+            }
+        }
+    ) {
+        Box(modifier = modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = uiState.selectedTab == 0,
+                            onClick = { viewModel.selectTab(0) },
+                            icon = { Icon(Icons.Default.Sensors, contentDescription = "Live Monitor") },
+                            label = { Text("Live Monitor") }
+                        )
+                        NavigationBarItem(
+                            selected = uiState.selectedTab == 1,
+                            onClick = { viewModel.selectTab(1) },
+                            icon = { Icon(Icons.Default.Security, contentDescription = "Controls") },
+                            label = { Text("Controls") }
+                        )
+                        NavigationBarItem(
+                            selected = uiState.selectedTab == 2,
+                            onClick = { viewModel.selectTab(2) },
+                            icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
+                            label = { Text("Cloud History") }
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    if (uiState.selectedTab == 0) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp)
+                        ) {
+                            // Header
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .androidx.compose.foundation.clickable {
+                                            scope.launch { drawerState.open() }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SupervisorAccount,
+                                        contentDescription = "User Settings & Navigation Drawer",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
 
                         Spacer(modifier = Modifier.width(16.dp))
 
@@ -421,7 +605,10 @@ fun ParentScreen(
                                         viewModel.openSnapshotDialog(child)
                                     },
                                     onActivityClick = {
-                                        viewModel.openActivityDialog(child)
+                                        viewModel.openActivityDialog(child, initialTab = 0)
+                                    },
+                                    onWhatsAppClick = {
+                                        viewModel.openActivityDialog(child, initialTab = 2)
                                     },
                                     onAlertsClick = {
                                         viewModel.openAlertsDialog(child)
@@ -480,45 +667,38 @@ fun ParentScreen(
             } else {
                 CloudRecordingsView(
                     recordings = uiState.allRecordings,
-                    childUsers = uiState.childUsers,
                     isLoading = uiState.isLoadingRecordings,
-                    currentFilter = uiState.recordingFilter,
-                    onFilterChange = { viewModel.setRecordingFilter(it) },
                     currentlyPlayingRecId = uiState.currentlyPlayingRecId,
-                    onPlayRecording = { playRecording(it) },
-                    onStopPlayback = { stopPlayback() },
+                    onPlayRecording = { rec -> playAudioFile(rec) },
+                    onDeleteRecording = { recId ->
+                        viewModel.deleteRecording(recId)
+                        Toast.makeText(context, "Recording deleted", Toast.LENGTH_SHORT).show()
+                    },
+                    selectedFilter = uiState.recordingFilter,
+                    onFilterChange = { filter -> viewModel.setRecordingFilter(filter) },
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            // Live Location Modal Dialog
-            uiState.locationDialogChild?.let { childUser ->
-                DisposableEffect(childUser.uid) {
-                    val locListener = FirebaseRepository.listenToChildLocation(childUser.uid) { loc ->
-                        viewModel.updateChildLocation(loc)
-                    }
-                    onDispose {
-                        FirebaseRepository.removeValueListener("users/${childUser.uid}/location", locListener)
-                    }
-                }
-
+            // Live Location Map/Dialog (Phase 1 & 2)
+            uiState.activeLocationDialogChild?.let { childUser ->
+                val location = uiState.locationMap[childUser.uid]
+                val pathHistory = uiState.locationHistoryMap[childUser.uid] ?: emptyList()
                 ChildLocationDialog(
                     childUser = childUser,
-                    childLocation = uiState.childLocation,
-                    isRefreshingLocation = uiState.isRefreshingLocation,
-                    onDismiss = { viewModel.closeLocationDialog() },
-                    onRefreshLocation = {
-                        viewModel.requestLocationRefresh(childUser.uid)
-                        Toast.makeText(context, "Real-time location refresh requested...", Toast.LENGTH_SHORT).show()
-                    }
+                    location = location,
+                    locationHistory = pathHistory,
+                    onRequestLocation = { viewModel.requestChildLocation(childUser.uid) },
+                    onDismiss = { viewModel.closeLocationDialog() }
                 )
             }
 
-            // Silent Remote Snapshot Dialog (Phase 1)
+            // Remote Photo Snapshot Dialog (Phase 2 & 5)
             uiState.activeSnapshotDialogChild?.let { childUser ->
+                val snapshots = uiState.snapshotsMap[childUser.uid] ?: emptyList()
                 ChildSnapshotDialog(
                     childUser = childUser,
-                    snapshots = uiState.snapshotsMap[childUser.uid] ?: emptyList(),
+                    snapshots = snapshots,
                     statusMessage = uiState.snapshotStatusMessage,
                     isCapturing = uiState.isSnapshotCapturing,
                     onRequestSnapshot = { facing ->
@@ -540,6 +720,7 @@ fun ParentScreen(
                     simInfo = uiState.simInfoMap[childUser.uid],
                     packageEvents = uiState.packageEventsMap[childUser.uid] ?: emptyList(),
                     whatsAppLogs = uiState.whatsAppLogsMap[childUser.uid] ?: emptyList(),
+                    initialTab = uiState.initialActivityTab,
                     onDismiss = { viewModel.closeActivityDialog() }
                 )
             }

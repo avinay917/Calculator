@@ -142,7 +142,14 @@ class LiveStreamActivity : ComponentActivity() {
 
             try {
                 val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager?.let { am ->
+                    am.mode = AudioManager.MODE_IN_COMMUNICATION
+                    val maxMusicVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusicVol, 0)
+                    val maxVoiceVol = am.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+                    am.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxVoiceVol, 0)
+                    am.isSpeakerphoneOn = true
+                }
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[LiveStreamActivity] AudioManager init error: ${e.localizedMessage}")
             }

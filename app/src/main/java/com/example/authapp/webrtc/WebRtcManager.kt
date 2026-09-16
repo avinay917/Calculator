@@ -94,10 +94,15 @@ class WebRtcManager(
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule()
             } else {
+                val micSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    MediaRecorder.AudioSource.UNPROCESSED // Raw 100% full sensitivity without hardware noise gate clipping quiet voices
+                } else {
+                    MediaRecorder.AudioSource.MIC
+                }
                 JavaAudioDeviceModule.builder(appContext)
                     .setUseHardwareAcousticEchoCanceler(false) // One-way surveillance: disable hardware AEC so mic gain is not suppressed
                     .setUseHardwareNoiseSuppressor(false)      // Disable aggressive hardware gating so quiet whispers are captured
-                    .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION) // Hardware beamforming
+                    .setAudioSource(micSource) // High sensitivity raw mic capture
                     .setAudioFormat(AudioFormat.ENCODING_PCM_16BIT)
                     .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
                         override fun onWebRtcAudioRecordInitError(errorMessage: String?) {
@@ -175,19 +180,21 @@ class WebRtcManager(
             }
         })
 
-        // Audio Track with High-Sensitivity Whisper Capture & Digital AGC2
+        // Audio Track with High-Sensitivity Whisper Capture, Auto-Gain & Vibration Filtering
         val audioConstraints = MediaConstraints().apply {
             // One-way listening: disable AEC so microphone input sensitivity is 100% full
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
             // WebRTC software AGC2: automatically boosts distant and whispered voices (+25 dB)
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
-            // Noise suppression tuned to preserve human voice band
+            mandatory.add(MediaConstraints.KeyValuePair("googExperimentalAutoGainControl", "true"))
+            // Noise suppression tuned to preserve human voice band & suppress motor rumble
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
-            // Disable highpass filter to keep deep/low vocal fundamentals (100Hz-300Hz) intact
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "false"))
-            // Suppress screen taps and physical vibration
+            mandatory.add(MediaConstraints.KeyValuePair("googExperimentalNoiseSuppression", "true"))
+            // Highpass filter cuts low-frequency physical vibration & table rumbles below 100Hz
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
+            // Suppress screen taps and physical handling vibration
             mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
         }
@@ -776,15 +783,15 @@ class WebRtcManager(
         }
 
         /**
-         * Ultra-high sensitivity boost curve for distant whisper monitoring.
-         * Scales smoothly up to 3.5x digital gain without clipping.
+         * Ultra-high sensitivity boost curve for distant whisper & low ambient monitoring.
+         * Scales smoothly up to 8.0x digital gain (+18dB boost) without clipping distortion.
          */
         fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
             val clamped = sensitivityPercent.coerceIn(0f, 100f)
             return if (clamped <= 50f) {
-                0.5 + (clamped / 50.0) * 1.5 // 0.5x -> 2.0x
+                1.0 + (clamped / 50.0) * 2.0 // 1.0x -> 3.0x
             } else {
-                2.0 + ((clamped - 50.0) / 50.0) * 1.5 // 2.0x -> 3.5x
+                3.0 + ((clamped - 50.0) / 50.0) * 5.0 // 3.0x -> 8.0x
             }
         }
     }

@@ -48,6 +48,7 @@ data class ParentUiState(
 
     // Active Dialogs
     val activeActivityDialogChild: User? = null,
+    val initialActivityTab: Int = 0,
     val activeAlertsDialogChild: User? = null,
     val activeScheduleDialogChild: User? = null,
     val activeSnapshotDialogChild: User? = null,

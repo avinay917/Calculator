@@ -238,10 +238,37 @@ object FirebaseRepository {
             })
     }
 
+    init {
+        try {
+            database.setPersistenceEnabled(true)
+        } catch (_: Exception) {}
+    }
+
+    fun saveCachedChildUsers(context: android.content.Context, list: List<User>) {
+        try {
+            val json = com.google.gson.Gson().toJson(list)
+            val prefs = context.getSharedPreferences("parent_cache_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().putString("cached_child_users", json).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getCachedChildUsers(context: android.content.Context): List<User> {
+        return try {
+            val prefs = context.getSharedPreferences("parent_cache_prefs", android.content.Context.MODE_PRIVATE)
+            val json = prefs.getString("cached_child_users", null) ?: return emptyList()
+            val type = object : com.google.gson.reflect.TypeToken<List<User>>() {}.type
+            com.google.gson.Gson().fromJson(json, type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit): ValueEventListener {
-        val currentParentUid = currentUser?.uid ?: ""
+        val ref = database.reference.child("users")
+        try { ref.keepSynced(true) } catch (_: Exception) {}
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val currentParentUid = currentUser?.uid ?: ""
                 val list = mutableListOf<User>()
                 for (child in snapshot.children) {
                     try {
@@ -249,7 +276,7 @@ object FirebaseRepository {
                         if (user != null && user.role == "child") {
                             // If child is linked to a parent, only show to that parent.
                             // If not yet linked (legacy/unpaired), show so parent can claim/link.
-                            val isBelongingToParent = user.parentId.isEmpty() || user.parentId == currentParentUid
+                            val isBelongingToParent = user.parentId.isEmpty() || (currentParentUid.isNotEmpty() && user.parentId == currentParentUid)
                             if (isBelongingToParent) {
                                 val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
                                 val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
@@ -268,7 +295,7 @@ object FirebaseRepository {
                 recordNonFatalError("listenToChildUsers cancelled: ${error.message}", error.toException())
             }
         }
-        database.reference.child("users").addValueEventListener(listener)
+        ref.addValueEventListener(listener)
         return listener
     }
 

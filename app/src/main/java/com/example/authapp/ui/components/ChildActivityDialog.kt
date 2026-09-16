@@ -36,9 +36,10 @@ fun ChildActivityDialog(
     simInfo: SimCardInfo? = null,
     packageEvents: List<AppInstallEvent> = emptyList(),
     whatsAppLogs: List<WhatsAppLogItem> = emptyList(),
+    initialTab: Int = 0,
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications
+    var selectedTab by remember { mutableIntStateOf(initialTab) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications
     var searchQuery by remember { mutableStateOf("") }
     var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }

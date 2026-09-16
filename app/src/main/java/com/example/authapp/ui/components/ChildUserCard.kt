@@ -44,6 +44,7 @@ fun ChildUserCard(
     onSnapshotClick: () -> Unit,
     onScreenClick: () -> Unit = {},
     onActivityClick: () -> Unit,
+    onWhatsAppClick: (() -> Unit)? = null,
     onAlertsClick: () -> Unit,
     onScheduleClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -328,7 +329,7 @@ fun ChildUserCard(
                     }
                 }
 
-                // Row 3: GPS Location & Activity Logs
+                // Row 3: GPS Track, Activity Logs & WhatsApp Chats
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -339,23 +340,38 @@ fun ChildUserCard(
                             onLocationClick()
                         },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text("GPS Track", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
                     }
 
                     OutlinedButton(
                         onClick = onActivityClick,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text("Activity Logs", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
+
+                    Button(
+                        onClick = { onWhatsAppClick?.invoke() ?: onActivityClick() },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF25D366),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(imageVector = androidx.compose.material.icons.Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("WhatsApp", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
                     }
                 }
 

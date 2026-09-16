@@ -45,10 +45,35 @@ class ParentViewModel : ViewModel() {
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
-    fun loadChildUsers() {
+    fun loadChildUsers(context: android.content.Context? = null) {
+        if (context != null) {
+            val cached = FirebaseRepository.getCachedChildUsers(context)
+            if (cached.isNotEmpty()) {
+                _uiState.update { current ->
+                    val defaultSelected = current.selectedChildForControls ?: cached.firstOrNull()
+                    current.copy(
+                        childUsers = cached,
+                        isLoadingChildren = false,
+                        selectedChildForControls = defaultSelected
+                    )
+                }
+            }
+        }
+
+        // Safety fallback timer: Ensure infinite spinner is killed after 3.5 seconds
+        viewModelScope.launch {
+            delay(3500)
+            if (_uiState.value.isLoadingChildren) {
+                _uiState.update { it.copy(isLoadingChildren = false) }
+            }
+        }
+
         if (childUsersListener != null) return
         try {
             childUsersListener = FirebaseRepository.listenToChildUsers { list ->
+                if (context != null && list.isNotEmpty()) {
+                    FirebaseRepository.saveCachedChildUsers(context, list)
+                }
                 _uiState.update { state ->
                     val defaultSelected = state.selectedChildForControls ?: list.firstOrNull()
                     state.copy(childUsers = list, isLoadingChildren = false, selectedChildForControls = defaultSelected)
@@ -494,12 +519,27 @@ class ParentViewModel : ViewModel() {
     }
 
     // Phase 1 & 2 Dialog Controls and Actions
-    fun openActivityDialog(child: User) {
-        _uiState.update { it.copy(activeActivityDialogChild = child) }
+    fun openActivityDialog(child: User, initialTab: Int = 0) {
+        _uiState.update { it.copy(activeActivityDialogChild = child, initialActivityTab = initialTab) }
     }
 
     fun closeActivityDialog() {
-        _uiState.update { it.copy(activeActivityDialogChild = null) }
+        _uiState.update { it.copy(activeActivityDialogChild = null, initialActivityTab = 0) }
+    }
+
+    fun checkForUpdatesManually(context: Context) {
+        FirebaseRepository.listenToAppUpdate { updateInfo ->
+            val curCode = com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context)
+            if (updateInfo != null && updateInfo.versionCode > curCode) {
+                _uiState.update { current ->
+                    current.copy(userFeedbackMessage = "New update available: ${updateInfo.versionName}! Starting update...")
+                }
+            } else {
+                _uiState.update { current ->
+                    current.copy(userFeedbackMessage = "App is up to date (Current version code: $curCode).")
+                }
+            }
+        }
     }
 
     fun openAlertsDialog(child: User) {
