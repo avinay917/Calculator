@@ -126,6 +126,7 @@ fun MainNavigation() {
                     },
                     modifier = Modifier.safeDrawingPadding()
                 )
+            }
         }
     )
 
