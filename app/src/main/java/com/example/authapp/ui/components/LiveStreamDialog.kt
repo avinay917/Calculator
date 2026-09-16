@@ -54,6 +54,7 @@ fun LiveStreamDialog(
     onSensitivityChange: (Float) -> Unit,
     currentAudioRoute: AudioOutputRoute = AudioOutputRoute.SPEAKER,
     isBluetoothConnected: Boolean = false,
+    isHeadsetConnected: Boolean = false,
     onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
     val isVideo = activeStreamType.equals("video", ignoreCase = true)
@@ -212,7 +213,18 @@ fun LiveStreamDialog(
                                     FilterChip(
                                         selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
                                         onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
-                                        label = { Text("BT", style = MaterialTheme.typography.labelSmall) },
+                                        label = { Text("Earbuds", style = MaterialTheme.typography.labelSmall) },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        modifier = Modifier.weight(0.8f)
+                                    )
+                                }
+                                if (isHeadsetConnected || currentAudioRoute == AudioOutputRoute.HEADSET) {
+                                    FilterChip(
+                                        selected = currentAudioRoute == AudioOutputRoute.HEADSET,
+                                        onClick = { onAudioRouteSelect(AudioOutputRoute.HEADSET) },
+                                        label = { Text("Earphones", style = MaterialTheme.typography.labelSmall) },
                                         leadingIcon = {
                                             Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                         },
@@ -338,6 +350,7 @@ fun LiveStreamDialog(
                             audioLevel = audioLevel,
                             currentAudioRoute = currentAudioRoute,
                             isBluetoothConnected = isBluetoothConnected,
+                            isHeadsetConnected = isHeadsetConnected,
                             onAudioRouteSelect = onAudioRouteSelect
                         )
 

@@ -39,6 +39,7 @@ fun LiveAudioMonitorView(
     audioLevel: Float = 0f,
     currentAudioRoute: AudioOutputRoute = AudioOutputRoute.SPEAKER,
     isBluetoothConnected: Boolean = false,
+    isHeadsetConnected: Boolean = false,
     onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
     // Dynamic spring-based pulse responding to actual WebRTC audio volume
@@ -238,12 +239,25 @@ fun LiveAudioMonitorView(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // 3. Bluetooth
+                        // 3. Bluetooth Earbuds
                         if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
                             FilterChip(
                                 selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
                                 onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
-                                label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
+                                label = { Text("Earbuds", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // 4. Wired Earphones
+                        if (isHeadsetConnected || currentAudioRoute == AudioOutputRoute.HEADSET) {
+                            FilterChip(
+                                selected = currentAudioRoute == AudioOutputRoute.HEADSET,
+                                onClick = { onAudioRouteSelect(AudioOutputRoute.HEADSET) },
+                                label = { Text("Earphones", style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
                                 },

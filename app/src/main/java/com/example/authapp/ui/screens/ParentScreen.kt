@@ -77,6 +77,7 @@ fun ParentScreen(
     val audioRouteManager = remember { AudioRouteManager(context) }
     val currentAudioRoute by audioRouteManager.currentRoute.collectAsStateWithLifecycle()
     val isBluetoothConnected by audioRouteManager.isBluetoothConnected.collectAsStateWithLifecycle()
+    val isHeadsetConnected by audioRouteManager.isHeadsetConnected.collectAsStateWithLifecycle()
 
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
@@ -196,17 +197,13 @@ fun ParentScreen(
                 try {
                     val audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                     audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-                    audioManager?.isSpeakerphoneOn = true
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ParentScreen] AudioManager init error: ${e.localizedMessage}")
                 }
 
                 FirebaseRepository.fetchIceServers { iceServers ->
                     try {
-                        audioRouteManager.checkAndHandleBluetooth()
-                        if (!isBluetoothConnected) {
-                            audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
-                        }
+                        audioRouteManager.checkAndAutoRoute()
                     } catch (e: Exception) {
                         FirebaseCrashlytics.getInstance().log("[ParentScreen] audioRouteManager error: ${e.localizedMessage}")
                     }
@@ -744,6 +741,7 @@ fun ParentScreen(
                 onSensitivityChange = { viewModel.setAudioSensitivity(it) },
                 currentAudioRoute = currentAudioRoute,
                 isBluetoothConnected = isBluetoothConnected,
+                isHeadsetConnected = isHeadsetConnected,
                 onAudioRouteSelect = { route -> audioRouteManager.setRoute(route) }
             )
         }

@@ -71,8 +71,6 @@ fun ChildScreen(
     var hasExactAlarmPermission by remember { mutableStateOf(false) }
     var hasNotificationListenerPermission by remember { mutableStateOf(false) }
 
-    var activeRationaleStep by remember { mutableStateOf<com.example.authapp.ui.components.PermissionStepType?>(null) }
-
     fun isMicrophoneAndCameraGranted(): Boolean {
         val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -188,60 +186,10 @@ fun ChildScreen(
 
     LaunchedEffect(Unit) {
         checkPermissions()
-        // Only auto-prompt once if permissions are missing; do not repeatedly harass user
-        val alreadyPrompted = permPrefs.getBoolean("already_prompted_core", false)
-        if (!alreadyPrompted && (!hasStage1Permissions || !hasCallPermissions)) {
-            permPrefs.edit().putBoolean("already_prompted_core", true).apply()
-            activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA
+        // Automatically trigger Android's native system permission pop-up dialog (like Flipkart/WhatsApp)
+        if (!hasStage1Permissions || !hasCallPermissions) {
+            triggerCorePermissionsRequest()
         }
-    }
-
-    activeRationaleStep?.let { step ->
-        com.example.authapp.ui.components.PermissionRationaleSheet(
-            stepType = step,
-            onGrantClick = {
-                val currentStep = step
-                activeRationaleStep = null
-                when (currentStep) {
-                    com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA -> {
-                        triggerCorePermissionsRequest()
-                    }
-                    com.example.authapp.ui.components.PermissionStepType.CALL_LOGS -> {
-                        triggerCorePermissionsRequest()
-                    }
-                    com.example.authapp.ui.components.PermissionStepType.OVERLAY -> {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            context.startActivity(intent)
-                        }
-                    }
-                    com.example.authapp.ui.components.PermissionStepType.BATTERY_OPTIMIZATION -> {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            try {
-                                val intent = Intent(
-                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                    Uri.parse("package:${context.packageName}")
-                                )
-                                context.startActivity(intent)
-                            } catch (_: android.content.ActivityNotFoundException) {
-                                // ✅ FIX: Custom ROMs (Xiaomi/Oppo/Vivo) mein yeh activity nahi hoti
-                                // Fallback: general battery settings open karo
-                                try {
-                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    }
-                }
-            },
-            onDismiss = {
-                permPrefs.edit().putBoolean("already_prompted_core", true).apply()
-                activeRationaleStep = null
-            }
-        )
     }
 
     Column(
@@ -449,246 +397,200 @@ fun ChildScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Card 1: Stage 1 Permissions (Mic, Camera, Notifications)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (hasStage1Permissions && hasCallPermissions) Icons.Default.Check else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (hasStage1Permissions && hasCallPermissions) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Stage 1: Media & Call Permissions",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+        val allSpecialGranted = hasOverlayPermission && isBatteryOptimizationIgnored && hasNotificationListenerPermission && hasExactAlarmPermission
+        val allCoreGranted = hasStage1Permissions && hasCallPermissions
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Requires Microphone, Camera, Location, Phone Calls, and Notification permissions for complete live stream and call monitoring.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (allCoreGranted && allSpecialGranted) {
+            // All Permissions & Settings are Fully Active - Modern Minimal Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (!hasStage1Permissions || !hasCallPermissions) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Protection Active",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Live streaming, telemetry, and background services are fully operational.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            // Core or Special Settings missing
+            if (!allCoreGranted) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "App Permissions Required",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Allow camera, mic, location, and call access so your parent can connect.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
                         Button(
-                            onClick = {
-                                activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.CORE_MEDIA
-                            },
-                            modifier = Modifier.weight(1f),
+                            onClick = { triggerCorePermissionsRequest() },
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text(text = "Grant Permissions")
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                                context.startActivity(intent)
-                            },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(text = "Settings")
+                            Text("Grant Permissions")
                         }
                     }
-                } else {
-                    Button(
-                        onClick = { },
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(text = "All Core Permissions Granted ✓")
-                    }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Card 2: Stage 2 Permissions (Overlay / Lock Screen Capability)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (hasOverlayPermission) Icons.Default.Security else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (hasOverlayPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Stage 2: Lock Screen Access",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Allows parent streaming requests to work when the phone is locked or in background.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.OVERLAY
-                    },
+            if (!allSpecialGranted) {
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
-                    Text(text = if (hasOverlayPermission) "Lock Screen Access Enabled ✓" else "Grant Display Over Apps Permission")
-                }
-            }
-        }
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Background System Access",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Android requires these system toggles to prevent the app from stopping in the background.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-        // Card 3: Stage 3 Battery Optimization Exemption
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (isBatteryOptimizationIgnored) Icons.Default.Check else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (isBatteryOptimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Stage 3: Battery Saver Exemption",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Prevents Xiaomi, Samsung, and Vivo OS from killing background streaming services.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        activeRationaleStep = com.example.authapp.ui.components.PermissionStepType.BATTERY_OPTIMIZATION
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(text = if (isBatteryOptimizationIgnored) "Unrestricted Background Running ✓" else "Disable Battery Optimization")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Card 4: Stage 4 - Exact Alarms + Notification Listener (Schedule & Notification Mirroring)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (hasExactAlarmPermission && hasNotificationListenerPermission) Icons.Default.Schedule else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (hasExactAlarmPermission && hasNotificationListenerPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Stage 4: Schedule & Notifications",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Required for auto-recording schedules (exact alarms) and notification mirroring to parent device.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Exact Alarm Permission (Android 12+ only)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasExactAlarmPermission) {
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                data = Uri.parse("package:${context.packageName}")
+                        // 1. Overlay
+                        if (!hasOverlayPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("1. Allow 'Display Over Other Apps'")
                             }
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Allow Exact Alarms (For Schedules)")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                // Notification Listener Permission
-                if (!hasNotificationListenerPermission) {
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Enable Notification Access")
-                    }
-                }
+                        // 2. Battery Saver
+                        if (!isBatteryOptimizationIgnored && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(
+                                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                        } catch (_: Exception) {}
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("2. Allow Unrestricted Background Battery")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                if (hasExactAlarmPermission && hasNotificationListenerPermission) {
-                    Button(
-                        onClick = { },
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Schedule & Notifications Enabled ✓")
+                        // 3. Notification Mirroring
+                        if (!hasNotificationListenerPermission) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("3. Enable Notification Access")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        // 4. Exact Alarm (Android 12+)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasExactAlarmPermission) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("4. Allow Exact Alarms (Schedules)")
+                            }
+                        }
                     }
                 }
             }
