@@ -1310,6 +1310,22 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
+    fun attachRecordingUrlToLatestCallLog(childId: String, recordingUrl: String) {
+        if (childId.isEmpty() || recordingUrl.isEmpty()) return
+        firestore.collection("call_logs").document(childId)
+            .collection("items")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { querySnap ->
+                val doc = querySnap.documents.firstOrNull() ?: return@addOnSuccessListener
+                doc.reference.update("audioRecordingUrl", recordingUrl)
+                database.reference.child("call_logs").child(childId).child(doc.id)
+                    .child("audioRecordingUrl").setValue(recordingUrl)
+            }
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
     // ==========================================
     // CLOUD FIRESTORE INTEGRATION & COST SAVING
     // ==========================================

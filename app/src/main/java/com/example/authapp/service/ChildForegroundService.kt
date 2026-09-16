@@ -570,13 +570,18 @@ class ChildForegroundService : Service() {
                                 streamType = "call",
                                 durationSeconds = durationSec,
                                 localFilePath = recordedFile.absolutePath,
-                                onSuccess = {
+                                onSuccess = { session ->
                                     AppHealthTelemetry.logDiagnostic(
                                         applicationContext,
                                         "CALL_RECORDING",
                                         "SUCCESS",
                                         "Call recording uploaded to Firebase Storage and synced to Parent History."
                                     )
+                                    try {
+                                        if (session.storageUrl.isNotEmpty()) {
+                                            FirebaseRepository.attachRecordingUrlToLatestCallLog(uid, session.storageUrl)
+                                        }
+                                    } catch (_: Exception) {}
                                     try { recordedFile.delete() } catch (_: Exception) {}
                                 },
                                 onFailure = { err ->

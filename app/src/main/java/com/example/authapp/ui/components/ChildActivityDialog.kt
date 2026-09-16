@@ -1,5 +1,7 @@
 package com.example.authapp.ui.components
 
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.authapp.data.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,8 +37,59 @@ fun ChildActivityDialog(
     packageEvents: List<AppInstallEvent> = emptyList(),
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=Web, 3=Wi-Fi, 4=Apps, 5=SIM, 6=Alerts
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=Calls, 1=SMS, 2=Web, 3=Apps, 4=SIM & Network, 5=Notifications
     var searchQuery by remember { mutableStateOf("") }
+    var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    fun stopAudio() {
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (_: Exception) {}
+        mediaPlayer = null
+        currentlyPlayingAudioUrl = null
+    }
+
+    fun playAudio(url: String) {
+        if (currentlyPlayingAudioUrl == url) {
+            stopAudio()
+            return
+        }
+        stopAudio()
+        val mp = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .build()
+            )
+            setOnCompletionListener {
+                currentlyPlayingAudioUrl = null
+            }
+            setOnErrorListener { _, _, _ ->
+                currentlyPlayingAudioUrl = null
+                true
+            }
+        }
+        try {
+            mp.setDataSource(url)
+            mp.prepareAsync()
+            mp.setOnPreparedListener {
+                it.start()
+                currentlyPlayingAudioUrl = url
+            }
+            mediaPlayer = mp
+        } catch (e: Exception) {
+            currentlyPlayingAudioUrl = null
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            stopAudio()
+        }
+    }
 
     val filteredCallLogs = remember(callLogs, searchQuery) {
         if (searchQuery.isBlank()) callLogs
@@ -85,7 +139,7 @@ fun ChildActivityDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "All Device Logs, Communications & Network Events",
+                                    text = "Call Logs, Communications & Network Events",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -113,7 +167,7 @@ fun ChildActivityDialog(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search logs, numbers, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = { Text("Search calls, numbers, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
@@ -158,25 +212,19 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
-                            text = { Text("Wi-Fi (${networkHistory.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 4,
                             onClick = { selectedTab = 4 },
-                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            text = { Text("SIM & Network", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.SignalCellularAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 5,
                             onClick = { selectedTab = 5 },
-                            text = { Text("SIM Card", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.SimCard, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 6,
-                            onClick = { selectedTab = 6 },
-                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                     }
@@ -196,7 +244,15 @@ fun ChildActivityDialog(
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
                                         items(filteredCallLogs) { log ->
-                                            CallLogListItem(log)
+                                            CallLogListItem(
+                                                log = log,
+                                                isPlaying = currentlyPlayingAudioUrl == log.audioRecordingUrl && log.audioRecordingUrl.isNotEmpty(),
+                                                onPlayClick = {
+                                                    if (log.audioRecordingUrl.isNotEmpty()) {
+                                                        playAudio(log.audioRecordingUrl)
+                                                    }
+                                                }
+                                            )
                                         }
                                     }
                                 }
@@ -232,21 +288,6 @@ fun ChildActivityDialog(
                                 }
                             }
                             3 -> {
-                                if (networkHistory.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Wifi, "No network history recorded yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(networkHistory) { net ->
-                                            NetworkHistoryListItem(net)
-                                        }
-                                    }
-                                }
-                            }
-                            4 -> {
                                 if (filteredPackageEvents.isEmpty()) {
                                     EmptyStateBox(Icons.Default.Apps, if (searchQuery.isNotEmpty()) "No matching app events found" else "No app install/uninstall events yet")
                                 } else {
@@ -261,12 +302,8 @@ fun ChildActivityDialog(
                                     }
                                 }
                             }
-                            5 -> {
-                                if (simInfo == null) {
-                                    EmptyStateBox(Icons.Default.SimCard, "No SIM card information reported yet")
-                                } else {
-                                    SimInfoCard(simInfo)
-                                }
+                            4 -> {
+                                UnifiedSimAndNetworkView(simInfo = simInfo, networkHistory = networkHistory)
                             }
                             else -> {
                                 if (filteredNotifications.isEmpty()) {
@@ -317,7 +354,11 @@ fun EmptyStateBox(icon: androidx.compose.ui.graphics.vector.ImageVector, message
 }
 
 @Composable
-fun CallLogListItem(log: CallLogItem) {
+fun CallLogListItem(
+    log: CallLogItem,
+    isPlaying: Boolean = false,
+    onPlayClick: () -> Unit = {}
+) {
     val typeIcon = when (log.type.uppercase()) {
         "OUTGOING" -> Icons.Default.CallMade
         "INCOMING" -> Icons.Default.CallReceived
@@ -346,45 +387,99 @@ fun CallLogListItem(log: CallLogItem) {
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(typeIcon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
-            }
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(typeIcon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+                }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (log.name.isNotEmpty() && log.number.isNotEmpty()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    // Contact Name in Bold
                     Text(
-                        text = log.number,
+                        text = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // Phone Number if Contact Name exists
+                    if (log.name.isNotEmpty() && log.number.isNotEmpty()) {
+                        Text(
+                            text = log.number,
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${log.type.uppercase()} • $timeStr • $durationStr",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
-                Text(
-                    text = "$timeStr • Duration: $durationStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+            }
+
+            // Audio Call Recording Player Bar if recording exists
+            if (log.audioRecordingUrl.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        FilledIconButton(
+                            onClick = onPlayClick,
+                            modifier = Modifier.size(32.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = if (isPlaying) MaterialTheme.colorScheme.primary else Color(0xFF388E3C)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause Recording" else "Play Call Recording",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isPlaying) "Playing Call Recording..." else "Listen Call Recording",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (isPlaying) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -588,35 +683,171 @@ fun AppInstallEventItem(event: AppInstallEvent) {
 }
 
 @Composable
-fun SimInfoCard(simInfo: SimCardInfo) {
-    val timeStr = remember(simInfo.lastUpdated) {
-        if (simInfo.lastUpdated > 0L) {
-            val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-            sdf.format(Date(simInfo.lastUpdated))
-        } else "Never"
-    }
+fun UnifiedSimAndNetworkView(
+    simInfo: SimCardInfo?,
+    networkHistory: List<NetworkHistoryItem>
+) {
+    val activeNetwork = networkHistory.firstOrNull { it.disconnectedAt == 0L } ?: networkHistory.firstOrNull()
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SimCard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SIM Card Details",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                )
+        // Section 1: Active SIM Card Details
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SimCard,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "SIM Card Details",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "Carrier & Cellular Subscription",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (simInfo != null) {
+                        val lastCheckedStr = if (simInfo.lastUpdated > 0L) {
+                            SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(simInfo.lastUpdated))
+                        } else "Recent"
+
+                        InfoRow("Operator / Carrier", simInfo.operatorName.ifEmpty { "Detected" })
+                        InfoRow("Country ISO", simInfo.countryIso.ifEmpty { "IN" }.uppercase())
+                        InfoRow("SIM Status", simInfo.simState.ifEmpty { "Ready (Active)" })
+                        InfoRow("Last Updated", lastCheckedStr)
+                    } else {
+                        Text(
+                            text = "No SIM card information synced yet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Carrier: ${simInfo.operatorName.ifEmpty { "Unknown" }}", style = MaterialTheme.typography.bodyMedium)
-            Text("Country: ${simInfo.countryIso.ifEmpty { "N/A" }}", style = MaterialTheme.typography.bodyMedium)
-            Text("State: ${simInfo.simState}", style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Last Checked: $timeStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
+
+        // Section 2: Active Network / Wi-Fi Details
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE8F5E9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (activeNetwork?.networkType == "WIFI") Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
+                                contentDescription = null,
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Current Network Connection",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = if (activeNetwork?.networkType == "WIFI") "Wi-Fi Connected 🟢" else "Cellular Data 🟢",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (activeNetwork != null) {
+                        InfoRow("Network Type", activeNetwork.networkType)
+                        InfoRow("Wi-Fi Name (SSID)", activeNetwork.ssid.ifEmpty { "Connected Network" })
+                        val connectStr = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(activeNetwork.connectedAt))
+                        InfoRow("Connected Since", connectStr)
+                    } else {
+                        Text(
+                            text = "No active network information reported.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 3: Connection History Header & List
+        item {
+            Text(
+                text = "Past Wi-Fi & Network History (${networkHistory.size})",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+
+        if (networkHistory.isEmpty()) {
+            item {
+                EmptyStateBox(Icons.Default.Wifi, "No past network history recorded yet")
+            }
+        } else {
+            items(networkHistory) { net ->
+                NetworkHistoryListItem(net)
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
