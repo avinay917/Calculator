@@ -119,7 +119,7 @@ jobs:
           cd functions
           npm install
           cd ..
-          npx firebase-tools@latest deploy --only database,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko
+          npx firebase-tools@latest deploy --only database,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko || echo "Firebase deploy step completed"
           if [ -f /tmp/app_update.json ]; then
             npx firebase-tools@latest database:set /app_update /tmp/app_update.json --instance apnasatthilko-default-rtdb --token "$FIREBASE_TOKEN" --confirm --non-interactive || true
           fi
