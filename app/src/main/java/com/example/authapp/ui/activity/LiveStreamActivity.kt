@@ -21,7 +21,7 @@ import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.ui.components.LiveStreamDialog
-import com.example.authapp.ui.theme.AuthAppTheme
+import com.example.authapp.theme.AuthAppTheme
 import com.example.authapp.webrtc.WebRtcManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.AudioTrack

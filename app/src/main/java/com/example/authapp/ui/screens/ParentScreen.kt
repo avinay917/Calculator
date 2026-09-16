@@ -206,7 +206,6 @@ fun ParentScreen(
             viewModel.clearActiveSessionId()
         }
     }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
