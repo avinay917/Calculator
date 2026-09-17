@@ -19,10 +19,24 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
+import com.example.authapp.utils.onValueChange
+import com.example.authapp.utils.toListOf
+
 object FirebaseRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     // ✅ FIX: Hardcoded URL remove kiya - Firebase google-services.json se automatically correct DB use karta hai
     private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance()
+
+    inline fun <reified T> listenToChildNode(
+        nodePath: String,
+        childUid: String,
+        crossinline onData: (List<T>) -> Unit
+    ): ValueEventListener {
+        return database.reference.child(nodePath).child(childUid)
+            .onValueChange { snapshot ->
+                onData(snapshot.toListOf())
+            }
+    }
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
