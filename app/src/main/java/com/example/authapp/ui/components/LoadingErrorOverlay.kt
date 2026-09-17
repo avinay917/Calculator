@@ -5,7 +5,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -51,7 +50,7 @@ fun LoadingErrorOverlay(
                     }
                 }
             }
-        } else if (!errorMessage.isNull_orEmpty()) {
+        } else if (!errorMessage.isNullOrEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -68,7 +67,7 @@ fun LoadingErrorOverlay(
                         modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
-                            text = errorMessage,
+                            text = errorMessage ?: "",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             textAlign = TextAlign.Center
