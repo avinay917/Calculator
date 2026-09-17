@@ -25,6 +25,14 @@ import com.example.authapp.data.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+private fun Long.formatTime(): String = if (this == 0L) "" else SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(this))
+private fun Long.formatSecs(): String {
+    if (this <= 0L) return "0s"
+    val mins = this / 60
+    val secs = this % 60
+    return if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildActivityDialog(
@@ -553,18 +561,8 @@ fun CallLogListItem(
         log.type.uppercase() == "REJECTED" -> Color(0xFFE65100)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val timeStr = remember(log.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(log.timestamp))
-    }
-    val durationStr = remember(log.durationSeconds) {
-        if (log.durationSeconds == 0L) "0s"
-        else {
-            val mins = log.durationSeconds / 60
-            val secs = log.durationSeconds % 60
-            if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
-        }
-    }
+    val timeStr = remember(log.timestamp) { log.timestamp.formatTime() }
+    val durationStr = remember(log.durationSeconds) { log.durationSeconds.formatSecs() }
 
     val displayType = when (log.type.uppercase()) {
         "INCOMING_WHATSAPP" -> "WHATSAPP INCOMING"
@@ -1077,10 +1075,7 @@ fun InfoRow(label: String, value: String) {
 
 @Composable
 fun NotificationListItem(notif: NotificationItem) {
-    val timeStr = remember(notif.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(notif.timestamp))
-    }
+    val timeStr = remember(notif.timestamp) { notif.timestamp.formatTime() }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -1126,10 +1121,7 @@ fun NotificationListItem(notif: NotificationItem) {
 
 @Composable
 fun WhatsAppListItem(item: WhatsAppLogItem) {
-    val timeStr = remember(item.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(item.timestamp))
-    }
+    val timeStr = remember(item.timestamp) { item.timestamp.formatTime() }
 
     val typeColor = when (item.type.uppercase()) {
         "STATUS" -> Color(0xFF00A884)
@@ -1218,10 +1210,7 @@ fun WhatsAppListItem(item: WhatsAppLogItem) {
 
 @Composable
 fun SnapshotGridItem(snapshot: SnapshotInfo) {
-    val timeStr = remember(snapshot.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(snapshot.timestamp))
-    }
+    val timeStr = remember(snapshot.timestamp) { snapshot.timestamp.formatTime() }
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -1282,10 +1271,7 @@ fun SnapshotGridItem(snapshot: SnapshotInfo) {
 
 @Composable
 fun MediaVaultListItem(media: MediaItemInfo) {
-    val timeStr = remember(media.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(media.timestamp))
-    }
+    val timeStr = remember(media.timestamp) { media.timestamp.formatTime() }
     val isVideo = media.mimeType.contains("video", ignoreCase = true)
     val isImage = media.mimeType.contains("image", ignoreCase = true)
 

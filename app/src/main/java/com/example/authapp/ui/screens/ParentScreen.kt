@@ -104,10 +104,10 @@ fun ParentScreen(
 
         // Auto-publish latest App Update info to Firebase RTDB for child devices
         FirebaseRepository.publishAppUpdate(
-            versionCode = 564L,
-            versionName = "v2.564",
-            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.564/app-release.apk",
-            releaseNotes = "v2.564: Call Recording Speed Control, Snapshots Gallery, Media Vault, Multi-Child Switcher",
+            versionCode = 565L,
+            versionName = "v2.565",
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.565/app-release.apk",
+            releaseNotes = "v2.565: Refactored & Optimized Code Base (Clean LOC)",
             isForceUpdate = false
         )
     }
