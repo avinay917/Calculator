@@ -9,13 +9,13 @@ service firebase.storage {
     // Call recordings and stream clips stored under recordings/{childId}/{fileName}
     match /recordings/{childId}/{allPaths=**} {
       allow read: if isParentOfChild(childId);
-      allow write: if request.auth != null && request.auth.uid == childId;
+      allow write: if request.auth != null && request.auth.uid == childId && request.resource.size < 100 * 1024 * 1024;
     }
 
     // Remote camera snapshots captured by child device
     match /snapshots/{childId}/{allPaths=**} {
       allow read: if isParentOfChild(childId);
-      allow write: if request.auth != null && request.auth.uid == childId;
+      allow write: if request.auth != null && request.auth.uid == childId && request.resource.size < 15 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
     }
     
     // Updates APK folder: public read so devices can download app update

@@ -17,7 +17,7 @@ service cloud.firestore {
 
     // User profile documents
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isOwner(userId) || isParentOfChild(userId) || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId);
       allow write: if isOwner(userId) || isParentOfChild(userId);
     }
 

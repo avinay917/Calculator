@@ -26,11 +26,11 @@
     },
     "app_update": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'parent' || !root.child('users').child(auth.uid).exists())"
     },
     "ice_servers": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'parent'"
     },
     "device_health": {
       "$childUid": {
