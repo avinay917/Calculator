@@ -1,5 +1,7 @@
 package com.example.authapp.utils
 
+import com.example.authapp.analytics.AppLogger
+
 /**
  * Executes block safely with logging to AppLogger upon exception.
  */

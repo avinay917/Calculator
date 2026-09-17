@@ -1,5 +1,6 @@
 package com.example.authapp.utils
 
+import com.example.authapp.analytics.AppLogger
 import com.google.android.gms.tasks.Task
 import com.google.firebase.database.DatabaseReference
 import kotlinx.coroutines.flow.MutableStateFlow

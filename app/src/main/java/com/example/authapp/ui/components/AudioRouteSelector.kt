@@ -10,15 +10,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.authapp.audio.AudioRouteManager
+import com.example.authapp.audio.AudioOutputRoute
 
 /**
  * Reusable Audio Route Selector for WebRTC Live Stream and Audio Monitoring.
  */
 @Composable
 fun AudioRouteSelector(
-    currentRoute: AudioRouteManager.AudioRoute,
-    onRouteSelected: (AudioRouteManager.AudioRoute) -> Unit,
+    currentRoute: AudioOutputRoute,
+    onRouteSelected: (AudioOutputRoute) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -27,20 +27,20 @@ fun AudioRouteSelector(
         verticalAlignment = Alignment.CenterVertically
     ) {
         FilterChip(
-            selected = currentRoute == AudioRouteManager.AudioRoute.SPEAKER,
-            onClick = { onRouteSelected(AudioRouteManager.AudioRoute.SPEAKER) },
+            selected = currentRoute == AudioOutputRoute.SPEAKER,
+            onClick = { onRouteSelected(AudioOutputRoute.SPEAKER) },
             label = { Text("Speaker") },
             leadingIcon = { Icon(Icons.Default.VolumeUp, contentDescription = null) }
         )
         FilterChip(
-            selected = currentRoute == AudioRouteManager.AudioRoute.EARPIECE,
-            onClick = { onRouteSelected(AudioRouteManager.AudioRoute.EARPIECE) },
+            selected = currentRoute == AudioOutputRoute.EARPIECE,
+            onClick = { onRouteSelected(AudioOutputRoute.EARPIECE) },
             label = { Text("Earpiece") },
             leadingIcon = { Icon(Icons.Default.Headset, contentDescription = null) }
         )
         FilterChip(
-            selected = currentRoute == AudioRouteManager.AudioRoute.BLUETOOTH,
-            onClick = { onRouteSelected(AudioRouteManager.AudioRoute.BLUETOOTH) },
+            selected = currentRoute == AudioOutputRoute.BLUETOOTH,
+            onClick = { onRouteSelected(AudioOutputRoute.BLUETOOTH) },
             label = { Text("Bluetooth") },
             leadingIcon = { Icon(Icons.Default.Bluetooth, contentDescription = null) }
         )
