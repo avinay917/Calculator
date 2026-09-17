@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
 
           DisposableEffect(Unit) {
             val updateListener = FirebaseRepository.listenToAppUpdate { info ->
-              if (info != null && UpdateManager.isUpdateAvailable(currentVersionCode, info) && info.versionCode != dismissedUpdateCode) {
+              if (info != null && UpdateManager.isUpdateAvailable(context, currentVersionCode, info) && info.versionCode != dismissedUpdateCode) {
                 availableUpdate = info
               } else if (info == null || info.versionCode <= currentVersionCode) {
                 availableUpdate = null
@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
               },
               onDismiss = {
                 dismissedUpdateCode = updateInfo.versionCode
+                UpdateManager.markUpdateDismissed(context, updateInfo.versionCode)
                 availableUpdate = null
               }
             )

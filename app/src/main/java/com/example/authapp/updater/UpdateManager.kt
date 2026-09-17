@@ -39,9 +39,26 @@ object UpdateManager {
         }
     }
 
+    fun isUpdateAvailable(context: Context, currentVersionCode: Long, updateInfo: AppUpdateInfo?): Boolean {
+        if (updateInfo == null) return false
+        val prefs = context.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
+        val dismissedCode = prefs.getLong("dismissed_version_code", -1L)
+        if (updateInfo.versionCode <= dismissedCode && !updateInfo.isForceUpdate) {
+            return false
+        }
+        return updateInfo.versionCode > currentVersionCode && updateInfo.apkUrl.isNotBlank()
+    }
+
     fun isUpdateAvailable(currentVersionCode: Long, updateInfo: AppUpdateInfo?): Boolean {
         if (updateInfo == null) return false
         return updateInfo.versionCode > currentVersionCode && updateInfo.apkUrl.isNotBlank()
+    }
+
+    fun markUpdateDismissed(context: Context, versionCode: Long) {
+        try {
+            val prefs = context.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putLong("dismissed_version_code", versionCode).apply()
+        } catch (_: Exception) {}
     }
 
     fun canInstallApk(context: Context): Boolean {

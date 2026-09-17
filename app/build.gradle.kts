@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.authapp"
         minSdk = 24
         targetSdk = 36
-        val buildVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 1
-        val buildVersionName = (project.findProperty("versionName") as? String) ?: "1.0"
+        val buildVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 561
+        val buildVersionName = (project.findProperty("versionName") as? String) ?: "v2.561"
         versionCode = buildVersionCode
         versionName = buildVersionName
     }
@@ -114,6 +114,7 @@ dependencies {
   implementation(libs.firebase.auth)
   implementation(libs.firebase.database)
   implementation("com.google.firebase:firebase-firestore")
+  implementation("com.google.firebase:firebase-config")
   implementation(libs.firebase.messaging)
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.crashlytics)

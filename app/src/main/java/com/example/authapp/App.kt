@@ -43,7 +43,8 @@ class App : Application() {
             val rtdb = FirebaseDatabase.getInstance()
             rtdb.setPersistenceEnabled(true)
             rtdb.reference.child("app_update").keepSynced(true)
-            Logger.i("App", "Firebase initialized with persistence enabled")
+            com.example.authapp.config.RemoteConfigManager.init(this)
+            Logger.i("App", "Firebase initialized with persistence enabled and RemoteConfig initialized")
         } catch (e: Exception) {
             Logger.e("App", "Firebase initialization error", e)
         }
