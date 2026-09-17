@@ -43,6 +43,9 @@ fun ChildActivityDialog(
     var selectedTab by remember { mutableIntStateOf(initialTab) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications
     var searchQuery by remember { mutableStateOf("") }
     var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
+    var isAudioBuffering by remember { mutableStateOf(false) }
+    var audioPositionMs by remember { mutableIntStateOf(0) }
+    var audioDurationMs by remember { mutableIntStateOf(0) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     fun stopAudio() {
@@ -52,6 +55,9 @@ fun ChildActivityDialog(
         } catch (_: Exception) {}
         mediaPlayer = null
         currentlyPlayingAudioUrl = null
+        isAudioBuffering = false
+        audioPositionMs = 0
+        audioDurationMs = 0
     }
 
     fun playAudio(url: String) {
@@ -60,6 +66,9 @@ fun ChildActivityDialog(
             return
         }
         stopAudio()
+        isAudioBuffering = true
+        currentlyPlayingAudioUrl = url
+
         val mp = MediaPlayer().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
@@ -68,23 +77,37 @@ fun ChildActivityDialog(
                     .build()
             )
             setOnCompletionListener {
-                currentlyPlayingAudioUrl = null
+                stopAudio()
             }
             setOnErrorListener { _, _, _ ->
-                currentlyPlayingAudioUrl = null
+                stopAudio()
                 true
             }
         }
         try {
             mp.setDataSource(url)
-            mp.prepareAsync()
-            mp.setOnPreparedListener {
-                it.start()
-                currentlyPlayingAudioUrl = url
+            mp.setOnPreparedListener { player ->
+                isAudioBuffering = false
+                audioDurationMs = player.duration
+                player.start()
             }
+            mp.prepareAsync()
             mediaPlayer = mp
         } catch (e: Exception) {
-            currentlyPlayingAudioUrl = null
+            stopAudio()
+        }
+    }
+
+    LaunchedEffect(currentlyPlayingAudioUrl) {
+        if (currentlyPlayingAudioUrl != null) {
+            while (currentlyPlayingAudioUrl != null) {
+                mediaPlayer?.let { mp ->
+                    if (mp.isPlaying) {
+                        audioPositionMs = mp.currentPosition
+                    }
+                }
+                kotlinx.coroutines.delay(250L)
+            }
         }
     }
 
@@ -269,6 +292,9 @@ fun ChildActivityDialog(
                                             CallLogListItem(
                                                 log = log,
                                                 isPlaying = currentlyPlayingAudioUrl == log.audioRecordingUrl && log.audioRecordingUrl.isNotEmpty(),
+                                                isBuffering = isAudioBuffering,
+                                                audioPositionMs = audioPositionMs,
+                                                audioDurationMs = audioDurationMs,
                                                 onPlayClick = {
                                                     if (log.audioRecordingUrl.isNotEmpty()) {
                                                         playAudio(log.audioRecordingUrl)
@@ -424,20 +450,26 @@ fun EmptyStateBox(icon: androidx.compose.ui.graphics.vector.ImageVector, message
 fun CallLogListItem(
     log: CallLogItem,
     isPlaying: Boolean = false,
+    isBuffering: Boolean = false,
+    audioPositionMs: Int = 0,
+    audioDurationMs: Int = 0,
     onPlayClick: () -> Unit = {}
 ) {
-    val typeIcon = when (log.type.uppercase()) {
-        "OUTGOING" -> Icons.Default.CallMade
-        "INCOMING" -> Icons.Default.CallReceived
-        "MISSED" -> Icons.Default.CallMissed
-        "REJECTED" -> Icons.Default.PhoneDisabled
+    val isWhatsApp = log.type.uppercase().contains("WHATSAPP")
+    val typeIcon = when {
+        isWhatsApp -> Icons.Default.Call
+        log.type.uppercase() == "OUTGOING" -> Icons.Default.CallMade
+        log.type.uppercase() == "INCOMING" -> Icons.Default.CallReceived
+        log.type.uppercase() == "MISSED" -> Icons.Default.CallMissed
+        log.type.uppercase() == "REJECTED" -> Icons.Default.PhoneDisabled
         else -> Icons.Default.Phone
     }
-    val iconTint = when (log.type.uppercase()) {
-        "OUTGOING" -> Color(0xFF1976D2)
-        "INCOMING" -> Color(0xFF388E3C)
-        "MISSED" -> Color(0xFFD32F2F)
-        "REJECTED" -> Color(0xFFE65100)
+    val iconTint = when {
+        isWhatsApp -> Color(0xFF25D366)
+        log.type.uppercase() == "OUTGOING" -> Color(0xFF1976D2)
+        log.type.uppercase() == "INCOMING" -> Color(0xFF388E3C)
+        log.type.uppercase() == "MISSED" -> Color(0xFFD32F2F)
+        log.type.uppercase() == "REJECTED" -> Color(0xFFE65100)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val timeStr = remember(log.timestamp) {
@@ -451,6 +483,12 @@ fun CallLogListItem(
             val secs = log.durationSeconds % 60
             if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
         }
+    }
+
+    val displayType = when (log.type.uppercase()) {
+        "INCOMING_WHATSAPP" -> "WHATSAPP INCOMING"
+        "OUTGOING_WHATSAPP" -> "WHATSAPP OUTGOING"
+        else -> log.type.uppercase()
     }
 
     Surface(
@@ -476,14 +514,12 @@ fun CallLogListItem(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    // Contact Name in Bold
                     Text(
                         text = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // Phone Number if Contact Name exists
                     if (log.name.isNotEmpty() && log.number.isNotEmpty()) {
                         Text(
                             text = log.number,
@@ -493,18 +529,18 @@ fun CallLogListItem(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${log.type.uppercase()} • $timeStr • $durationStr",
+                        text = "$displayType • $timeStr • $durationStr",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
 
-            // Audio Call Recording Player Bar if recording exists
+            // Enhanced Audio Call Recording Player Bar
             if (log.audioRecordingUrl.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -514,33 +550,58 @@ fun CallLogListItem(
                     ) {
                         FilledIconButton(
                             onClick = onPlayClick,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(36.dp),
                             colors = IconButtonDefaults.filledIconButtonColors(
                                 containerColor = if (isPlaying) MaterialTheme.colorScheme.primary else Color(0xFF388E3C)
                             )
                         ) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause Recording" else "Play Call Recording",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            if (isPlaying && isBuffering) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause Recording" else "Play Call Recording",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(10.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isPlaying) "Playing Call Recording..." else "Listen Call Recording",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isPlaying) (if (isBuffering) "Buffering..." else "Playing Call Recording...") else "Listen Call Recording 🎙️",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isPlaying && audioDurationMs > 0) {
+                                    val currentSec = audioPositionMs / 1000
+                                    val totalSec = audioDurationMs / 1000
+                                    Text(
+                                        text = String.format(Locale.getDefault(), "%02d:%02d / %02d:%02d", currentSec / 60, currentSec % 60, totalSec / 60, totalSec % 60),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                             if (isPlaying) {
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val progress = if (audioDurationMs > 0) (audioPositionMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
                                 LinearProgressIndicator(
+                                    progress = { progress },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(3.dp),
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
