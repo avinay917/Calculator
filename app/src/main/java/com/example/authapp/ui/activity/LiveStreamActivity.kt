@@ -197,17 +197,27 @@ class LiveStreamActivity : ComponentActivity() {
                     },
                     onRemoteVideoTrack = { track ->
                         mainHandler.post {
-                            streamStatusTextState.value = "Live Video Streaming 🟢"
                             remoteVideoTrackState.value = track
-                            AppAnalytics.logFeatureUsage("video_cast", "connected")
+                            val isScreen = streamType.contains("screen", ignoreCase = true)
+                            val isAudioActive = remoteAudioTrackState.value != null
+                            streamStatusTextState.value = when {
+                                isScreen -> "Live Screen Streaming 🟢"
+                                isAudioActive -> "Live Camera & Audio Streaming 🟢"
+                                else -> "Live Video Streaming 🟢"
+                            }
+                            AppAnalytics.logFeatureUsage(if (isScreen) "screen_cast" else "video_cast", "connected")
                         }
                     },
                     onRemoteAudioTrack = { track ->
                         mainHandler.post {
+                            remoteAudioTrackState.value = track
+                            val isVideoActive = remoteVideoTrackState.value != null
+                            val isScreen = streamType.contains("screen", ignoreCase = true)
                             if (streamType.equals("audio", ignoreCase = true)) {
                                 streamStatusTextState.value = "Live Audio Streaming 🟢"
+                            } else if (isVideoActive && !isScreen) {
+                                streamStatusTextState.value = "Live Camera & Audio Streaming 🟢"
                             }
-                            remoteAudioTrackState.value = track
                             try {
                                 track.setEnabled(true)
                                 track.setVolume(WebRtcManager.calculateSuperBoostGain(audioSensitivityState.floatValue))
