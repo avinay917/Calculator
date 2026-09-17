@@ -1,9 +1,10 @@
 {
   "rules": {
     "users": {
+      ".read": "auth != null",
+      ".indexOn": ["parentId", "role"],
       "$uid": {
-        ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid || !data.exists())"
       }
     },
     "streams": {
@@ -158,8 +159,8 @@
     },
     "pairing_codes": {
       "$code": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'parent'",
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'child' && !data.exists()"
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
     "youtube_history": {
