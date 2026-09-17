@@ -101,6 +101,15 @@ fun ParentScreen(
         }
         viewModel.loadChildUsers(context)
         viewModel.loadAllRecordings()
+
+        // Auto-publish latest App Update info to Firebase RTDB for child devices
+        FirebaseRepository.publishAppUpdate(
+            versionCode = 564L,
+            versionName = "v2.564",
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.564/app-release.apk",
+            releaseNotes = "v2.564: Call Recording Speed Control, Snapshots Gallery, Media Vault, Multi-Child Switcher",
+            isForceUpdate = false
+        )
     }
 
     LaunchedEffect(uiState.userFeedbackMessage) {
