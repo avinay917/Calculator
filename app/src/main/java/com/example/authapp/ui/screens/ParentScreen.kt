@@ -446,14 +446,16 @@ fun ParentScreen(
                                 .fillMaxSize()
                                 .padding(20.dp)
                         ) {
-                            // Header
+                            // Header (Clean, Non-Overlapping Layout)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(56.dp)
+                                        .size(46.dp)
                                         .clip(CircleShape)
                                         .background(MaterialTheme.colorScheme.primaryContainer)
                                         .clickable {
@@ -463,59 +465,50 @@ fun ParentScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.SupervisorAccount,
-                                        contentDescription = "User Settings & Navigation Drawer",
+                                        contentDescription = "User Settings",
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(26.dp)
                                     )
                                 }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Parent Dashboard",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primaryContainer
-                                ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "PARENT",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        text = "Parent Dashboard",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = email,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                IconButton(onClick = { showPairingDialog = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.QrCode,
+                                        contentDescription = "Pair Child Device",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = onSignOut) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Sign Out",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = email,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        IconButton(onClick = { showPairingDialog = true }) {
-                            Icon(
-                                imageVector = Icons.Default.QrCode,
-                                contentDescription = "Pair Child Device",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        IconButton(onClick = onSignOut) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Sign Out",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(20.dp))
 

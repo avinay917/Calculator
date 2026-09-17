@@ -1,6 +1,8 @@
 package com.example.authapp.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -140,17 +142,23 @@ fun ChildScheduleDialog(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Recording Duration:", style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        text = "Recording Duration:",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     listOf(3, 5, 10, 15, 30).forEach { dur ->
                                         FilterChip(
                                             selected = durationMinutes == dur,
                                             onClick = { durationMinutes = dur },
-                                            label = { Text("${dur}m") },
-                                            modifier = Modifier.padding(end = 4.dp)
+                                            label = { Text("${dur}m", fontWeight = FontWeight.Bold) },
+                                            modifier = Modifier.padding(end = 6.dp)
                                         )
                                     }
                                 }
