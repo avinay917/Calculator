@@ -1644,25 +1644,6 @@ object FirebaseRepository {
                 onComplete(false)
             }
     }
-
-    fun listenToAppUpdate(onUpdate: (AppUpdateInfo?) -> Unit): ValueEventListener {
-        val ref = database.reference.child("app_update")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) {
-                    onUpdate(null)
-                    return
-                }
-                val info = snapshot.getValue(AppUpdateInfo::class.java)
-                onUpdate(info)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                onUpdate(null)
-            }
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 }
 
 
