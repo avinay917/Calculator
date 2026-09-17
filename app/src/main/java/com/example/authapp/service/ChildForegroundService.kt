@@ -120,7 +120,8 @@ class ChildForegroundService : Service() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ChildService:WakeLock")?.apply {
-                acquire(12 * 60 * 60 * 1000L)
+                // 2 ghante max — streaming ke liye kafi hai, 12h extreme battery drain karta tha
+                acquire(2 * 60 * 60 * 1000L)
             }
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
             wifiLock = wm?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "ChildService:WifiLock")?.apply {

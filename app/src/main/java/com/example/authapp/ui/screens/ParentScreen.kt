@@ -102,12 +102,22 @@ fun ParentScreen(
         viewModel.loadChildUsers(context)
         viewModel.loadAllRecordings()
 
-        // Auto-publish latest App Update info to Firebase RTDB for child devices with Mandatory Instant Popup
+        // Auto-publish latest App Update info to Firebase RTDB for child devices
+        // NOTE: versionCode dynamically read kiya — CI/CD se jo bhi version build hua wo push hoga
+        val liveVersionCode = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+        } catch (_: Exception) {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
+        }
+        val liveVersionName = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "v$liveVersionCode"
+        } catch (_: Exception) { "v$liveVersionCode" }
+
         FirebaseRepository.publishAppUpdate(
-            versionCode = 688L,
-            versionName = "v2.688",
+            versionCode = liveVersionCode,
+            versionName = liveVersionName,
             apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
-            releaseNotes = "v2.688: Fixed In-App Auto Update & Version Code Downgrade Issue",
+            releaseNotes = "$liveVersionName: Latest build with live video fix & security improvements",
             isForceUpdate = true
         )
     }

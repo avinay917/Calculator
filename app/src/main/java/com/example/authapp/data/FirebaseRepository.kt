@@ -240,14 +240,17 @@ object FirebaseRepository {
     }
 
     fun listenToUserRole(uid: String, onRoleChanged: (String) -> Unit) {
+        // FIXED: Persistent ValueEventListener se Memory Leak hota tha — SingleValueEvent use karo
         database.reference.child("users").child(uid).child("role")
-            .addValueEventListener(object : ValueEventListener {
+            .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val role = snapshot.getValue(String::class.java) ?: "child"
                     onRoleChanged(role)
                 }
 
-                override fun onCancelled(error: DatabaseError) {}
+                override fun onCancelled(error: DatabaseError) {
+                    onRoleChanged("child") // Default safe fallback
+                }
             })
     }
 

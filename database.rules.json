@@ -158,8 +158,8 @@
     },
     "pairing_codes": {
       "$code": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'parent'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'child' && !data.exists()"
       }
     }
   }

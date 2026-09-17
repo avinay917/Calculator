@@ -127,7 +127,9 @@ data class WhatsAppLogItem(
     val messageText: String = "",
     val timestamp: Long = 0L,
     val type: String = "CHAT", // CHAT, STATUS, AUDIO, PHOTO, VIDEO
-    val isIncoming: Boolean = true
+    val isIncoming: Boolean = true,
+    val mediaUrl: String = "",   // WhatsApp Status/Photo/Video download URL
+    val mediaType: String = ""   // "image", "video", "audio" - empty if text-only
 )
 
 

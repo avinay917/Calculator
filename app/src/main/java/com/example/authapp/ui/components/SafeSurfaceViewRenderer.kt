@@ -32,9 +32,11 @@ fun SafeSurfaceViewRenderer(
                 setEnableHardwareScaler(false)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                 setMirror(false)
-                // CRITICAL: setZOrderMediaOverlay(false) — Dialog ke andar true hone par
-                // SurfaceView ek wrong Z-order window banata hai jo native EGL crash karta hai
-                setZOrderMediaOverlay(false)
+                // CRITICAL FIX: setZOrderMediaOverlay(true) — Video Compose Surface ke
+                // UPAR render hona chahiye. false hone par SurfaceView neeche chala jata hai
+                // aur parent ko sirf black screen dikhti hai, video nahi.
+                // LiveStreamActivity ek dedicated Activity hai (Dialog nahi), isliye true safe hai.
+                setZOrderMediaOverlay(true)
 
                 try {
                     init(eglContext, object : RendererCommon.RendererEvents {
