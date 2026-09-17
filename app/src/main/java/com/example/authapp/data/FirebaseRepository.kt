@@ -1619,6 +1619,50 @@ object FirebaseRepository {
             onConfigFetched(emptyMap())
         }
     }
+
+    // --- OTA App Update Management ---
+    fun publishAppUpdate(
+        versionCode: Long,
+        versionName: String,
+        apkUrl: String,
+        releaseNotes: String,
+        isForceUpdate: Boolean = false,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        val data = mapOf<String, Any>(
+            "versionCode" to versionCode,
+            "versionName" to versionName,
+            "apkUrl" to apkUrl,
+            "releaseNotes" to releaseNotes,
+            "isForceUpdate" to isForceUpdate,
+            "updatedAt" to ServerValue.TIMESTAMP
+        )
+        database.reference.child("app_update").setValue(data)
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                crashlytics.recordException(e)
+                onComplete(false)
+            }
+    }
+
+    fun listenToAppUpdate(onUpdate: (AppUpdateInfo?) -> Unit): ValueEventListener {
+        val ref = database.reference.child("app_update")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!snapshot.exists()) {
+                    onUpdate(null)
+                    return
+                }
+                val info = snapshot.getValue(AppUpdateInfo::class.java)
+                onUpdate(info)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                onUpdate(null)
+            }
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
 }
 
 
