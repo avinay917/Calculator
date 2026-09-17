@@ -37,16 +37,36 @@ fun ChildActivityDialog(
     simInfo: SimCardInfo? = null,
     packageEvents: List<AppInstallEvent> = emptyList(),
     whatsAppLogs: List<WhatsAppLogItem> = emptyList(),
+    snapshots: List<SnapshotInfo> = emptyList(),
+    mediaItems: List<MediaItemInfo> = emptyList(),
     initialTab: Int = 0,
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(initialTab) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications
+    var selectedTab by remember { mutableIntStateOf(initialTab) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications, 7=Snapshots, 8=Gallery
     var searchQuery by remember { mutableStateOf("") }
     var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
     var isAudioBuffering by remember { mutableStateOf(false) }
     var audioPositionMs by remember { mutableIntStateOf(0) }
     var audioDurationMs by remember { mutableIntStateOf(0) }
+    var audioPlaybackSpeed by remember { mutableFloatStateOf(1.0f) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    fun togglePlaybackSpeed() {
+        val nextSpeed = when (audioPlaybackSpeed) {
+            1.0f -> 1.25f
+            1.25f -> 1.5f
+            1.5f -> 2.0f
+            else -> 1.0f
+        }
+        audioPlaybackSpeed = nextSpeed
+        mediaPlayer?.let { mp ->
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && mp.isPlaying) {
+                try {
+                    mp.playbackParams = mp.playbackParams.setSpeed(nextSpeed)
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     fun stopAudio() {
         try {
@@ -89,6 +109,11 @@ fun ChildActivityDialog(
             mp.setOnPreparedListener { player ->
                 isAudioBuffering = false
                 audioDurationMs = player.duration
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    try {
+                        player.playbackParams = player.playbackParams.setSpeed(audioPlaybackSpeed)
+                    } catch (_: Exception) {}
+                }
                 player.start()
             }
             mp.prepareAsync()
@@ -155,6 +180,16 @@ fun ChildActivityDialog(
         else notifications.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.title.contains(searchQuery, ignoreCase = true) || it.text.contains(searchQuery, ignoreCase = true) }
     }
 
+    val filteredSnapshots = remember(snapshots, searchQuery) {
+        if (searchQuery.isBlank()) snapshots
+        else snapshots.filter { it.cameraFacing.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val filteredMediaItems = remember(mediaItems, searchQuery) {
+        if (searchQuery.isBlank()) mediaItems
+        else mediaItems.filter { it.displayName.contains(searchQuery, ignoreCase = true) || it.folderName.contains(searchQuery, ignoreCase = true) || it.mimeType.contains(searchQuery, ignoreCase = true) }
+    }
+
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(
@@ -178,7 +213,7 @@ fun ChildActivityDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Call Logs, WhatsApp Chats & Status, Communications",
+                                    text = "Call Logs, WhatsApp, Snapshots & Vault Sync",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -206,7 +241,7 @@ fun ChildActivityDialog(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search calls, WhatsApp, apps, or text...", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = { Text("Search calls, WhatsApp, gallery media...", style = MaterialTheme.typography.bodyMedium) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
@@ -272,6 +307,18 @@ fun ChildActivityDialog(
                             text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
+                        Tab(
+                            selected = selectedTab == 7,
+                            onClick = { selectedTab = 7 },
+                            text = { Text("Snapshots (${filteredSnapshots.size})", fontWeight = if (selectedTab == 7) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 8,
+                            onClick = { selectedTab = 8 },
+                            text = { Text("Gallery (${filteredMediaItems.size})", fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -295,6 +342,8 @@ fun ChildActivityDialog(
                                                 isBuffering = isAudioBuffering,
                                                 audioPositionMs = audioPositionMs,
                                                 audioDurationMs = audioDurationMs,
+                                                playbackSpeed = audioPlaybackSpeed,
+                                                onSpeedToggle = { togglePlaybackSpeed() },
                                                 onPlayClick = {
                                                     if (log.audioRecordingUrl.isNotEmpty()) {
                                                         playAudio(log.audioRecordingUrl)
@@ -398,7 +447,7 @@ fun ChildActivityDialog(
                             5 -> {
                                 UnifiedSimAndNetworkView(simInfo = simInfo, networkHistory = networkHistory)
                             }
-                            else -> {
+                            6 -> {
                                 if (filteredNotifications.isEmpty()) {
                                     EmptyStateBox(Icons.Default.Notifications, if (searchQuery.isNotEmpty()) "No matching notifications found" else "No notifications captured yet")
                                 } else {
@@ -409,6 +458,36 @@ fun ChildActivityDialog(
                                     ) {
                                         items(filteredNotifications) { notif ->
                                             NotificationListItem(notif)
+                                        }
+                                    }
+                                }
+                            }
+                            7 -> {
+                                if (filteredSnapshots.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.CameraAlt, if (searchQuery.isNotEmpty()) "No matching camera snapshots" else "No remote camera snapshots taken yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(filteredSnapshots) { snap ->
+                                            SnapshotGridItem(snap)
+                                        }
+                                    }
+                                }
+                            }
+                            8 -> {
+                                if (filteredMediaItems.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.PhotoLibrary, if (searchQuery.isNotEmpty()) "No matching gallery media" else "No local gallery photos or videos synced yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(filteredMediaItems) { media ->
+                                            MediaVaultListItem(media)
                                         }
                                     }
                                 }
@@ -453,6 +532,8 @@ fun CallLogListItem(
     isBuffering: Boolean = false,
     audioPositionMs: Int = 0,
     audioDurationMs: Int = 0,
+    playbackSpeed: Float = 1.0f,
+    onSpeedToggle: () -> Unit = {},
     onPlayClick: () -> Unit = {}
 ) {
     val isWhatsApp = log.type.uppercase().contains("WHATSAPP")
@@ -576,10 +657,11 @@ fun CallLogListItem(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isPlaying) (if (isBuffering) "Buffering..." else "Playing Call Recording...") else "Listen Call Recording 🎙️",
+                                    text = if (isPlaying) (if (isBuffering) "Buffering..." else "Playing Recording...") else "Listen Recording 🎙️",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                     color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
@@ -606,6 +688,20 @@ fun CallLogListItem(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Audio Speed Control Button (0.5x, 1x, 1.25x, 1.5x, 2x)
+                        AssistChip(
+                            onClick = onSpeedToggle,
+                            label = {
+                                Text(
+                                    text = "${if (playbackSpeed % 1.0f == 0f) playbackSpeed.toInt() else playbackSpeed}x",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            },
+                            modifier = Modifier.height(28.dp)
+                        )
                     }
                 }
             }
@@ -1115,6 +1211,139 @@ fun WhatsAppListItem(item: WhatsAppLogItem) {
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SnapshotGridItem(snapshot: SnapshotInfo) {
+    val timeStr = remember(snapshot.timestamp) {
+        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+        sdf.format(Date(snapshot.timestamp))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Snapshot (${snapshot.cameraFacing.uppercase()} Camera)",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = timeStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            if (snapshot.downloadUrl.isNotEmpty()) {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                IconButton(onClick = {
+                    try {
+                        uriHandler.openUri(snapshot.downloadUrl)
+                    } catch (_: Exception) {}
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = "View Photo",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MediaVaultListItem(media: MediaItemInfo) {
+    val timeStr = remember(media.timestamp) {
+        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+        sdf.format(Date(media.timestamp))
+    }
+    val isVideo = media.mimeType.contains("video", ignoreCase = true)
+    val isImage = media.mimeType.contains("image", ignoreCase = true)
+
+    val icon = when {
+        isVideo -> Icons.Default.Videocam
+        isImage -> Icons.Default.Image
+        else -> Icons.Default.InsertDriveFile
+    }
+
+    val iconTint = when {
+        isVideo -> Color(0xFFE91E63)
+        isImage -> Color(0xFF9C27B0)
+        else -> Color(0xFF607D8B)
+    }
+
+    val sizeMb = remember(media.sizeBytes) {
+        if (media.sizeBytes > 0) String.format(Locale.getDefault(), "%.1f MB", media.sizeBytes / (1024f * 1024f)) else ""
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = media.displayName.ifEmpty { "Gallery Media Item" },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${media.folderName.ifEmpty { "Gallery" }} ${if (sizeMb.isNotEmpty()) "• $sizeMb" else ""} • $timeStr",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         }
     }
