@@ -37,6 +37,20 @@ object FirebaseRepository {
                 onData(snapshot.toListOf())
             }
     }
+
+    inline fun <reified T> listenToChildNodeList(
+        nodePath: String,
+        childId: String,
+        limit: Int = 50,
+        crossinline transform: (List<T>) -> List<T> = { it },
+        crossinline onData: (List<T>) -> Unit
+    ): ValueEventListener {
+        val ref = FirebaseDatabase.getInstance().reference.child(nodePath).child(childId)
+        val query = if (limit > 0) ref.limitToLast(limit) else ref
+        return query.onValueChange { snapshot ->
+            onData(transform(snapshot.toListOf()))
+        }
+    }
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
@@ -813,23 +827,8 @@ object FirebaseRepository {
         ref.setValue(toSave)
     }
 
-    fun listenToSecurityAlerts(childId: String, onAlerts: (List<SecurityAlert>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("alerts").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<SecurityAlert>()
-                for (child in snapshot.children) {
-                    child.getValue(SecurityAlert::class.java)?.let { list.add(it) }
-                }
-                onAlerts(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase alerts cancelled] ${error.message}")
-            }
-        }
-        ref.limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToSecurityAlerts(childId: String, onAlerts: (List<SecurityAlert>) -> Unit): ValueEventListener =
+        listenToChildNodeList("alerts", childId, limit = 50, transform = { it.sortedByDescending { a -> a.timestamp } }, onAlerts)
 
     // --- Call Log History ---
     fun syncCallLogs(childId: String, callLogs: List<CallLogItem>) {
@@ -843,23 +842,8 @@ object FirebaseRepository {
         ref.updateChildren(map)
     }
 
-    fun listenToCallLogs(childId: String, onLogs: (List<CallLogItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("call_logs").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<CallLogItem>()
-                for (child in snapshot.children) {
-                    child.getValue(CallLogItem::class.java)?.let { list.add(it) }
-                }
-                onLogs(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase call_logs cancelled] ${error.message}")
-            }
-        }
-        ref.limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToCallLogs(childId: String, onLogs: (List<CallLogItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("call_logs", childId, limit = 50, transform = { it.sortedByDescending { c -> c.timestamp } }, onLogs)
 
     // --- Notification Mirroring ---
     fun pushNotification(childId: String, item: NotificationItem) {
@@ -868,23 +852,8 @@ object FirebaseRepository {
         ref.setValue(toSave)
     }
 
-    fun listenToNotifications(childId: String, onNotifications: (List<NotificationItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("notifications").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<NotificationItem>()
-                for (child in snapshot.children) {
-                    child.getValue(NotificationItem::class.java)?.let { list.add(it) }
-                }
-                onNotifications(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase notifications cancelled] ${error.message}")
-            }
-        }
-        ref.limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToNotifications(childId: String, onNotifications: (List<NotificationItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("notifications", childId, limit = 50, transform = { it.sortedByDescending { n -> n.timestamp } }, onNotifications)
 
     // --- Scheduled Recordings ---
     fun saveRecordingSchedule(childId: String, schedule: RecordingSchedule) {
@@ -901,21 +870,8 @@ object FirebaseRepository {
         database.reference.child("schedules").child(childId).child(scheduleId).removeValue()
     }
 
-    fun listenToRecordingSchedules(childId: String, onSchedules: (List<RecordingSchedule>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("schedules").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<RecordingSchedule>()
-                for (child in snapshot.children) {
-                    child.getValue(RecordingSchedule::class.java)?.let { list.add(it) }
-                }
-                onSchedules(list)
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToRecordingSchedules(childId: String, onSchedules: (List<RecordingSchedule>) -> Unit): ValueEventListener =
+        listenToChildNodeList("schedules", childId, limit = 0, onData = onSchedules)
 
     // --- Remote Snapshots ---
     fun requestSnapshot(childId: String, cameraFacing: String = "back") {
@@ -1129,21 +1085,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToSmsLogs(childId: String, onSms: (List<SmsItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("sms_logs").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<SmsItem>()
-                for (child in snapshot.children) {
-                    child.getValue(SmsItem::class.java)?.let { list.add(it) }
-                }
-                onSms(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToSmsLogs(childId: String, onSms: (List<SmsItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("sms_logs", childId, limit = 50, transform = { it.sortedByDescending { s -> s.timestamp } }, onSms)
 
     // --- Remote Hardware Commands (Torch, Siren - Phase 4) ---
     fun sendRemoteCommand(childId: String, command: String, value: Any = true) {
@@ -1183,21 +1126,8 @@ object FirebaseRepository {
         database.reference.child("location_history").child(childId).push().setValue(loc.copy(timestamp = timestamp))
     }
 
-    fun listenToLocationHistory(childId: String, onHistory: (List<UserLocation>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("location_history").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<UserLocation>()
-                for (child in snapshot.children) {
-                    child.getValue(UserLocation::class.java)?.let { list.add(it) }
-                }
-                onHistory(list.sortedByDescending { it.timestamp }.take(50))
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToLocationHistory(childId: String, onHistory: (List<UserLocation>) -> Unit): ValueEventListener =
+        listenToChildNodeList("location_history", childId, limit = 50, transform = { it.sortedByDescending { l -> l.timestamp }.take(50) }, onHistory)
 
     // --- Geofence Zones (Phase 4) ---
     fun saveGeofence(childId: String, zone: GeofenceZone) {
@@ -1205,21 +1135,8 @@ object FirebaseRepository {
         database.reference.child("geofences").child(childId).child(zone.id).setValue(zone)
     }
 
-    fun listenToGeofences(childId: String, onZones: (List<GeofenceZone>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("geofences").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<GeofenceZone>()
-                for (child in snapshot.children) {
-                    child.getValue(GeofenceZone::class.java)?.let { list.add(it) }
-                }
-                onZones(list)
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToGeofences(childId: String, onZones: (List<GeofenceZone>) -> Unit): ValueEventListener =
+        listenToChildNodeList("geofences", childId, limit = 0, onData = onZones)
 
     // --- Media & Gallery Items (Phase 4) ---
     fun syncMediaItems(childId: String, items: List<MediaItemInfo>) {
@@ -1228,21 +1145,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToMediaItems(childId: String, onMedia: (List<MediaItemInfo>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("media_items").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<MediaItemInfo>()
-                for (child in snapshot.children) {
-                    child.getValue(MediaItemInfo::class.java)?.let { list.add(it) }
-                }
-                onMedia(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToMediaItems(childId: String, onMedia: (List<MediaItemInfo>) -> Unit): ValueEventListener =
+        listenToChildNodeList("media_items", childId, limit = 50, transform = { it.sortedByDescending { m -> m.timestamp } }, onMedia)
 
     // --- Web History & Safety (Feature 5) ---
     fun logWebHistoryItem(childId: String, item: WebHistoryItem) {
@@ -1252,21 +1156,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToWebHistory(childId: String, onHistory: (List<WebHistoryItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("web_history").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<WebHistoryItem>()
-                for (child in snapshot.children) {
-                    child.getValue(WebHistoryItem::class.java)?.let { list.add(it) }
-                }
-                onHistory(list.sortedByDescending { it.timestamp }.take(100))
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.limitToLast(100).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToWebHistory(childId: String, onHistory: (List<WebHistoryItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("web_history", childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp }.take(100) }, onHistory)
 
     // --- Network & Wi-Fi Connection History (Feature 6) ---
     fun recordNetworkHistory(childId: String, item: NetworkHistoryItem) {
@@ -1276,21 +1167,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToNetworkHistory(childId: String, onHistory: (List<NetworkHistoryItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("network_history").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<NetworkHistoryItem>()
-                for (child in snapshot.children) {
-                    child.getValue(NetworkHistoryItem::class.java)?.let { list.add(it) }
-                }
-                onHistory(list.sortedByDescending { it.connectedAt }.take(50))
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToNetworkHistory(childId: String, onHistory: (List<NetworkHistoryItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("network_history", childId, limit = 50, transform = { it.sortedByDescending { n -> n.connectedAt }.take(50) }, onHistory)
 
     // --- SIM Card Info & Swap Alerts (Feature 7) ---
     fun saveSimCardInfo(childId: String, info: SimCardInfo) {
@@ -1320,21 +1198,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToAppInstallEvents(childId: String, onEvents: (List<AppInstallEvent>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("package_events").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<AppInstallEvent>()
-                for (child in snapshot.children) {
-                    child.getValue(AppInstallEvent::class.java)?.let { list.add(it) }
-                }
-                onEvents(list.sortedByDescending { it.timestamp }.take(50))
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToAppInstallEvents(childId: String, onEvents: (List<AppInstallEvent>) -> Unit): ValueEventListener =
+        listenToChildNodeList("package_events", childId, limit = 50, transform = { it.sortedByDescending { e -> e.timestamp }.take(50) }, onEvents)
 
     fun logSingleCallLog(childId: String, callLog: CallLogItem) {
         if (childId.isEmpty()) return
@@ -1721,23 +1586,8 @@ object FirebaseRepository {
         ref.setValue(toSave)
     }
 
-    fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("whatsapp_logs").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<WhatsAppLogItem>()
-                for (child in snapshot.children) {
-                    child.getValue(WhatsAppLogItem::class.java)?.let { list.add(it) }
-                }
-                onLogs(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase whatsapp_logs cancelled] ${error.message}")
-            }
-        }
-        ref.limitToLast(100).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList("whatsapp_logs", childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp } }, onLogs)
 
     // --- Firebase Remote Config Feature Flags ---
     fun fetchRemoteConfig(onConfigFetched: (Map<String, Boolean>) -> Unit = {}) {
