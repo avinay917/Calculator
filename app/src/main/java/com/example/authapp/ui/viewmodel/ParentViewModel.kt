@@ -46,6 +46,19 @@ class ParentViewModel : ViewModel() {
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
+    private fun <T> setupMapListener(
+        listenersMap: MutableMap<String, com.google.firebase.database.ValueEventListener>,
+        childUid: String,
+        listenBlock: (String, (T) -> Unit) -> com.google.firebase.database.ValueEventListener,
+        onDataReceived: (T) -> Unit
+    ) {
+        if (!listenersMap.containsKey(childUid)) {
+            listenersMap[childUid] = listenBlock(childUid) { data ->
+                onDataReceived(data)
+            }
+        }
+    }
+
     fun loadChildUsers(context: android.content.Context? = null) {
         if (context != null) {
             val cached = FirebaseRepository.getCachedChildUsers(context)
@@ -81,30 +94,30 @@ class ParentViewModel : ViewModel() {
                 }
                 list.forEach { child ->
                     if (child.uid.isNotEmpty()) {
-                        setupMapListener(healthListeners, child.uid, FirebaseRepository::listenToDeviceHealth) { state, data ->
-                            if (data != null) state.copy(deviceHealthMap = state.deviceHealthMap + (child.uid to data)) else state
+                        setupMapListener(healthListeners, child.uid, FirebaseRepository::listenToDeviceHealth) { health ->
+                            if (health != null) _uiState.update { it.copy(deviceHealthMap = it.deviceHealthMap + (child.uid to health)) }
                         }
-                        setupMapListener(alertsListeners, child.uid, FirebaseRepository::listenToSecurityAlerts) { state, data ->
-                            state.copy(securityAlertsMap = state.securityAlertsMap + (child.uid to data))
+                        setupMapListener(alertsListeners, child.uid, FirebaseRepository::listenToSecurityAlerts) { alerts ->
+                            _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
                         }
                         val fsAlerts = FirebaseRepository.listenToChildSecurityAlertsFirestore(child.uid) { alerts ->
                             if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
                         }
                         firestoreRegistrations.add(fsAlerts)
 
-                        setupMapListener(callLogsListeners, child.uid, FirebaseRepository::listenToCallLogs) { state, data ->
-                            state.copy(callLogsMap = state.callLogsMap + (child.uid to data))
+                        setupMapListener(callLogsListeners, child.uid, FirebaseRepository::listenToCallLogs) { logs ->
+                            _uiState.update { it.copy(callLogsMap = it.callLogsMap + (child.uid to logs)) }
                         }
                         val fsCalls = FirebaseRepository.listenToChildCallLogsFirestore(child.uid) { logs ->
                             if (logs.isNotEmpty()) _uiState.update { it.copy(callLogsMap = it.callLogsMap + (child.uid to logs)) }
                         }
                         firestoreRegistrations.add(fsCalls)
 
-                        setupMapListener(notificationsListeners, child.uid, FirebaseRepository::listenToNotifications) { state, data ->
-                            state.copy(notificationsMap = state.notificationsMap + (child.uid to data))
+                        setupMapListener(notificationsListeners, child.uid, FirebaseRepository::listenToNotifications) { notifs ->
+                            _uiState.update { it.copy(notificationsMap = it.notificationsMap + (child.uid to notifs)) }
                         }
-                        setupMapListener(schedulesListeners, child.uid, FirebaseRepository::listenToRecordingSchedules) { state, data ->
-                            state.copy(schedulesMap = state.schedulesMap + (child.uid to data))
+                        setupMapListener(schedulesListeners, child.uid, FirebaseRepository::listenToRecordingSchedules) { schedules ->
+                            _uiState.update { it.copy(schedulesMap = it.schedulesMap + (child.uid to schedules)) }
                         }
                         if (!snapshotsListeners.containsKey(child.uid)) {
                             snapshotsListeners[child.uid] = FirebaseRepository.listenToSnapshots(child.uid) { snapshots ->
@@ -136,55 +149,55 @@ class ParentViewModel : ViewModel() {
                                 }
                             }
                         }
-                        setupMapListener(appUsageListeners, child.uid, FirebaseRepository::listenToAppUsage) { state, data ->
-                            state.copy(appUsageMap = state.appUsageMap + (child.uid to data))
+                        setupMapListener(appUsageListeners, child.uid, FirebaseRepository::listenToAppUsage) { usageList ->
+                            _uiState.update { it.copy(appUsageMap = it.appUsageMap + (child.uid to usageList)) }
                         }
-                        setupMapListener(parentControlsListeners, child.uid, FirebaseRepository::listenToParentControls) { state, data ->
-                            state.copy(parentControlsMap = state.parentControlsMap + (child.uid to data))
+                        setupMapListener(parentControlsListeners, child.uid, FirebaseRepository::listenToParentControls) { settings ->
+                            _uiState.update { it.copy(parentControlsMap = it.parentControlsMap + (child.uid to settings)) }
                         }
-                        setupMapListener(smsListeners, child.uid, FirebaseRepository::listenToSmsLogs) { state, data ->
-                            state.copy(smsLogsMap = state.smsLogsMap + (child.uid to data))
+                        setupMapListener(smsListeners, child.uid, FirebaseRepository::listenToSmsLogs) { smsList ->
+                            _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (child.uid to smsList)) }
                         }
                         val fsSms = FirebaseRepository.listenToChildSmsLogsFirestore(child.uid) { smsList ->
                             if (smsList.isNotEmpty()) _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (child.uid to smsList)) }
                         }
                         firestoreRegistrations.add(fsSms)
 
-                        setupMapListener(geofencesListeners, child.uid, FirebaseRepository::listenToGeofences) { state, data ->
-                            state.copy(geofencesMap = state.geofencesMap + (child.uid to data))
+                        setupMapListener(geofencesListeners, child.uid, FirebaseRepository::listenToGeofences) { zones ->
+                            _uiState.update { it.copy(geofencesMap = it.geofencesMap + (child.uid to zones)) }
                         }
-                        setupMapListener(locationHistoryListeners, child.uid, FirebaseRepository::listenToLocationHistory) { state, data ->
-                            state.copy(locationHistoryMap = state.locationHistoryMap + (child.uid to data))
+                        setupMapListener(locationHistoryListeners, child.uid, FirebaseRepository::listenToLocationHistory) { history ->
+                            _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (child.uid to history)) }
                         }
-                        setupMapListener(webHistoryListeners, child.uid, FirebaseRepository::listenToWebHistory) { state, data ->
-                            state.copy(webHistoryMap = state.webHistoryMap + (child.uid to data))
+                        setupMapListener(webHistoryListeners, child.uid, FirebaseRepository::listenToWebHistory) { webList ->
+                            _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (child.uid to webList)) }
                         }
                         val fsWeb = FirebaseRepository.listenToChildWebHistoryFirestore(child.uid) { webList ->
                             if (webList.isNotEmpty()) _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (child.uid to webList)) }
                         }
                         firestoreRegistrations.add(fsWeb)
 
-                        setupMapListener(networkHistoryListeners, child.uid, FirebaseRepository::listenToNetworkHistory) { state, data ->
-                            state.copy(networkHistoryMap = state.networkHistoryMap + (child.uid to data))
+                        setupMapListener(networkHistoryListeners, child.uid, FirebaseRepository::listenToNetworkHistory) { netList ->
+                            _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (child.uid to netList)) }
                         }
                         val fsNet = FirebaseRepository.listenToChildNetworkHistoryFirestore(child.uid) { netList ->
                             if (netList.isNotEmpty()) _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (child.uid to netList)) }
                         }
                         firestoreRegistrations.add(fsNet)
 
-                        setupMapListener(simInfoListeners, child.uid, FirebaseRepository::listenToSimCardInfo) { state, data ->
-                            state.copy(simInfoMap = state.simInfoMap + (child.uid to data))
+                        setupMapListener(simInfoListeners, child.uid, FirebaseRepository::listenToSimCardInfo) { sim ->
+                            _uiState.update { it.copy(simInfoMap = it.simInfoMap + (child.uid to sim)) }
                         }
-                        setupMapListener(packageEventsListeners, child.uid, FirebaseRepository::listenToAppInstallEvents) { state, data ->
-                            state.copy(packageEventsMap = state.packageEventsMap + (child.uid to data))
+                        setupMapListener(packageEventsListeners, child.uid, FirebaseRepository::listenToAppInstallEvents) { events ->
+                            _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (child.uid to events)) }
                         }
                         val fsPkg = FirebaseRepository.listenToChildPackageEventsFirestore(child.uid) { events ->
                             if (events.isNotEmpty()) _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (child.uid to events)) }
                         }
                         firestoreRegistrations.add(fsPkg)
 
-                        setupMapListener(whatsAppListeners, child.uid, FirebaseRepository::listenToWhatsAppLogs) { state, data ->
-                            state.copy(whatsAppLogsMap = state.whatsAppLogsMap + (child.uid to data))
+                        setupMapListener(whatsAppListeners, child.uid, FirebaseRepository::listenToWhatsAppLogs) { waList ->
+                            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (child.uid to waList)) }
                         }
                         if (!commandsListeners.containsKey(child.uid)) {
                             val cmdListener = FirebaseRepository.listenToRemoteCommands(child.uid) { command, value ->
