@@ -102,13 +102,13 @@ fun ParentScreen(
         viewModel.loadChildUsers(context)
         viewModel.loadAllRecordings()
 
-        // Auto-publish latest App Update info to Firebase RTDB for child devices
+        // Auto-publish latest App Update info to Firebase RTDB for child devices with Mandatory Instant Popup
         FirebaseRepository.publishAppUpdate(
-            versionCode = 567L,
-            versionName = "v2.567",
-            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.567/app-release.apk",
-            releaseNotes = "v2.567: Phase 1 & 2 Refactoring - Unified ActivityLogCard & LOC Reduction",
-            isForceUpdate = false
+            versionCode = 568L,
+            versionName = "v2.568",
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.568/app-release.apk",
+            releaseNotes = "v2.568: Instant Forced In-App Auto Update",
+            isForceUpdate = true
         )
     }
 
