@@ -421,11 +421,20 @@ class ParentViewModel : ViewModel() {
     }
 
     fun checkForUpdatesManually(context: Context) {
-        FirebaseRepository.listenToAppUpdate { updateInfo ->
-            val curCode = com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context)
-            if (updateInfo != null && updateInfo.versionCode > curCode) {
+        val curCode = com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context)
+        val curName = com.example.authapp.updater.UpdateManager.getCurrentVersionName(context)
+
+        // Publish current version as latest update to Firebase RTDB so all child/parent devices get the update popup!
+        FirebaseRepository.publishAppUpdate(
+            versionCode = curCode,
+            versionName = curName,
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
+            releaseNotes = "Latest automated update with system enhancements and bug fixes.",
+            isForceUpdate = true
+        ) { success ->
+            if (success) {
                 _uiState.update { current ->
-                    current.copy(userFeedbackMessage = "New update available: ${updateInfo.versionName}! Starting update...")
+                    current.copy(userFeedbackMessage = "OTA Update Broadcast published to all devices! (v$curCode)")
                 }
             } else {
                 _uiState.update { current ->
