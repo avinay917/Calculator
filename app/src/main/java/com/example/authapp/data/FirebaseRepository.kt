@@ -32,7 +32,7 @@ object FirebaseRepository {
         childUid: String,
         crossinline onData: (List<T>) -> Unit
     ): ValueEventListener {
-        return database.reference.child(nodePath).child(childUid)
+        return FirebaseDatabase.getInstance().reference.child(nodePath).child(childUid)
             .onValueChange { snapshot ->
                 onData(snapshot.toListOf())
             }
