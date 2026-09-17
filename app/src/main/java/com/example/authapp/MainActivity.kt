@@ -55,10 +55,38 @@ class MainActivity : ComponentActivity() {
           var isDownloading by remember { mutableStateOf(false) }
           var downloadProgress by remember { mutableStateOf(0f) }
           var downloadError by remember { mutableStateOf<String?>(null) }
-          var dismissedUpdateCode by remember { mutableStateOf(0L) }
+          var permissionRequestedForUpdate by remember { mutableStateOf(false) }
+          val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-          val currentVersionCode = remember(context) { UpdateManager.getCurrentVersionCode(context) }
-          val currentVersionName = remember(context) { UpdateManager.getCurrentVersionName(context) }
+          DisposableEffect(lifecycleOwner) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+              if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val updateInfo = availableUpdate
+                if (permissionRequestedForUpdate && updateInfo != null && UpdateManager.canInstallApk(context) && !isDownloading) {
+                  permissionRequestedForUpdate = false
+                  isDownloading = true
+                  downloadError = null
+                  downloadProgress = 0f
+                  coroutineScope.launch {
+                    UpdateManager.downloadAndInstallApk(
+                      context = context,
+                      apkUrl = updateInfo.apkUrl,
+                      onProgress = { p -> downloadProgress = p },
+                      onError = { err ->
+                        isDownloading = false
+                        downloadError = err
+                      }
+                    )
+                    isDownloading = false
+                  }
+                }
+              }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+              lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+          }
 
           DisposableEffect(Unit) {
             val updateListener = FirebaseRepository.listenToAppUpdate { info ->
@@ -84,7 +112,8 @@ class MainActivity : ComponentActivity() {
               errorMessage = downloadError,
               onUpdateClick = {
                 if (!UpdateManager.canInstallApk(context)) {
-                  Toast.makeText(context, "Please allow 'Install unknown apps' to update", Toast.LENGTH_LONG).show()
+                  permissionRequestedForUpdate = true
+                  Toast.makeText(context, "Please enable 'Allow from this source' to auto-update", Toast.LENGTH_LONG).show()
                   UpdateManager.openInstallPermissionSettings(context)
                 } else {
                   isDownloading = true
