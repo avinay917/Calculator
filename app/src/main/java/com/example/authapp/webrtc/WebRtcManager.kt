@@ -209,8 +209,13 @@ class WebRtcManager(
         }
         enableHardwareAudioEffects()
 
-        // Video Track (if requested)
-        if (streamType.equals("video", ignoreCase = true)) {
+        // Video Track (if camera_video, screen_mirror, or legacy video requested)
+        val isVideoRequested = streamType.equals("video", ignoreCase = true) ||
+                streamType.equals("camera_video", ignoreCase = true) ||
+                streamType.equals("screen_mirror", ignoreCase = true) ||
+                streamType.equals("screen", ignoreCase = true)
+
+        if (isVideoRequested) {
             var capturer: VideoCapturer? = null
             for (attempt in 1..3) {
                 capturer = createVideoCapturer(preferFront = true)

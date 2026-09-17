@@ -57,7 +57,10 @@ fun LiveStreamDialog(
     isHeadsetConnected: Boolean = false,
     onAudioRouteSelect: (AudioOutputRoute) -> Unit = {}
 ) {
-    val isVideo = activeStreamType.equals("video", ignoreCase = true)
+    val isVideo = activeStreamType.equals("video", ignoreCase = true) ||
+            activeStreamType.equals("camera_video", ignoreCase = true) ||
+            activeStreamType.equals("screen_mirror", ignoreCase = true) ||
+            activeStreamType.equals("Screen Share", ignoreCase = true)
 
     BackHandler(onBack = onDismiss)
 

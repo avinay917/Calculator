@@ -589,15 +589,15 @@ fun ParentScreen(
                                     deviceHealth = uiState.deviceHealthMap[child.uid],
                                     alertsCount = uiState.securityAlertsMap[child.uid]?.size ?: 0,
                                     onAudioClick = {
-                                        viewModel.startStream(child, "audio")
+                                        viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.AUDIO_ONLY)
                                         Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
                                     },
                                     onVideoClick = {
-                                        viewModel.startStream(child, "video")
+                                        viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.CAMERA_VIDEO)
                                         Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
                                     },
                                     onScreenClick = {
-                                        viewModel.startStream(child, "video")
+                                        viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.SCREEN_MIRROR)
                                         Toast.makeText(context, "Requesting Live Screen Mirror from ${child.name}...", Toast.LENGTH_SHORT).show()
                                     },
                                     onLocationClick = {

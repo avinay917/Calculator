@@ -94,8 +94,15 @@ class LiveStreamActivity : ComponentActivity() {
                     val isBluetoothConnected by audioRouteManager.isBluetoothConnected.collectAsState()
                     val isHeadsetConnected by audioRouteManager.isHeadsetConnected.collectAsState()
 
+                    val displayStreamType = when (streamType.lowercase()) {
+                        "camera_video", "video" -> "Video"
+                        "screen_mirror", "screen" -> "Screen Share"
+                        "audio_only", "audio" -> "Audio"
+                        else -> if (streamType.contains("audio", ignoreCase = true)) "Audio" else "Video"
+                    }
+
                     LiveStreamDialog(
-                        activeStreamType = if (streamType.equals("video", ignoreCase = true)) "Video" else "Audio",
+                        activeStreamType = displayStreamType,
                         activeChildName = childName,
                         streamStatusText = streamStatusTextState.value,
                         isFrontCamera = isFrontCameraState.value,

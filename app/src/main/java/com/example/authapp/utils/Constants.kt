@@ -43,8 +43,12 @@ object Constants {
     object StreamTypes {
         const val AUDIO = "audio"
         const val VIDEO = "video"
+        const val CAMERA_VIDEO = "camera_video"
+        const val SCREEN_MIRROR = "screen_mirror"
+        const val AUDIO_ONLY = "audio_only"
         const val AUDIO_DISPLAY = "Audio"
         const val VIDEO_DISPLAY = "Video"
+        const val SCREEN_DISPLAY = "Screen Share"
     }
 
     // Stream Statuses
