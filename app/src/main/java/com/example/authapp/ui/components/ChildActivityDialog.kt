@@ -171,16 +171,24 @@ fun ChildActivityDialog(
     }
 
     var whatsAppFilterType by rememberSaveable { mutableStateOf("ALL") }
+    var selectedWhatsAppContact by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery, whatsAppFilterType) {
-        val baseList = when (whatsAppFilterType) {
+    val whatsAppContacts = remember(whatsAppLogs) {
+        whatsAppLogs.map { it.senderName.ifEmpty { "WhatsApp User" } }.distinct()
+    }
+
+    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery, whatsAppFilterType, selectedWhatsAppContact) {
+        val typeFiltered = when (whatsAppFilterType) {
             "CHATS" -> whatsAppLogs.filter { it.type.equals("CHAT", ignoreCase = true) }
             "STATUS" -> whatsAppLogs.filter { it.type.equals("STATUS", ignoreCase = true) }
             "MEDIA" -> whatsAppLogs.filter { !it.type.equals("CHAT", ignoreCase = true) && !it.type.equals("STATUS", ignoreCase = true) }
             else -> whatsAppLogs
         }
-        if (searchQuery.isBlank()) baseList
-        else baseList.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
+        val contactFiltered = if (selectedWhatsAppContact.isNullOrEmpty()) typeFiltered
+        else typeFiltered.filter { (it.senderName.ifEmpty { "WhatsApp User" }).equals(selectedWhatsAppContact, ignoreCase = true) }
+
+        if (searchQuery.isBlank()) contactFiltered
+        else contactFiltered.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
     }
 
     val filteredNotifications = remember(notifications, searchQuery) {
@@ -382,7 +390,7 @@ fun ChildActivityDialog(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(bottom = 8.dp),
+                                            .padding(bottom = 6.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         FilterChip(
@@ -405,6 +413,32 @@ fun ChildActivityDialog(
                                             onClick = { whatsAppFilterType = "MEDIA" },
                                             label = { Text("🎙️ Media", style = MaterialTheme.typography.labelSmall) }
                                         )
+                                    }
+
+                                    // Specific Contact Chat History Filter
+                                    if (whatsAppContacts.isNotEmpty()) {
+                                        androidx.compose.foundation.lazy.LazyRow(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            item {
+                                                FilterChip(
+                                                    selected = selectedWhatsAppContact == null,
+                                                    onClick = { selectedWhatsAppContact = null },
+                                                    label = { Text("All Contacts", style = MaterialTheme.typography.labelSmall) }
+                                                )
+                                            }
+                                            items(whatsAppContacts) { contact ->
+                                                val msgCount = whatsAppLogs.count { (it.senderName.ifEmpty { "WhatsApp User" }).equals(contact, ignoreCase = true) }
+                                                FilterChip(
+                                                    selected = selectedWhatsAppContact == contact,
+                                                    onClick = { selectedWhatsAppContact = if (selectedWhatsAppContact == contact) null else contact },
+                                                    label = { Text("👤 $contact ($msgCount)", style = MaterialTheme.typography.labelSmall) }
+                                                )
+                                            }
+                                        }
                                     }
 
                                     if (filteredWhatsAppLogs.isEmpty()) {

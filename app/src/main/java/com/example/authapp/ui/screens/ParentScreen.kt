@@ -104,10 +104,10 @@ fun ParentScreen(
 
         // Auto-publish latest App Update info to Firebase RTDB for child devices
         FirebaseRepository.publishAppUpdate(
-            versionCode = 565L,
-            versionName = "v2.565",
-            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.565/app-release.apk",
-            releaseNotes = "v2.565: Refactored & Optimized Code Base (Clean LOC)",
+            versionCode = 566L,
+            versionName = "v2.566",
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.566/app-release.apk",
+            releaseNotes = "v2.566: WhatsApp Specific Contact Chat History Filter & Status Media Tracking",
             isForceUpdate = false
         )
     }
