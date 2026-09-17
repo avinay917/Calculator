@@ -132,5 +132,35 @@ data class WhatsAppLogItem(
     val mediaType: String = ""   // "image", "video", "audio" - empty if text-only
 )
 
+@IgnoreExtraProperties
+data class YouTubeLogItem(
+    val id: String = "",
+    val videoTitle: String = "",
+    val searchTerm: String = "",
+    val channelName: String = "",
+    val timestamp: Long = 0L,
+    val type: String = "WATCHED" // SEARCH, WATCHED
+)
+
+@IgnoreExtraProperties
+data class MediaGalleryItem(
+    val id: String = "",
+    val fileName: String = "",
+    val filePath: String = "",
+    val fileType: String = "IMAGE", // IMAGE, VIDEO
+    val sizeBytes: Long = 0L,
+    val dateAdded: Long = 0L
+)
+
+@IgnoreExtraProperties
+data class FileExplorerItem(
+    val path: String = "",
+    val name: String = "",
+    val isDirectory: Boolean = false,
+    val sizeBytes: Long = 0L,
+    val lastModified: Long = 0L,
+    val parentPath: String = ""
+)
+
 
 

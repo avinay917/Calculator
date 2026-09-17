@@ -161,6 +161,27 @@
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'parent'",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'child' && !data.exists()"
       }
+    },
+    "youtube_history": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".indexOn": ["timestamp"]
+      }
+    },
+    "media_gallery": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".indexOn": ["dateAdded"]
+      }
+    },
+    "file_explorer": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+      }
     }
   }
 }
+

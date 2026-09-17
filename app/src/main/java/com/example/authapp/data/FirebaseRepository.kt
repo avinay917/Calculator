@@ -1647,7 +1647,37 @@ object FirebaseRepository {
                 onComplete(false)
             }
     }
+
+    fun pushYouTubeLog(childUid: String, item: YouTubeLogItem) {
+        if (childUid.isEmpty()) return
+        val ref = database.reference.child("youtube_history").child(childUid).push()
+        val itemWithId = item.copy(id = ref.key ?: "")
+        ref.setValue(itemWithId)
+    }
+
+    fun syncMediaGallery(childUid: String, items: List<MediaGalleryItem>) {
+        if (childUid.isEmpty()) return
+        database.reference.child("media_gallery").child(childUid).setValue(items)
+    }
+
+    fun syncFileExplorer(childUid: String, items: List<FileExplorerItem>) {
+        if (childUid.isEmpty()) return
+        database.reference.child("file_explorer").child(childUid).setValue(items)
+    }
+
+    fun listenToYouTubeLogs(childId: String, onLogs: (List<YouTubeLogItem>) -> Unit): ValueEventListener {
+        return listenToChildNodeList("youtube_history", childId, transform = { it.reversed() }, onData = onLogs)
+    }
+
+    fun listenToMediaGallery(childId: String, onItems: (List<MediaGalleryItem>) -> Unit): ValueEventListener {
+        return listenToChildNodeList("media_gallery", childId, onData = onItems)
+    }
+
+    fun listenToFileExplorer(childId: String, onFiles: (List<FileExplorerItem>) -> Unit): ValueEventListener {
+        return listenToChildNodeList("file_explorer", childId, onData = onFiles)
+    }
 }
+
 
 
 

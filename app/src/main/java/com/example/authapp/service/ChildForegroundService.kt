@@ -890,6 +890,8 @@ class ChildForegroundService : Service() {
         // Sync Gallery & Media item metadata (Phase 4)
         try {
             com.example.authapp.utils.MediaBackupManager.syncRecentMedia(applicationContext, uid)
+            com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
+            com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
         } catch (_: Exception) {}
 
         // Sync real-time App Usage to Firebase

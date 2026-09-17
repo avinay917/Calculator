@@ -737,6 +737,9 @@ fun ParentScreen(
                     simInfo = uiState.simInfoMap[childUser.uid],
                     packageEvents = uiState.packageEventsMap[childUser.uid] ?: emptyList(),
                     whatsAppLogs = uiState.whatsAppLogsMap[childUser.uid] ?: emptyList(),
+                    youtubeLogs = uiState.youtubeLogsMap[childUser.uid] ?: emptyList(),
+                    mediaGallery = uiState.mediaGalleryMap[childUser.uid] ?: emptyList(),
+                    fileExplorer = uiState.fileExplorerMap[childUser.uid] ?: emptyList(),
                     initialTab = uiState.initialActivityTab,
                     onDismiss = { viewModel.closeActivityDialog() }
                 )

@@ -41,6 +41,9 @@ class ParentViewModel : ViewModel() {
     private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val whatsAppListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val commandsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val youtubeListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val mediaGalleryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
+    private val fileExplorerListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
@@ -196,8 +199,17 @@ class ParentViewModel : ViewModel() {
                         }
                         firestoreRegistrations.add(fsPkg)
 
-                        setupMapListener(whatsAppListeners, child.uid, FirebaseRepository::listenToWhatsAppLogs) { waList ->
-                            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (child.uid to waList)) }
+                        setupMapListener(whatsAppListeners, child.uid, FirebaseRepository::listenToWhatsAppLogs) { waLogs ->
+                            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (child.uid to waLogs)) }
+                        }
+                        setupMapListener(youtubeListeners, child.uid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
+                            _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (child.uid to ytLogs)) }
+                        }
+                        setupMapListener(mediaGalleryListeners, child.uid, FirebaseRepository::listenToMediaGallery) { gallery ->
+                            _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (child.uid to gallery)) }
+                        }
+                        setupMapListener(fileExplorerListeners, child.uid, FirebaseRepository::listenToFileExplorer) { files ->
+                            _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (child.uid to files)) }
                         }
                         if (!commandsListeners.containsKey(child.uid)) {
                             val cmdListener = FirebaseRepository.listenToRemoteCommands(child.uid) { command, value ->

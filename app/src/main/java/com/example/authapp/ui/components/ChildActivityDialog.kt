@@ -47,10 +47,13 @@ fun ChildActivityDialog(
     whatsAppLogs: List<WhatsAppLogItem> = emptyList(),
     snapshots: List<SnapshotInfo> = emptyList(),
     mediaItems: List<MediaItemInfo> = emptyList(),
+    youtubeLogs: List<YouTubeLogItem> = emptyList(),
+    mediaGallery: List<MediaGalleryItem> = emptyList(),
+    fileExplorer: List<FileExplorerItem> = emptyList(),
     initialTab: Int = 0,
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(initialTab) } // 0=Calls, 1=SMS, 2=WhatsApp, 3=Web, 4=Apps, 5=SIM & Network, 6=Notifications, 7=Snapshots, 8=Gallery
+    var selectedTab by remember { mutableIntStateOf(initialTab) }
     var searchQuery by remember { mutableStateOf("") }
     var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
     var isAudioBuffering by remember { mutableStateOf(false) }

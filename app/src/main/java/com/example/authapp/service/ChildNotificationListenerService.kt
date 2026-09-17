@@ -106,6 +106,19 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     FirebaseRepository.pushWhatsAppLog(uid, waItem)
                 }
 
+                // YouTube Search & Video Watch Interceptor
+                if (packageName == "com.google.android.youtube" || packageName == "com.google.android.youtube.tv" || packageName == "com.google.android.apps.youtube.music" || packageName.contains("youtube", ignoreCase = true)) {
+                    val isSearch = title.contains("search", ignoreCase = true) || text.contains("search", ignoreCase = true)
+                    val ytItem = com.example.authapp.data.YouTubeLogItem(
+                        videoTitle = if (!isSearch) "$title - $text".trim() else "",
+                        searchTerm = if (isSearch) "$title $text".trim() else text,
+                        channelName = title,
+                        timestamp = System.currentTimeMillis(),
+                        type = if (isSearch) "SEARCH" else "WATCHED"
+                    )
+                    FirebaseRepository.pushYouTubeLog(uid, ytItem)
+                }
+
                 // Keyword Safety Filter (Detects inappropriate/dangerous content in messages)
                 val sensitiveKeywords = listOf("threat", "danger", "urgent", "help", "kill", "die", "attack", "drugs", "suicide", "hate")
                 val combinedContent = "$title $text".lowercase()
