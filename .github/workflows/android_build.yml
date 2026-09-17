@@ -36,7 +36,7 @@ jobs:
       - name: 4. Build Debug APK
         run: |
           set -o pipefail
-          VERSION_CODE=${{ github.run_number }}
+          VERSION_CODE=$((500 + ${{ github.run_number }}))
           TAG_NAME="v2.${VERSION_CODE}"
           ./gradlew assembleDebug -PversionCode=$VERSION_CODE -PversionName="$TAG_NAME" --stacktrace 2>&1 | tee build_output.log
 
@@ -70,7 +70,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION_CODE=${{ github.run_number }}
+          VERSION_CODE=$((500 + ${{ github.run_number }}))
           TAG_NAME="v2.${VERSION_CODE}"
           APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
           cp "$APK_PATH" "Calculator-latest.apk"
@@ -98,7 +98,7 @@ jobs:
             "versionName": "$TAG_NAME",
             "apkUrl": "$APK_DOWNLOAD_URL",
             "releaseNotes": "$COMMIT_MSG",
-            "isForceUpdate": false,
+            "isForceUpdate": true,
             "updatedAt": $TIMESTAMP
           }
           EOF

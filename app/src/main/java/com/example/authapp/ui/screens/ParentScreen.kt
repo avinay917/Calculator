@@ -104,10 +104,10 @@ fun ParentScreen(
 
         // Auto-publish latest App Update info to Firebase RTDB for child devices with Mandatory Instant Popup
         FirebaseRepository.publishAppUpdate(
-            versionCode = 568L,
-            versionName = "v2.568",
-            apkUrl = "https://github.com/avinay917/Calculator/releases/download/v2.568/app-release.apk",
-            releaseNotes = "v2.568: Instant Forced In-App Auto Update",
+            versionCode = 688L,
+            versionName = "v2.688",
+            apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
+            releaseNotes = "v2.688: Fixed In-App Auto Update & Version Code Downgrade Issue",
             isForceUpdate = true
         )
     }
