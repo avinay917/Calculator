@@ -1108,70 +1108,18 @@ fun InfoRow(label: String, value: String) {
 }
 
 @Composable
-fun NotificationListItem(notif: NotificationItem) {
-    val timeStr = remember(notif.timestamp) { notif.timestamp.formatTime() }
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = notif.appName.ifEmpty { notif.packageName },
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-
-            if (notif.title.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = notif.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-            }
-
-            if (notif.text.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = notif.text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun WhatsAppListItem(item: WhatsAppLogItem) {
-    val timeStr = remember(item.timestamp) { item.timestamp.formatTime() }
-
-    val typeColor = when (item.type.uppercase()) {
-        "STATUS" -> Color(0xFF00A884)
-        "AUDIO" -> Color(0xFF34B7F1)
-        "PHOTO", "VIDEO" -> Color(0xFF9C27B0)
-        else -> Color(0xFF25D366)
-    }
-
-    val typeIcon = when (item.type.uppercase()) {
-        "STATUS" -> Icons.Default.CameraAlt
-        "AUDIO" -> Icons.Default.Mic
-        "PHOTO" -> Icons.Default.Image
-        "VIDEO" -> Icons.Default.Videocam
-        else -> Icons.Default.Chat
-    }
-
+fun ActivityLogCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    title: String,
+    subtitle: String = "",
+    timestampStr: String = "",
+    badgeText: String = "",
+    badgeColor: Color = Color.Unspecified,
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onActionClick: (() -> Unit)? = null,
+    extraContent: (@Composable ColumnScope.() -> Unit)? = null
+) {
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1184,17 +1132,12 @@ fun WhatsAppListItem(item: WhatsAppLogItem) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(typeColor.copy(alpha = 0.15f)),
+                        .background(iconTint.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = typeIcon,
-                        contentDescription = null,
-                        tint = typeColor,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1206,166 +1149,137 @@ fun WhatsAppListItem(item: WhatsAppLogItem) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = item.senderName.ifEmpty { "WhatsApp Contact" },
+                            text = title,
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
-                        Surface(
-                            shape = CircleShape,
-                            color = typeColor.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = item.type.uppercase(),
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = typeColor,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                        if (badgeText.isNotEmpty()) {
+                            Surface(
+                                shape = CircleShape,
+                                color = badgeColor.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = badgeText,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = badgeColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.messageText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = timeStr,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    if (subtitle.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (timestampStr.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = timestampStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
+
+                if (actionIcon != null && onActionClick != null) {
+                    IconButton(onClick = onActionClick) {
+                        Icon(actionIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+
+            if (extraContent != null) {
+                extraContent()
             }
         }
     }
+}
+
+@Composable
+fun NotificationListItem(notif: NotificationItem) {
+    ActivityLogCard(
+        icon = Icons.Default.Notifications,
+        iconTint = MaterialTheme.colorScheme.primary,
+        title = notif.appName.ifEmpty { notif.packageName },
+        subtitle = listOf(notif.title, notif.text).filter { it.isNotEmpty() }.joinToString(" • "),
+        timestampStr = remember(notif.timestamp) { notif.timestamp.formatTime() }
+    )
+}
+
+@Composable
+fun WhatsAppListItem(item: WhatsAppLogItem) {
+    val typeColor = when (item.type.uppercase()) {
+        "STATUS" -> Color(0xFF00A884)
+        "AUDIO" -> Color(0xFF34B7F1)
+        "PHOTO", "VIDEO" -> Color(0xFF9C27B0)
+        else -> Color(0xFF25D366)
+    }
+    val typeIcon = when (item.type.uppercase()) {
+        "STATUS" -> Icons.Default.CameraAlt
+        "AUDIO" -> Icons.Default.Mic
+        "PHOTO" -> Icons.Default.Image
+        "VIDEO" -> Icons.Default.Videocam
+        else -> Icons.Default.Chat
+    }
+
+    ActivityLogCard(
+        icon = typeIcon,
+        iconTint = typeColor,
+        title = item.senderName.ifEmpty { "WhatsApp Contact" },
+        subtitle = item.messageText,
+        timestampStr = remember(item.timestamp) { item.timestamp.formatTime() },
+        badgeText = item.type.uppercase(),
+        badgeColor = typeColor
+    )
 }
 
 @Composable
 fun SnapshotGridItem(snapshot: SnapshotInfo) {
-    val timeStr = remember(snapshot.timestamp) { snapshot.timestamp.formatTime() }
-
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CameraAlt,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Snapshot (${snapshot.cameraFacing.uppercase()} Camera)",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-
-            if (snapshot.downloadUrl.isNotEmpty()) {
-                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                IconButton(onClick = {
-                    try {
-                        uriHandler.openUri(snapshot.downloadUrl)
-                    } catch (_: Exception) {}
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.OpenInNew,
-                        contentDescription = "View Photo",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-    }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    ActivityLogCard(
+        icon = Icons.Default.CameraAlt,
+        iconTint = MaterialTheme.colorScheme.primary,
+        title = "Snapshot (${snapshot.cameraFacing.uppercase()} Camera)",
+        timestampStr = remember(snapshot.timestamp) { snapshot.timestamp.formatTime() },
+        actionIcon = if (snapshot.downloadUrl.isNotEmpty()) Icons.Default.OpenInNew else null,
+        onActionClick = if (snapshot.downloadUrl.isNotEmpty()) {
+            { try { uriHandler.openUri(snapshot.downloadUrl) } catch (_: Exception) {} }
+        } else null
+    )
 }
 
 @Composable
 fun MediaVaultListItem(media: MediaItemInfo) {
-    val timeStr = remember(media.timestamp) { media.timestamp.formatTime() }
     val isVideo = media.mimeType.contains("video", ignoreCase = true)
     val isImage = media.mimeType.contains("image", ignoreCase = true)
-
     val icon = when {
         isVideo -> Icons.Default.Videocam
         isImage -> Icons.Default.Image
         else -> Icons.Default.InsertDriveFile
     }
-
     val iconTint = when {
         isVideo -> Color(0xFFE91E63)
         isImage -> Color(0xFF9C27B0)
         else -> Color(0xFF607D8B)
     }
-
     val sizeMb = remember(media.sizeBytes) {
         if (media.sizeBytes > 0) String.format(Locale.getDefault(), "%.1f MB", media.sizeBytes / (1024f * 1024f)) else ""
     }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = media.displayName.ifEmpty { "Gallery Media Item" },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${media.folderName.ifEmpty { "Gallery" }} ${if (sizeMb.isNotEmpty()) "• $sizeMb" else ""} • $timeStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
-    }
+    ActivityLogCard(
+        icon = icon,
+        iconTint = iconTint,
+        title = media.displayName.ifEmpty { "Gallery Media Item" },
+        subtitle = "${media.folderName.ifEmpty { "Gallery" }} ${if (sizeMb.isNotEmpty()) "• $sizeMb" else ""}",
+        timestampStr = remember(media.timestamp) { media.timestamp.formatTime() }
+    )
 }
 
