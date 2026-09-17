@@ -15,4 +15,11 @@ object AppLogger {
             FirebaseCrashlytics.getInstance().recordException(exception)
         }
     }
+
+    fun e(tag: String, message: String, throwable: Throwable? = null) {
+        FirebaseCrashlytics.getInstance().log("[$tag] $message")
+        if (throwable != null) {
+            FirebaseCrashlytics.getInstance().recordException(throwable)
+        }
+    }
 }
