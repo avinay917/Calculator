@@ -245,7 +245,7 @@ fun ChildUserCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Quick Actions 2x4 Grid
+            // Quick Actions 2x4 Grid (Refactored using FeatureActionButton)
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -255,41 +255,37 @@ fun ChildUserCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    FilledTonalButton(
+                    FeatureActionButton(
+                        icon = Icons.Default.Mic,
+                        label = "Live Audio",
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             AppAnalytics.logButtonClick("audio_cast", "ParentScreen", mapOf("childId" to user.uid))
                             if (!user.isOnline) {
                                 Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                                return@FilledTonalButton
+                                return@FeatureActionButton
                             }
                             onAudioClick()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Live Audio", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                    }
+                        }
+                    )
 
-                    FilledTonalButton(
+                    FeatureActionButton(
+                        icon = Icons.Default.Videocam,
+                        label = "Live Video",
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             AppAnalytics.logButtonClick("video_cast", "ParentScreen", mapOf("childId" to user.uid))
                             if (!user.isOnline) {
                                 Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                                return@FilledTonalButton
+                                return@FeatureActionButton
                             }
                             onVideoClick()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Live Video", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                    }
+                        }
+                    )
                 }
 
                 // Row 2: Screen Cast & Snapshot
@@ -297,37 +293,33 @@ fun ChildUserCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
+                    FeatureActionButton(
+                        icon = Icons.Default.Smartphone,
+                        label = "Screen Cast",
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             AppAnalytics.logButtonClick("screen_cast", "ParentScreen", mapOf("childId" to user.uid))
                             if (!user.isOnline) {
                                 Toast.makeText(context, "${user.name.ifEmpty { "Child device" }} is currently offline.", Toast.LENGTH_SHORT).show()
-                                return@OutlinedButton
+                                return@FeatureActionButton
                             }
                             onScreenClick()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Screen Cast", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                    }
+                        }
+                    )
 
-                    OutlinedButton(
+                    FeatureActionButton(
+                        icon = Icons.Default.CameraAlt,
+                        label = "Snapshot",
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             AppAnalytics.logButtonClick("snapshot", "ParentScreen", mapOf("childId" to user.uid))
                             onSnapshotClick()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Snapshot", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                    }
+                        }
+                    )
                 }
 
                 // Row 3: GPS Track, Activity Logs & WhatsApp Chats
@@ -335,45 +327,35 @@ fun ChildUserCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
+                    FeatureActionButton(
+                        icon = Icons.Default.LocationOn,
+                        label = "GPS Track",
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             AppAnalytics.logButtonClick("gps_location", "ParentScreen", mapOf("childId" to user.uid))
                             onLocationClick()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("GPS Track", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                    }
+                        }
+                    )
 
-                    OutlinedButton(
-                        onClick = onActivityClick,
+                    FeatureActionButton(
+                        icon = Icons.Default.Call,
+                        label = "Activity Logs",
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Activity Logs", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                    }
+                        onClick = onActivityClick
+                    )
 
-                    Button(
-                        onClick = { onWhatsAppClick?.invoke() ?: onActivityClick() },
+                    FeatureActionButton(
+                        icon = Icons.Default.Chat,
+                        label = "WhatsApp",
+                        containerColor = Color(0xFF25D366),
+                        contentColor = Color.White,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF25D366),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(imageVector = Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("WhatsApp", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                    }
+                        onClick = { onWhatsAppClick?.invoke() ?: onActivityClick() }
+                    )
                 }
 
                 // Row 4: Security Alerts & Schedules
@@ -381,33 +363,24 @@ fun ChildUserCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
-                        onClick = onAlertsClick,
+                    FeatureActionButton(
+                        icon = Icons.Default.Security,
+                        label = "Alerts",
+                        containerColor = if (alertsCount > 0) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (alertsCount > 0) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        badgeCount = alertsCount,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = if (alertsCount > 0) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.outlinedButtonColors()
-                    ) {
-                        Icon(imageVector = Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (alertsCount > 0) "Alerts ($alertsCount)" else "Security Alerts",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (alertsCount > 0) FontWeight.Bold else FontWeight.SemiBold
-                            )
-                        )
-                    }
+                        onClick = onAlertsClick
+                    )
 
-                    OutlinedButton(
-                        onClick = onScheduleClick,
+                    FeatureActionButton(
+                        icon = Icons.Default.Schedule,
+                        label = "Schedules",
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Schedules", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                    }
+                        onClick = onScheduleClick
+                    )
                 }
             }
         }
