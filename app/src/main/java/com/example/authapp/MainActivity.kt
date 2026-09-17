@@ -55,8 +55,9 @@ class MainActivity : ComponentActivity() {
           var isDownloading by remember { mutableStateOf(false) }
           var downloadProgress by remember { mutableStateOf(0f) }
           var downloadError by remember { mutableStateOf<String?>(null) }
-          var permissionRequestedForUpdate by remember { mutableStateOf(false) }
-          val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+          var dismissedUpdateCode by remember { mutableStateOf(0L) }
+          val currentVersionCode = remember(context) { UpdateManager.getCurrentVersionCode(context) }
+          val currentVersionName = remember(context) { UpdateManager.getCurrentVersionName(context) }
 
           DisposableEffect(lifecycleOwner) {
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
