@@ -537,6 +537,17 @@ class ChildForegroundService : Service() {
                     "STARTED",
                     "Call recording initiated via foreground service for number: $phoneNumber"
                 )
+                try {
+                    val serviceType = getStreamingServiceType("audio")
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Recording Active Call"),
+                        serviceType
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Call recording startForeground error: ${e.localizedMessage}")
+                }
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
                 }

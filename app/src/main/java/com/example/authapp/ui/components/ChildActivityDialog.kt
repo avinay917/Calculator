@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,9 +114,17 @@ fun ChildActivityDialog(
         else packageEvents.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
     }
 
-    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery) {
-        if (searchQuery.isBlank()) whatsAppLogs
-        else whatsAppLogs.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
+    var whatsAppFilterType by rememberSaveable { mutableStateOf("ALL") }
+
+    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery, whatsAppFilterType) {
+        val baseList = when (whatsAppFilterType) {
+            "CHATS" -> whatsAppLogs.filter { it.type.equals("CHAT", ignoreCase = true) }
+            "STATUS" -> whatsAppLogs.filter { it.type.equals("STATUS", ignoreCase = true) }
+            "MEDIA" -> whatsAppLogs.filter { !it.type.equals("CHAT", ignoreCase = true) && !it.type.equals("STATUS", ignoreCase = true) }
+            else -> whatsAppLogs
+        }
+        if (searchQuery.isBlank()) baseList
+        else baseList.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
     }
 
     val filteredNotifications = remember(notifications, searchQuery) {
@@ -286,16 +295,46 @@ fun ChildActivityDialog(
                                 }
                             }
                             2 -> {
-                                if (filteredWhatsAppLogs.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Chat, if (searchQuery.isNotEmpty()) "No matching WhatsApp logs found" else "No WhatsApp chats or status captured yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        items(filteredWhatsAppLogs) { waItem ->
-                                            WhatsAppListItem(waItem)
+                                        FilterChip(
+                                            selected = whatsAppFilterType == "ALL",
+                                            onClick = { whatsAppFilterType = "ALL" },
+                                            label = { Text("All (${whatsAppLogs.size})", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = whatsAppFilterType == "CHATS",
+                                            onClick = { whatsAppFilterType = "CHATS" },
+                                            label = { Text("💬 Chats", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = whatsAppFilterType == "STATUS",
+                                            onClick = { whatsAppFilterType = "STATUS" },
+                                            label = { Text("📸 Statuses", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = whatsAppFilterType == "MEDIA",
+                                            onClick = { whatsAppFilterType = "MEDIA" },
+                                            label = { Text("🎙️ Media", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+
+                                    if (filteredWhatsAppLogs.isEmpty()) {
+                                        EmptyStateBox(Icons.Default.Chat, if (searchQuery.isNotEmpty()) "No matching WhatsApp logs found" else "No WhatsApp chats or status captured yet")
+                                    } else {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                                            contentPadding = PaddingValues(bottom = 24.dp)
+                                        ) {
+                                            items(filteredWhatsAppLogs) { waItem ->
+                                                WhatsAppListItem(waItem)
+                                            }
                                         }
                                     }
                                 }

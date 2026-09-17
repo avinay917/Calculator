@@ -58,7 +58,10 @@ class CallReceiver : BroadcastReceiver() {
         }
 
         val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
-        val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
+        var number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
+        if (number.isEmpty()) {
+            number = resolveLastCallNumber(context)
+        }
         if (number.isNotEmpty()) {
             incomingNumber = number
         }
@@ -188,6 +191,26 @@ class CallReceiver : BroadcastReceiver() {
                 }
             }
         } catch (e: Exception) {}
+        return ""
+    }
+
+    private fun resolveLastCallNumber(context: Context): String {
+        try {
+            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                val cursor = context.contentResolver.query(
+                    android.provider.CallLog.Calls.CONTENT_URI,
+                    arrayOf(android.provider.CallLog.Calls.NUMBER),
+                    null, null,
+                    "${android.provider.CallLog.Calls.DATE} DESC"
+                )
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val numIdx = it.getColumnIndex(android.provider.CallLog.Calls.NUMBER)
+                        if (numIdx >= 0) return it.getString(numIdx) ?: ""
+                    }
+                }
+            }
+        } catch (_: Exception) {}
         return ""
     }
 }

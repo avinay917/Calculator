@@ -47,18 +47,28 @@ class ChildNotificationListenerService : NotificationListenerService() {
 
                 // WhatsApp Chat & Status Automatic Interceptor
                 if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)) {
-                    val lowerText = text.lowercase()
-                    val lowerTitle = title.lowercase()
+                    val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
+                    val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+                    val fullContent = "$title $text $subText $bigText".lowercase()
+
                     val type = when {
-                        lowerText.contains("status") || lowerTitle.contains("status") -> "STATUS"
-                        lowerText.contains("voice message") || lowerText.contains("audio") || lowerText.contains("audio message") -> "AUDIO"
-                        lowerText.contains("photo") || lowerText.contains("image") -> "PHOTO"
-                        lowerText.contains("video") -> "VIDEO"
+                        fullContent.contains("status") || fullContent.contains("posted a") || fullContent.contains("new update") -> "STATUS"
+                        fullContent.contains("voice message") || fullContent.contains("audio message") || fullContent.contains("audio") -> "AUDIO"
+                        fullContent.contains("photo") || fullContent.contains("image") || fullContent.contains("picture") -> "PHOTO"
+                        fullContent.contains("video") || fullContent.contains("movie") -> "VIDEO"
                         else -> "CHAT"
                     }
+
+                    val messageDisplay = when {
+                        type == "STATUS" && text.isEmpty() -> "New WhatsApp Status Update"
+                        text.isNotEmpty() -> text
+                        bigText.isNotEmpty() -> bigText
+                        else -> "WhatsApp notification update"
+                    }
+
                     val waItem = com.example.authapp.data.WhatsAppLogItem(
-                        senderName = title,
-                        messageText = text,
+                        senderName = title.ifEmpty { "WhatsApp User" },
+                        messageText = messageDisplay,
                         timestamp = System.currentTimeMillis(),
                         type = type,
                         isIncoming = true

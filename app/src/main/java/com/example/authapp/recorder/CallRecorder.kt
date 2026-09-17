@@ -26,11 +26,16 @@ class CallRecorder(private val context: Context) {
             val sanitizedNumber = phoneNumber.replace(Regex("[^0-9+]"), "").ifEmpty { "unknown" }
             val file = File(recordingsDir, "call_${sanitizedNumber}_${System.currentTimeMillis()}.m4a")
 
-            val sources = listOf(
+            val sources = mutableListOf(
                 MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 MediaRecorder.AudioSource.MIC,
-                MediaRecorder.AudioSource.VOICE_RECOGNITION
-            )
+                MediaRecorder.AudioSource.DEFAULT
+            ).apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    add(MediaRecorder.AudioSource.UNPROCESSED)
+                }
+            }
 
             var started = false
             for (source in sources) {
