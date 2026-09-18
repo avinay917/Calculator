@@ -917,18 +917,22 @@ class ChildForegroundService : Service() {
                     if (streamType.equals("video", ignoreCase = true)) {
                         ensureOverlayWindow()
                     }
-                    val serviceType = getStreamingServiceType(streamType)
                     try {
+                        val serviceType = getStreamingServiceType(streamType)
                         ServiceCompat.startForeground(
                             this,
                             NOTIFICATION_ID,
                             buildNotification("Active Remote Stream ($streamType)"),
                             serviceType
                         )
+                        startWebRtcStream(sessionId, streamType)
+                    } catch (e: SecurityException) {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] SecurityException on stream start (Android 14 policy): ${e.localizedMessage}")
+                        FirebaseRepository.updateStreamStatus(uid, "FAILED", streamType, sessionId)
+                        stopStream()
                     } catch (e: Exception) {
                         FirebaseCrashlytics.getInstance().log("[ChildService] startForeground stream error: ${e.localizedMessage}")
                     }
-                    startWebRtcStream(sessionId, streamType)
                 }
             },
             onStopped = {

@@ -441,7 +441,7 @@ object FirebaseRepository {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val status = snapshot.child("status").getValue(String::class.java)
-                if (status == "REQUESTED" || status == "STREAMING") {
+                if (status == "REQUESTED") {
                     val streamType = snapshot.child("streamType").getValue(String::class.java) ?: "audio"
                     val sessionId = snapshot.child("sessionId").getValue(String::class.java)
                         ?: "session_${childId}"
