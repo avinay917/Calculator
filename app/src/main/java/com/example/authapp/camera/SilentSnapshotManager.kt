@@ -60,7 +60,15 @@ class SilentSnapshotManager(private val context: Context) {
             val imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
             var isHandled = false
 
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val wakeLock = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SilentSnapshot:LockScreenWakeLock")?.apply {
+                acquire(10000L)
+            }
+
             fun cleanup() {
+                try {
+                    if (wakeLock?.isHeld == true) wakeLock.release()
+                } catch (_: Exception) {}
                 try { handlerThread.quitSafely() } catch (_: Exception) {}
             }
 

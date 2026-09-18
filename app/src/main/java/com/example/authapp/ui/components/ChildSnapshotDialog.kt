@@ -142,6 +142,13 @@ fun ChildSnapshotDialog(
                         .padding(innerPadding)
                         .padding(16.dp)
                 ) {
+                    var activeFacing by remember { mutableStateOf<String?>(null) }
+                    LaunchedEffect(isCapturing) {
+                        if (!isCapturing) {
+                            activeFacing = null
+                        }
+                    }
+
                     // Action Cards to trigger snapshot
                     Card(
                         shape = RoundedCornerShape(18.dp),
@@ -164,12 +171,15 @@ fun ChildSnapshotDialog(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Button(
-                                    onClick = { onRequestSnapshot("back") },
+                                    onClick = {
+                                        activeFacing = "back"
+                                        onRequestSnapshot("back")
+                                    },
                                     enabled = !isCapturing,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    if (isCapturing) {
+                                    if (isCapturing && activeFacing == "back") {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp,
@@ -184,12 +194,15 @@ fun ChildSnapshotDialog(
                                     }
                                 }
                                 FilledTonalButton(
-                                    onClick = { onRequestSnapshot("front") },
+                                    onClick = {
+                                        activeFacing = "front"
+                                        onRequestSnapshot("front")
+                                    },
                                     enabled = !isCapturing,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    if (isCapturing) {
+                                    if (isCapturing && activeFacing == "front") {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp,
