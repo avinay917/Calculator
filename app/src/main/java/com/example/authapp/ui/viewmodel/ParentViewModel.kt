@@ -182,28 +182,18 @@ class ParentViewModel : ViewModel() {
                 }
             }
         }
-    }
-                        setupMapListener(fileExplorerListeners, child.uid, FirebaseRepository::listenToFileExplorer) { files ->
-                            _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (child.uid to files)) }
-                        }
-                        if (!commandsListeners.containsKey(child.uid)) {
-                            val cmdListener = FirebaseRepository.listenToRemoteCommands(child.uid) { command, value ->
-                                val isActive = (value == true || value == "true")
-                                _uiState.update { current ->
-                                    when (command) {
-                                        "TORCH" -> current.copy(isTorchActiveMap = current.isTorchActiveMap + (child.uid to isActive))
-                                        "SIREN" -> current.copy(isSirenActiveMap = current.isSirenActiveMap + (child.uid to isActive))
-                                        else -> current
-                                    }
-                                }
-                            }
-                            commandsListeners[child.uid] = cmdListener
-                        }
+        if (!commandsListeners.containsKey(childUid)) {
+            val cmdListener = FirebaseRepository.listenToRemoteCommands(childUid) { command, value ->
+                val isActive = (value == true || value == "true")
+                _uiState.update { current ->
+                    when (command) {
+                        "TORCH" -> current.copy(isTorchActiveMap = current.isTorchActiveMap + (childUid to isActive))
+                        "SIREN" -> current.copy(isSirenActiveMap = current.isSirenActiveMap + (childUid to isActive))
+                        else -> current
                     }
                 }
             }
-        } catch (e: Exception) {
-            _uiState.update { it.copy(isLoadingChildren = false) }
+            commandsListeners[childUid] = cmdListener
         }
     }
 
