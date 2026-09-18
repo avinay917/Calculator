@@ -9,6 +9,7 @@ import com.example.authapp.data.NotificationItem
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class ChildNotificationListenerService : NotificationListenerService() {
+    private val recentNotificationCache = android.util.LruCache<String, Long>(50)
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
@@ -32,6 +33,17 @@ class ChildNotificationListenerService : NotificationListenerService() {
                 pm.getApplicationLabel(appInfo).toString()
             } catch (_: Exception) {
                 packageName
+            }
+
+            // Deduplicate notifications received within 3 seconds (e.g., WhatsApp summary + detail notifications)
+            val notifKey = "$packageName:$title:$text"
+            val now = System.currentTimeMillis()
+            synchronized(recentNotificationCache) {
+                val lastLogged = recentNotificationCache.get(notifKey)
+                if (lastLogged != null && (now - lastLogged) < 3000L) {
+                    return
+                }
+                recentNotificationCache.put(notifKey, now)
             }
 
             val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)

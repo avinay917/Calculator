@@ -108,106 +108,81 @@ class ParentViewModel : ViewModel() {
                         }
                         firestoreRegistrations.add(fsAlerts)
 
-                        setupMapListener(callLogsListeners, child.uid, FirebaseRepository::listenToCallLogs) { logs ->
-                            _uiState.update { it.copy(callLogsMap = it.callLogsMap + (child.uid to logs)) }
-                        }
-                        val fsCalls = FirebaseRepository.listenToChildCallLogsFirestore(child.uid) { logs ->
-                            if (logs.isNotEmpty()) _uiState.update { it.copy(callLogsMap = it.callLogsMap + (child.uid to logs)) }
-                        }
-                        firestoreRegistrations.add(fsCalls)
-
-                        setupMapListener(notificationsListeners, child.uid, FirebaseRepository::listenToNotifications) { notifs ->
-                            _uiState.update { it.copy(notificationsMap = it.notificationsMap + (child.uid to notifs)) }
-                        }
-                        setupMapListener(schedulesListeners, child.uid, FirebaseRepository::listenToRecordingSchedules) { schedules ->
-                            _uiState.update { it.copy(schedulesMap = it.schedulesMap + (child.uid to schedules)) }
-                        }
-                        if (!snapshotsListeners.containsKey(child.uid)) {
-                            snapshotsListeners[child.uid] = FirebaseRepository.listenToSnapshots(child.uid) { snapshots ->
-                                _uiState.update { current ->
-                                    val oldSize = current.snapshotsMap[child.uid]?.size ?: 0
-                                    val msg = if (snapshots.size > oldSize && current.isSnapshotCapturing) {
-                                        "New photo captured successfully!"
-                                    } else current.snapshotStatusMessage
-                                    current.copy(
-                                        snapshotsMap = current.snapshotsMap + (child.uid to snapshots),
-                                        snapshotStatusMessage = msg,
-                                        isSnapshotCapturing = if (snapshots.size > oldSize) false else current.isSnapshotCapturing
-                                    )
-                                }
-                            }
-                        }
-                        if (!snapshotStatusListeners.containsKey(child.uid)) {
-                            snapshotStatusListeners[child.uid] = FirebaseRepository.listenToSnapshotRequestStatus(child.uid) { status, error ->
-                                if (status == "FAILED") {
-                                    snapshotTimeoutJob?.cancel()
-                                    _uiState.update { it.copy(
-                                        isSnapshotCapturing = false,
-                                        snapshotStatusMessage = "Snapshot failed: ${error ?: "Camera error or device busy"}"
-                                    ) }
-                                } else if (status == "PROCESSING") {
-                                    _uiState.update { it.copy(
-                                        snapshotStatusMessage = "Child device is capturing photo..."
-                                    ) }
-                                }
-                            }
-                        }
                         setupMapListener(appUsageListeners, child.uid, FirebaseRepository::listenToAppUsage) { usageList ->
                             _uiState.update { it.copy(appUsageMap = it.appUsageMap + (child.uid to usageList)) }
                         }
                         setupMapListener(parentControlsListeners, child.uid, FirebaseRepository::listenToParentControls) { settings ->
                             _uiState.update { it.copy(parentControlsMap = it.parentControlsMap + (child.uid to settings)) }
                         }
-                        setupMapListener(smsListeners, child.uid, FirebaseRepository::listenToSmsLogs) { smsList ->
-                            _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (child.uid to smsList)) }
-                        }
-                        val fsSms = FirebaseRepository.listenToChildSmsLogsFirestore(child.uid) { smsList ->
-                            if (smsList.isNotEmpty()) _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (child.uid to smsList)) }
-                        }
-                        firestoreRegistrations.add(fsSms)
-
                         setupMapListener(geofencesListeners, child.uid, FirebaseRepository::listenToGeofences) { zones ->
                             _uiState.update { it.copy(geofencesMap = it.geofencesMap + (child.uid to zones)) }
                         }
                         setupMapListener(locationHistoryListeners, child.uid, FirebaseRepository::listenToLocationHistory) { history ->
                             _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (child.uid to history)) }
                         }
-                        setupMapListener(webHistoryListeners, child.uid, FirebaseRepository::listenToWebHistory) { webList ->
-                            _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (child.uid to webList)) }
-                        }
-                        val fsWeb = FirebaseRepository.listenToChildWebHistoryFirestore(child.uid) { webList ->
-                            if (webList.isNotEmpty()) _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (child.uid to webList)) }
-                        }
-                        firestoreRegistrations.add(fsWeb)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+            _uiState.update { it.copy(isLoadingChildren = false) }
+        }
+    }
 
-                        setupMapListener(networkHistoryListeners, child.uid, FirebaseRepository::listenToNetworkHistory) { netList ->
-                            _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (child.uid to netList)) }
-                        }
-                        val fsNet = FirebaseRepository.listenToChildNetworkHistoryFirestore(child.uid) { netList ->
-                            if (netList.isNotEmpty()) _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (child.uid to netList)) }
-                        }
-                        firestoreRegistrations.add(fsNet)
-
-                        setupMapListener(simInfoListeners, child.uid, FirebaseRepository::listenToSimCardInfo) { sim ->
-                            _uiState.update { it.copy(simInfoMap = it.simInfoMap + (child.uid to sim)) }
-                        }
-                        setupMapListener(packageEventsListeners, child.uid, FirebaseRepository::listenToAppInstallEvents) { events ->
-                            _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (child.uid to events)) }
-                        }
-                        val fsPkg = FirebaseRepository.listenToChildPackageEventsFirestore(child.uid) { events ->
-                            if (events.isNotEmpty()) _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (child.uid to events)) }
-                        }
-                        firestoreRegistrations.add(fsPkg)
-
-                        setupMapListener(whatsAppListeners, child.uid, FirebaseRepository::listenToWhatsAppLogs) { waLogs ->
-                            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (child.uid to waLogs)) }
-                        }
-                        setupMapListener(youtubeListeners, child.uid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
-                            _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (child.uid to ytLogs)) }
-                        }
-                        setupMapListener(mediaGalleryListeners, child.uid, FirebaseRepository::listenToMediaGallery) { gallery ->
-                            _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (child.uid to gallery)) }
-                        }
+    /**
+     * Lazy listener attachment when opening child activity center or details card
+     */
+    fun attachChildActivityListeners(childUid: String) {
+        if (childUid.isEmpty()) return
+        setupMapListener(callLogsListeners, childUid, FirebaseRepository::listenToCallLogs) { logs ->
+            _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
+        }
+        setupMapListener(notificationsListeners, childUid, FirebaseRepository::listenToNotifications) { notifs ->
+            _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
+        }
+        setupMapListener(smsListeners, childUid, FirebaseRepository::listenToSmsLogs) { smsList ->
+            _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
+        }
+        setupMapListener(webHistoryListeners, childUid, FirebaseRepository::listenToWebHistory) { webList ->
+            _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
+        }
+        setupMapListener(networkHistoryListeners, childUid, FirebaseRepository::listenToNetworkHistory) { netList ->
+            _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (childUid to netList)) }
+        }
+        setupMapListener(simInfoListeners, childUid, FirebaseRepository::listenToSimCardInfo) { sim ->
+            _uiState.update { it.copy(simInfoMap = it.simInfoMap + (childUid to sim)) }
+        }
+        setupMapListener(packageEventsListeners, childUid, FirebaseRepository::listenToAppInstallEvents) { events ->
+            _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (childUid to events)) }
+        }
+        setupMapListener(whatsAppListeners, childUid, FirebaseRepository::listenToWhatsAppLogs) { waLogs ->
+            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
+        }
+        setupMapListener(youtubeListeners, childUid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
+            _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (childUid to ytLogs)) }
+        }
+        setupMapListener(mediaGalleryListeners, childUid, FirebaseRepository::listenToMediaGallery) { gallery ->
+            _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
+        }
+        setupMapListener(fileExplorerListeners, childUid, FirebaseRepository::listenToFileExplorer) { files ->
+            _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
+        }
+        if (!snapshotsListeners.containsKey(childUid)) {
+            snapshotsListeners[childUid] = FirebaseRepository.listenToSnapshots(childUid) { snapshots ->
+                _uiState.update { current ->
+                    val oldSize = current.snapshotsMap[childUid]?.size ?: 0
+                    val msg = if (snapshots.size > oldSize && current.isSnapshotCapturing) {
+                        "New photo captured successfully!"
+                    } else current.snapshotStatusMessage
+                    current.copy(
+                        snapshotsMap = current.snapshotsMap + (childUid to snapshots),
+                        snapshotStatusMessage = msg,
+                        isSnapshotCapturing = if (snapshots.size > oldSize) false else current.isSnapshotCapturing
+                    )
+                }
+            }
+        }
+    }
                         setupMapListener(fileExplorerListeners, child.uid, FirebaseRepository::listenToFileExplorer) { files ->
                             _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (child.uid to files)) }
                         }

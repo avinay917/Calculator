@@ -325,6 +325,9 @@ class LiveStreamActivity : ComponentActivity() {
     }
 
     private fun cleanupWebRtc() {
+        remoteVideoTrackState.value = null
+        remoteAudioTrackState.value = null
+        mainHandler.removeCallbacksAndMessages(null)
         candidateHandler.removeCallbacksAndMessages(null)
         val remaining = synchronized(candidateBuffer) {
             val list = candidateBuffer.toList()

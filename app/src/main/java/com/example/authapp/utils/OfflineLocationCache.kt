@@ -1,4 +1,4 @@
-﻿package com.example.authapp.utils
+package com.example.authapp.utils
 
 import android.content.Context
 import com.example.authapp.data.FirebaseRepository
@@ -61,6 +61,7 @@ object OfflineLocationCache {
                 val pointsCount = jsonArray.length()
                 if (pointsCount == 0) return
 
+                val batchList = mutableListOf<UserLocation>()
                 for (i in 0 until pointsCount) {
                     val obj = jsonArray.getJSONObject(i)
                     val loc = UserLocation(
@@ -70,7 +71,10 @@ object OfflineLocationCache {
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         provider = obj.optString("provider", "offline_cache")
                     )
-                    FirebaseRepository.recordLocationHistoryPoint(childUid, loc)
+                    batchList.add(loc)
+                }
+                if (batchList.isNotEmpty()) {
+                    FirebaseRepository.recordLocationHistoryBatch(childUid, batchList)
                 }
 
                 file.delete()

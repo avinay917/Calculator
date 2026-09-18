@@ -1129,6 +1129,24 @@ object FirebaseRepository {
         database.reference.child("location_history").child(childId).push().setValue(loc.copy(timestamp = timestamp))
     }
 
+    fun recordLocationHistoryBatch(childId: String, locations: List<UserLocation>) {
+        if (childId.isEmpty() || locations.isEmpty()) return
+        val ref = database.reference.child("location_history").child(childId)
+        val batchMap = mutableMapOf<String, Any>()
+        locations.forEach { loc ->
+            if (loc.latitude != 0.0) {
+                val newKey = ref.push().key
+                if (!newKey.isNullOrEmpty()) {
+                    val timestamp = if (loc.timestamp > 0L) loc.timestamp else System.currentTimeMillis()
+                    batchMap[newKey] = loc.copy(timestamp = timestamp)
+                }
+            }
+        }
+        if (batchMap.isNotEmpty()) {
+            ref.updateChildren(batchMap)
+        }
+    }
+
     fun listenToLocationHistory(childId: String, onHistory: (List<UserLocation>) -> Unit): ValueEventListener =
         listenToChildNodeList("location_history", childId, limit = 50, transform = { it.sortedByDescending { l -> l.timestamp }.take(50) }, onHistory)
 

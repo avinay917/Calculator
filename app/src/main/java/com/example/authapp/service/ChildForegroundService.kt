@@ -442,16 +442,20 @@ class ChildForegroundService : Service() {
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
                 val durationMinutes = intent.getIntExtra("duration_minutes", 0)
 
-                // Enforce scheduled auto-stop if duration was provided
-                scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
-                scheduledStopRunnable = null
-                if (durationMinutes > 0) {
-                    scheduledStopRunnable = Runnable {
-                        FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled stream auto-stopping after $durationMinutes min")
-                        stopStream()
-                    }
-                    mainHandler.postDelayed(scheduledStopRunnable!!, durationMinutes * 60 * 1000L)
+                // Deduplicate redundant start requests if session is already active
+                if (isStreaming && currentSessionId == sessionId) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId already active; ignoring duplicate start request.")
+                    return START_STICKY
                 }
+
+                // Enforce scheduled auto-stop if duration was provided or default 15 min safety cap
+                scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+                val maxMinutes = if (durationMinutes > 0) durationMinutes else 15
+                scheduledStopRunnable = Runnable {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream auto-stopping after $maxMinutes min safety timeout")
+                    stopStream()
+                }
+                mainHandler.postDelayed(scheduledStopRunnable!!, maxMinutes * 60 * 1000L)
 
                 if (streamType.equals("video", ignoreCase = true)) {
                     ensureOverlayWindow()
