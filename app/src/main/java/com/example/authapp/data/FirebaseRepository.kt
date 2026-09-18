@@ -1449,7 +1449,9 @@ object FirebaseRepository {
                     database.reference.child("pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(codeSnap: DataSnapshot) {
                             val isUsed = codeSnap.child("isUsed").getValue(Boolean::class.java) ?: false
-                            if (codeSnap.exists() && !isUsed) {
+                            val createdAt = codeSnap.child("createdAt").getValue(Long::class.java) ?: 0L
+                            val isExpired = createdAt > 0L && (System.currentTimeMillis() - createdAt) > (120 * 60 * 1000L) // 2 hours expiration limit
+                            if (codeSnap.exists() && !isUsed && !isExpired) {
                                 onComplete(existingCode, null)
                             } else {
                                 createNewPairingCode(parentUid, parentEmail, onComplete)
@@ -1511,7 +1513,7 @@ object FirebaseRepository {
                 }
                 val createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: 0L
                 val ageMs = System.currentTimeMillis() - createdAt
-                if (createdAt > 0L && ageMs > 15 * 60 * 1000L) { // 15-minute expiration limit
+                if (createdAt > 0L && ageMs > 120 * 60 * 1000L) { // 2-hour expiration limit
                     onResult(false, null, "Pairing code has expired. Please generate a new 6-digit code on Parent app.")
                     return
                 }
