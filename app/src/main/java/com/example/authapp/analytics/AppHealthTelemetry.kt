@@ -56,6 +56,27 @@ object AppHealthTelemetry {
             true
         }
 
+        val usageAccess = try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps?.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+            } else {
+                @Suppress("DEPRECATION")
+                appOps?.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+            }
+            mode == android.app.AppOpsManager.MODE_ALLOWED
+        } catch (_: Exception) { false }
+
+        val notificationListener = try {
+            val listeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: ""
+            listeners.contains(context.packageName)
+        } catch (_: Exception) { false }
+
+        val accessibility = try {
+            val services = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+            services.contains(context.packageName)
+        } catch (_: Exception) { false }
+
         return mapOf(
             "microphone" to mic,
             "camera" to camera,
@@ -64,7 +85,10 @@ object AppHealthTelemetry {
             "readCallLog" to callLog,
             "postNotifications" to notifications,
             "systemAlertWindow" to overlay,
-            "batteryOptimizationIgnored" to batterySaverIgnored
+            "batteryOptimizationIgnored" to batterySaverIgnored,
+            "usageAccess" to usageAccess,
+            "notificationListener" to notificationListener,
+            "accessibility" to accessibility
         )
     }
 

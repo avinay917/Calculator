@@ -38,6 +38,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Lock Screen, WiFi & Overlay Permissions -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -83,6 +84,12 @@
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:theme="@style/Theme.AuthApp" />
 
+        <!-- Standard Screen Capture Permission Activity -->
+        <activity
+            android:name="com.example.authapp.ui.activity.ScreenCapturePromptActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- FCM Service for Waking Up Device -->
         <service
             android:name="com.example.authapp.service.MyFirebaseMessagingService"
@@ -97,7 +104,7 @@
             android:name="com.example.authapp.service.ChildForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|location|microphone|camera" />
+            android:foregroundServiceType="dataSync|location|microphone|camera|mediaProjection" />
 
         <!-- Device Boot Receiver to Restore Protection -->
         <!-- Protected against 3rd-party intent spoofing via RECEIVE_BOOT_COMPLETED permission -->
@@ -174,6 +181,20 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
+        </service>
+
+        <!-- Web History & Browser Safety Accessibility Service -->
+        <service
+            android:name="com.example.authapp.service.ChildAccessibilityService"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
 
         <!-- FileProvider for In-App APK Installation -->

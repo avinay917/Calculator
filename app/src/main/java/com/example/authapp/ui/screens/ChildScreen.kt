@@ -73,6 +73,8 @@ fun ChildScreen(
     var isBatteryOptimizationIgnored by remember { mutableStateOf(false) }
     var hasExactAlarmPermission by remember { mutableStateOf(false) }
     var hasNotificationListenerPermission by remember { mutableStateOf(false) }
+    var hasUsageAccessPermission by remember { mutableStateOf(false) }
+    var hasAccessibilityPermission by remember { mutableStateOf(false) }
 
     fun isMicrophoneAndCameraGranted(): Boolean {
         val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -96,12 +98,33 @@ fun ChildScreen(
         return enabledListeners.contains(context.packageName)
     }
 
+    fun checkUsageAccessPermission(): Boolean {
+        return try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps?.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+            } else {
+                @Suppress("DEPRECATION")
+                appOps?.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+            }
+            mode == android.app.AppOpsManager.MODE_ALLOWED
+        } catch (_: Exception) { false }
+    }
+
+    fun checkAccessibilityPermission(): Boolean {
+        return try {
+            val services = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+            services.contains(context.packageName)
+        } catch (_: Exception) { false }
+    }
+
     fun startMonitoringService() {
         val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
             action = ChildForegroundService.ACTION_START_MONITORING
         }
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
+            com.example.authapp.sync.KeepAliveWorker.schedule(context)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -121,6 +144,8 @@ fun ChildScreen(
         }
         hasExactAlarmPermission = checkExactAlarmPermission()
         hasNotificationListenerPermission = checkNotificationListenerPermission()
+        hasUsageAccessPermission = checkUsageAccessPermission()
+        hasAccessibilityPermission = checkAccessibilityPermission()
 
         // Synchronize full real-time device health to Firebase Realtime Database
         com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
@@ -402,7 +427,7 @@ fun ChildScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val allSpecialGranted = hasOverlayPermission && isBatteryOptimizationIgnored && hasNotificationListenerPermission && hasExactAlarmPermission
+        val allSpecialGranted = hasOverlayPermission && isBatteryOptimizationIgnored && hasNotificationListenerPermission && hasExactAlarmPermission && hasUsageAccessPermission && hasAccessibilityPermission
         val allCoreGranted = hasStage1Permissions && hasCallPermissions
 
         if (allCoreGranted && allSpecialGranted) {
@@ -510,21 +535,66 @@ fun ChildScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Background System Access",
+                                text = "Permission Setup Wizard",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Android requires these system toggles to prevent the app from stopping in the background.",
+                            text = "Enable these 5 essential system settings so protection and remote services run reliably:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // 1. Overlay
+                        // 1. Usage Access
+                        if (!hasUsageAccessPermission) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("1. Enable Usage Access")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        // 2. Notification Access
+                        if (!hasNotificationListenerPermission) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("2. Enable Notification Access")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        // 3. Accessibility
+                        if (!hasAccessibilityPermission) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("3. Enable Accessibility Service")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        // 4. Overlay
                         if (!hasOverlayPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             OutlinedButton(
                                 onClick = {
@@ -537,12 +607,12 @@ fun ChildScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("1. Allow 'Display Over Other Apps'")
+                                Text("4. Allow 'Display Over Other Apps'")
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // 2. Battery Saver
+                        // 5. Battery Saver
                         if (!isBatteryOptimizationIgnored && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             OutlinedButton(
                                 onClick = {
@@ -561,27 +631,27 @@ fun ChildScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("2. Allow Unrestricted Background Battery")
+                                Text("5. Allow Unrestricted Background Battery")
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // 3. Notification Mirroring
-                        if (!hasNotificationListenerPermission) {
+                        // 6. OEM Auto-Start Settings (Xiaomi, Vivo, Oppo, Realme, Samsung)
+                        if (com.example.authapp.utils.AutoStartHelper.isOemAutoStartDevice()) {
+                            val oemName = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
                             OutlinedButton(
                                 onClick = {
-                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                    context.startActivity(intent)
+                                    com.example.authapp.utils.AutoStartHelper.openAutoStartSettings(context)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("3. Enable Notification Access")
+                                Text("6. Enable $oemName Auto-Start Protection")
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // 4. Exact Alarm (Android 12+)
+                        // Exact Alarm (Android 12+)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasExactAlarmPermission) {
                             OutlinedButton(
                                 onClick = {
@@ -593,7 +663,7 @@ fun ChildScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("4. Allow Exact Alarms (Schedules)")
+                                Text("Allow Exact Alarms (Schedules)")
                             }
                         }
                     }

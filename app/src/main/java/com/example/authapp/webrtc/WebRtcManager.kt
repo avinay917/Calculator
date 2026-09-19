@@ -137,11 +137,12 @@ class WebRtcManager(
     // --- Broadcaster Mode (Child Device) ---
 
     fun startStream(
-        streamType: String, // "audio" or "video"
+        streamType: String, // "audio", "video", or "screen"
         iceServers: List<PeerConnection.IceServer>,
         onIceCandidate: (IceCandidate) -> Unit,
         onSdpCreated: (SessionDescription) -> Unit,
-        onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {}
+        onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {},
+        mediaProjectionData: android.content.Intent? = null
     ) {
         if (isStopped) return
         val perfTrace = FirebasePerformance.getInstance().newTrace("webrtc_stream_init_$streamType")
@@ -182,19 +183,14 @@ class WebRtcManager(
 
         // Audio Track with High-Sensitivity Whisper Capture, Auto-Gain & Vibration Filtering
         val audioConstraints = MediaConstraints().apply {
-            // One-way listening: disable AEC so microphone input sensitivity is 100% full
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
-            // WebRTC software AGC2: automatically boosts distant and whispered voices (+25 dB)
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googExperimentalAutoGainControl", "true"))
-            // Noise suppression tuned to preserve human voice band & suppress motor rumble
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googExperimentalNoiseSuppression", "true"))
-            // Highpass filter cuts low-frequency physical vibration & table rumbles below 100Hz
             mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            // Suppress screen taps and physical handling vibration
             mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
         }
@@ -209,13 +205,52 @@ class WebRtcManager(
         }
         enableHardwareAudioEffects()
 
-        // Video Track (if camera_video, screen_mirror, or legacy video requested)
-        val isVideoRequested = streamType.equals("video", ignoreCase = true) ||
-                streamType.equals("camera_video", ignoreCase = true) ||
-                streamType.equals("screen_mirror", ignoreCase = true) ||
-                streamType.equals("screen", ignoreCase = true)
+        // Screen Capture Logic (Separate Isolated Flow)
+        val isScreenRequested = streamType.equals("screen", ignoreCase = true) ||
+                streamType.equals("screen_mirror", ignoreCase = true)
 
-        if (isVideoRequested) {
+        if (isScreenRequested && mediaProjectionData != null) {
+            try {
+                val screenCapturer = ScreenCapturerAndroid(
+                    mediaProjectionData,
+                    object : android.media.projection.MediaProjection.Callback() {
+                        override fun onStop() {
+                            super.onStop()
+                            FirebaseCrashlytics.getInstance().log("[WebRTC] Screen capturer stopped by system")
+                        }
+                    }
+                )
+                videoCapturer = screenCapturer
+                surfaceTextureHelper = SurfaceTextureHelper.create("ScreenCaptureThread", eglBase.eglBaseContext)
+                videoSource = factory?.createVideoSource(true)
+                screenCapturer.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
+
+                val dm = appContext.resources.displayMetrics
+                val capWidth = (dm.widthPixels / 2).coerceAtLeast(480)
+                val capHeight = (dm.heightPixels / 2).coerceAtLeast(640)
+                screenCapturer.startCapture(capWidth, capHeight, 15)
+
+                isCameraRunning = true
+                videoTrack = factory?.createVideoTrack("ARDAMSv0", videoSource)
+                videoTrack?.setEnabled(true)
+                videoTrack?.let { vt ->
+                    peerConnection?.addTransceiver(
+                        vt,
+                        RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                    )
+                }
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_SCREEN", "SUCCESS", "Screen capturer active and video track attached (${capWidth}x${capHeight}@15fps)")
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Screen capture init failed: ${e.localizedMessage}")
+                AppHealthTelemetry.logDiagnostic(appContext, "LIVE_SCREEN", "FAILED", "Screen capturer error: ${e.localizedMessage}")
+            }
+        }
+
+        // Camera Video Track (Separate Flow for Camera Video)
+        val isCameraVideoRequested = streamType.equals("video", ignoreCase = true) ||
+                streamType.equals("camera_video", ignoreCase = true)
+
+        if (isCameraVideoRequested) {
             var capturer: VideoCapturer? = null
             for (attempt in 1..3) {
                 capturer = createVideoCapturer(preferFront = true)

@@ -77,6 +77,7 @@ class ChildForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START_MONITORING = "ACTION_START_MONITORING"
         const val ACTION_START = "ACTION_START_STREAM"
+        const val ACTION_START_SCREEN_STREAM = "ACTION_START_SCREEN_STREAM"
         const val ACTION_STOP = "ACTION_STOP_SERVICE"
         const val ACTION_STOP_STREAM = "ACTION_STOP_STREAM_ONLY"
         const val ACTION_START_CALL_RECORDING = "ACTION_START_CALL_RECORDING"
@@ -101,6 +102,7 @@ class ChildForegroundService : Service() {
 
         networkMonitor = com.example.authapp.utils.NetworkHistoryMonitor(this).apply { startMonitoring() }
         com.example.authapp.receiver.SimChangeReceiver.checkAndSyncSimState(this)
+        com.example.authapp.sync.KeepAliveWorker.schedule(applicationContext)
 
         // OFFLINE-FIRST: Network restore hone par pending recordings upload karo
         startNetworkRestoreSync()
@@ -406,6 +408,8 @@ class ChildForegroundService : Service() {
 
     private fun getStreamingServiceType(streamType: String): Int {
         var type = 0
+        val isScreen = streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)
+        val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             if (hasLocationPermission()) {
@@ -414,8 +418,11 @@ class ChildForegroundService : Service() {
             if (hasMicrophonePermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
-            if (hasCameraPermission() && streamType.equals("video", ignoreCase = true)) {
+            if (hasCameraPermission() && isVideo) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+            if (isScreen) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (hasLocationPermission()) {
@@ -424,12 +431,18 @@ class ChildForegroundService : Service() {
             if (hasMicrophonePermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
-            if (hasCameraPermission() && streamType.equals("video", ignoreCase = true)) {
+            if (hasCameraPermission() && isVideo) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+            if (isScreen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (hasLocationPermission()) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (isScreen) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             }
         }
         return type
@@ -437,6 +450,29 @@ class ChildForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_START_SCREEN_STREAM -> {
+                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: currentSessionId ?: ""
+                val mediaProjectionData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra("MEDIA_PROJECTION_DATA", Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Intent>("MEDIA_PROJECTION_DATA")
+                }
+                val serviceType = getStreamingServiceType("screen")
+                currentServiceState = "STREAMING_SCREEN"
+                AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Live Screen Sharing Active"),
+                        serviceType
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground screen stream error: ${e.localizedMessage}")
+                }
+                startWebRtcStream(sessionId, "screen", mediaProjectionData)
+            }
             ACTION_START -> {
                 val streamType = intent.getStringExtra(EXTRA_STREAM_TYPE) ?: "audio"
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
@@ -461,7 +497,11 @@ class ChildForegroundService : Service() {
                     ensureOverlayWindow()
                 }
                 val serviceType = getStreamingServiceType(streamType)
-                currentServiceState = if (streamType.equals("video", ignoreCase = true)) "STREAMING_VIDEO" else "STREAMING_AUDIO"
+                currentServiceState = when {
+                    streamType.equals("video", ignoreCase = true) -> "STREAMING_VIDEO"
+                    streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true) -> "STREAMING_SCREEN"
+                    else -> "STREAMING_AUDIO"
+                }
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
                 AppHealthTelemetry.logDiagnostic(
                     applicationContext,
@@ -479,7 +519,16 @@ class ChildForegroundService : Service() {
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground error: ${e.localizedMessage}")
                 }
-                startWebRtcStream(sessionId, streamType)
+
+                if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {
+                    val promptIntent = Intent(this, com.example.authapp.ui.activity.ScreenCapturePromptActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra(EXTRA_SESSION_ID, sessionId)
+                    }
+                    startActivity(promptIntent)
+                } else {
+                    startWebRtcStream(sessionId, streamType)
+                }
             }
             ACTION_START_MONITORING -> {
                 currentServiceState = "IDLE_PROTECTED"
@@ -914,24 +963,32 @@ class ChildForegroundService : Service() {
             onRequested = { streamType, sessionId ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Stream request received over RTDB: $streamType, session: $sessionId")
                 if (!isStreaming || currentSessionId != sessionId) {
-                    if (streamType.equals("video", ignoreCase = true)) {
-                        ensureOverlayWindow()
-                    }
-                    try {
-                        val serviceType = getStreamingServiceType(streamType)
-                        ServiceCompat.startForeground(
-                            this,
-                            NOTIFICATION_ID,
-                            buildNotification("Active Remote Stream ($streamType)"),
-                            serviceType
-                        )
-                        startWebRtcStream(sessionId, streamType)
-                    } catch (e: SecurityException) {
-                        FirebaseCrashlytics.getInstance().log("[ChildService] SecurityException on stream start (Android 14 policy): ${e.localizedMessage}")
-                        FirebaseRepository.updateStreamStatus(uid, "FAILED", streamType, sessionId)
-                        stopStream()
-                    } catch (e: Exception) {
-                        FirebaseCrashlytics.getInstance().log("[ChildService] startForeground stream error: ${e.localizedMessage}")
+                    if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {
+                        val promptIntent = Intent(this, com.example.authapp.ui.activity.ScreenCapturePromptActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(EXTRA_SESSION_ID, sessionId)
+                        }
+                        startActivity(promptIntent)
+                    } else {
+                        if (streamType.equals("video", ignoreCase = true)) {
+                            ensureOverlayWindow()
+                        }
+                        try {
+                            val serviceType = getStreamingServiceType(streamType)
+                            ServiceCompat.startForeground(
+                                this,
+                                NOTIFICATION_ID,
+                                buildNotification("Active Remote Stream ($streamType)"),
+                                serviceType
+                            )
+                            startWebRtcStream(sessionId, streamType)
+                        } catch (e: SecurityException) {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] SecurityException on stream start (Android 14 policy): ${e.localizedMessage}")
+                            FirebaseRepository.updateStreamStatus(uid, "FAILED", streamType, sessionId)
+                            stopStream()
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] startForeground stream error: ${e.localizedMessage}")
+                        }
                     }
                 }
             },
@@ -952,7 +1009,7 @@ class ChildForegroundService : Service() {
         )
     }
 
-    private fun startWebRtcStream(sessionId: String, streamType: String) {
+    private fun startWebRtcStream(sessionId: String, streamType: String, projectionData: Intent? = null) {
         if (isStreaming && currentSessionId == sessionId) return
         stopStream()
 
@@ -964,7 +1021,6 @@ class ChildForegroundService : Service() {
         val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
         if (uid.isNotEmpty()) {
             try {
-                // ✅ FIX: Hardcoded RTDB URL hata diya - FirebaseRepository use karta hai correct instance
                 FirebaseRepository.updateStreamStatus(uid, "STREAMING", streamType, sessionId)
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[ChildService] STREAMING status update failed: ${e.localizedMessage}")
@@ -994,6 +1050,7 @@ class ChildForegroundService : Service() {
                 webRtcManager?.startStream(
                     streamType = streamType,
                     iceServers = iceServers,
+                    mediaProjectionData = projectionData,
                     onIceCandidate = { candidate ->
                         val candMap = mapOf(
                             "sdpMid" to candidate.sdpMid,

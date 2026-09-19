@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Calculator</string>
+    <string name="accessibility_service_description">Enables web safety, browser protection, and monitoring features for parental safety.</string>
 </resources>
