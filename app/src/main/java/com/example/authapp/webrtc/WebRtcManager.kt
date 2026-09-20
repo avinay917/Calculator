@@ -63,17 +63,27 @@ class WebRtcManager(
                 // On Samsung devices (especially Exynos chips like A21s), hardware OMX decoding causes native SIGABRT in libc.so.
                 // SoftwareVideoDecoderFactory (libvpx VP8/VP9) is completely crash-safe and lightweight.
                 private val hardwareFactory = if (isSamsung) null else try { DefaultVideoDecoderFactory(eglBase.eglBaseContext) } catch (_: Throwable) { null }
-                private val softwareFactory = SoftwareVideoDecoderFactory()
+                private val softwareFactory: VideoDecoderFactory? = try {
+                    SoftwareVideoDecoderFactory()
+                } catch (t: Throwable) {
+                    FirebaseCrashlytics.getInstance().recordException(t)
+                    null
+                }
 
                 override fun createDecoder(info: VideoCodecInfo?): VideoDecoder? {
-                    return if (isSamsung) {
-                        softwareFactory.createDecoder(info)
-                    } else {
-                        try {
-                            hardwareFactory?.createDecoder(info) ?: softwareFactory.createDecoder(info)
-                        } catch (_: Throwable) {
-                            softwareFactory.createDecoder(info)
+                    return try {
+                        if (isSamsung) {
+                            softwareFactory?.createDecoder(info)
+                        } else {
+                            try {
+                                hardwareFactory?.createDecoder(info) ?: softwareFactory?.createDecoder(info)
+                            } catch (_: Throwable) {
+                                softwareFactory?.createDecoder(info)
+                            }
                         }
+                    } catch (t: Throwable) {
+                        FirebaseCrashlytics.getInstance().recordException(t)
+                        null
                     }
                 }
 
@@ -82,7 +92,7 @@ class WebRtcManager(
                     if (!isSamsung) {
                         try { hardwareFactory?.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
                     }
-                    try { softwareFactory.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
+                    try { softwareFactory?.supportedCodecs?.let { list.addAll(it) } } catch (_: Throwable) {}
                     return list.distinctBy { it.name }.toTypedArray()
                 }
             }
@@ -678,6 +688,7 @@ class WebRtcManager(
 
         fun getDefaultIceServers(): List<PeerConnection.IceServer> {
             return listOf(
+                // Google STUN Servers (Low Latency)
                 PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
@@ -685,6 +696,9 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
                 PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
+
+                // CRITICAL TURN SERVERS FOR HOTSPOT/STRICT FIREWALL (Symmetric NAT)
+                // 1. Metered OpenRelay (UDP/TCP/TLS)
                 PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
                     .setUsername("openrelayproject")
                     .setPassword("openrelayproject")
@@ -696,6 +710,16 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443?transport=tcp")
                     .setUsername("openrelayproject")
                     .setPassword("openrelayproject")
+                    .createIceServer(),
+                
+                // 2. FreeSTUN Fallback TURN Servers
+                PeerConnection.IceServer.builder("turn:freestun.net:3478")
+                    .setUsername("free")
+                    .setPassword("free")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:freestun.net:3478?transport=tcp")
+                    .setUsername("free")
+                    .setPassword("free")
                     .createIceServer()
             )
         }
