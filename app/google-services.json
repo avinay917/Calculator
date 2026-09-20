@@ -15,34 +15,13 @@
       },
       "oauth_client": [
         {
-          "client_id": "247813001651-cio2e520us2lofn07gf9pug622lmm5d2.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyB2aHZi5n4KGD6Zf_OISpWFZVNI20Qysq0"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "247813001651-cio2e520us2lofn07gf9pug622lmm5d2.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:247813001651:android:4727b4e89599e74d85bbc6",
-        "android_client_info": {
-          "package_name": "com.example.liveaudioapp"
-        }
-      },
-      "oauth_client": [
+          "client_id": "247813001651-97t3b369osj9tt79ohlj1sm57tk2dl4f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.authapp",
+            "certificate_hash": "efb2d461aa79a4826b65f9da74bbf215463d2d3a"
+          }
+        },
         {
           "client_id": "247813001651-cio2e520us2lofn07gf9pug622lmm5d2.apps.googleusercontent.com",
           "client_type": 3
@@ -57,7 +36,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "247813001651-cio2e520us2lofn07gf9pug622lmm5d2.apps.googleusercontent.com",
+              "client_id": "247813001651-cio2e520us2lofn07gf9ppro622lmm5d2.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
