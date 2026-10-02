@@ -8,13 +8,6 @@ import com.example.authapp.analytics.AppHealthTelemetry
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.*
 
-private class SurfaceRendererState(
-    var isInitialized: Boolean = false,
-    var attachedTrack: VideoTrack? = null,
-    var pendingTrack: VideoTrack? = null,
-    var onReleasedCallback: (() -> Unit)? = null
-)
-
 @Composable
 fun SafeSurfaceViewRenderer(
     videoTrack: VideoTrack?,
@@ -24,127 +17,65 @@ fun SafeSurfaceViewRenderer(
 ) {
     if (eglContext == null) return
 
+    DisposableEffect(videoTrack) {
+        var renderer: SurfaceViewRenderer? = null
+        var currentTrack: VideoTrack? = videoTrack
+
+        onDispose {
+            try {
+                currentTrack?.removeSink(renderer)
+            } catch (_: Exception) {
+            }
+            try {
+                renderer?.release()
+            } catch (_: Exception) {
+            }
+            onRendererReleased?.invoke()
+        }
+    }
+
     AndroidView(
         factory = { ctx ->
-            val state = SurfaceRendererState(onReleasedCallback = onRendererReleased)
             SurfaceViewRenderer(ctx).apply {
-                tag = state
-                setEnableHardwareScaler(false)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                setMirror(false)
-                // CRITICAL FIX: setZOrderMediaOverlay(true) — Video Compose Surface ke
-                // UPAR render hona chahiye. false hone par SurfaceView neeche chala jata hai
-                // aur parent ko sirf black screen dikhti hai, video nahi.
-                // LiveStreamActivity ek dedicated Activity hai (Dialog nahi), isliye true safe hai.
-                setZOrderMediaOverlay(true)
-
                 try {
+                    setEnableHardwareScaler(true)
+                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                    setZOrderMediaOverlay(true)
                     init(eglContext, object : RendererCommon.RendererEvents {
                         override fun onFirstFrameRendered() {
-                            AppHealthTelemetry.logDiagnostic(ctx, "LIVE_VIDEO", "SUCCESS", "Parent SurfaceView rendered first video frame!")
-                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] First video frame rendered on SurfaceViewRenderer")
+                            AppHealthTelemetry.logDiagnostic(
+                                ctx,
+                                "LIVE_VIDEO",
+                                "SUCCESS",
+                                "First frame rendered"
+                            )
+                            FirebaseCrashlytics.getInstance()
+                                .log("[SurfaceViewRenderer] First frame rendered")
                         }
-                        override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
-                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] Frame resolution changed: ${videoWidth}x${videoHeight}, rot=$rotation")
+
+                        override fun onFrameResolutionChanged(
+                            videoWidth: Int,
+                            videoHeight: Int,
+                            rotation: Int
+                        ) {
+                            FirebaseCrashlytics.getInstance()
+                                .log("[SurfaceViewRenderer] Resolution: ${videoWidth}x${videoHeight}")
                         }
                     })
-                    state.isInitialized = true
-                } catch (t: Throwable) {
-                    FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceViewRenderer init failed: ${t.localizedMessage}")
-                    FirebaseCrashlytics.getInstance().recordException(t)
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
                 }
-
-                holder.addCallback(object : SurfaceHolder.Callback {
-                    override fun surfaceCreated(holder: SurfaceHolder) {
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceView surfaceCreated (valid=${holder.surface?.isValid})")
-                        val currentPending = state.pendingTrack
-                        if (currentPending != null && state.isInitialized) {
-                            try {
-                                currentPending.addSink(this@apply)
-                                state.attachedTrack = currentPending
-                                state.pendingTrack = null
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Pending track attached to sink on surfaceCreated")
-                            } catch (t: Throwable) {
-                                FirebaseCrashlytics.getInstance().recordException(t)
-                            }
-                        }
-                    }
-
-                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
-
-                    override fun surfaceDestroyed(holder: SurfaceHolder) {
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceView surfaceDestroyed (detaching sink)")
-                        state.attachedTrack?.let {
-                            try {
-                                it.removeSink(this@apply)
-                                FirebaseCrashlytics.getInstance().log("[WebRTC UI] Sink detached upon surfaceDestroyed")
-                            } catch (t: Throwable) {
-                                FirebaseCrashlytics.getInstance().recordException(t)
-                            }
-                        }
-                        state.pendingTrack = state.attachedTrack ?: state.pendingTrack
-                        state.attachedTrack = null
-                    }
-                })
             }
         },
+        modifier = modifier,
         update = { renderer ->
-            val state = renderer.tag as? SurfaceRendererState ?: return@AndroidView
-            if (!state.isInitialized) return@AndroidView
-
-            if (state.attachedTrack != videoTrack) {
-                state.attachedTrack?.let { old ->
-                    try {
-                        old.removeSink(renderer)
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] Detached old videoTrack")
-                    } catch (t: Throwable) {
-                        FirebaseCrashlytics.getInstance().recordException(t)
-                    }
-                }
-                state.attachedTrack = null
-
-                if (videoTrack != null) {
-                    val surface = try { renderer.holder?.surface } catch (_: Throwable) { null }
-                    if (surface?.isValid == true) {
-                        try {
-                            videoTrack.addSink(renderer)
-                            state.attachedTrack = videoTrack
-                            state.pendingTrack = null
-                            FirebaseCrashlytics.getInstance().log("[WebRTC UI] Attached new videoTrack directly (surface isValid)")
-                        } catch (t: Throwable) {
-                            FirebaseCrashlytics.getInstance().recordException(t)
-                        }
-                    } else {
-                        // Queue track to be attached when surfaceCreated is called
-                        state.pendingTrack = videoTrack
-                        FirebaseCrashlytics.getInstance().log("[WebRTC UI] Queued videoTrack (waiting for surfaceCreated)")
-                    }
-                } else {
-                    state.pendingTrack = null
-                }
-            }
-        },
-        onRelease = { renderer ->
-            val state = renderer.tag as? SurfaceRendererState
-            state?.pendingTrack = null
-            state?.attachedTrack?.let {
-                try {
-                    it.removeSink(renderer)
-                } catch (t: Throwable) {
-                    FirebaseCrashlytics.getInstance().recordException(t)
-                }
-            }
-            state?.attachedTrack = null
             try {
-                renderer.release()
-                FirebaseCrashlytics.getInstance().log("[WebRTC UI] SurfaceViewRenderer released cleanly")
-            } catch (t: Throwable) {
-                FirebaseCrashlytics.getInstance().recordException(t)
+                if (videoTrack != null) {
+                    videoTrack.addSink(renderer)
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
             }
-            // CRITICAL: eglBase release MUST happen AFTER renderer.release() to avoid use-after-free
-            try { state?.onReleasedCallback?.invoke() } catch (_: Throwable) {}
-        },
-        modifier = modifier
+        }
     )
 }
-
