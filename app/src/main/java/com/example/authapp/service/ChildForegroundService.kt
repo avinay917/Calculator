@@ -128,7 +128,8 @@ class ChildForegroundService : Service() {
     private fun startNetworkRestoreSync() {
         try {
             val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
-            val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            // BUG FIX: class field mein assign karo — taaki onDestroy() mein sahi se unregisterNetworkCallback() call ho sake
+            val callback = object : android.net.ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: android.net.Network) {
                     super.onAvailable(network)
                     // Internet restore hua — pending queue check karo
@@ -140,7 +141,8 @@ class ChildForegroundService : Service() {
                     }
                 }
             }
-            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            this.networkCallback = callback
+            connectivityManager.registerDefaultNetworkCallback(callback)
             FirebaseCrashlytics.getInstance().log("[ChildService] Network restore sync listener registered")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[ChildService] Network callback register error: ${e.localizedMessage}")

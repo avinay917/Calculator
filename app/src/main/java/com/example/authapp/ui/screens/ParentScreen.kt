@@ -121,7 +121,7 @@ fun ParentScreen(
             versionName = liveVersionName,
             apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
             releaseNotes = "$liveVersionName: Latest build with live video fix & security improvements",
-            isForceUpdate = true
+            isForceUpdate = false  // BUG FIX: false rakho — users ke liye graceful optional update
         )
     }
 
