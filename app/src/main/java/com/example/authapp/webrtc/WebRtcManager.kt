@@ -586,8 +586,34 @@ class WebRtcManager(
         )
 
         fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
-            val normalized = sensitivityPercent / 100.0
-            return 1.0 + (normalized * 2.0)
+            val normalized = (sensitivityPercent / 100.0).coerceIn(0.0, 1.0)
+            return 0.5 + (normalized * 3.0)
+        }
+
+        fun optimizeOpusSdp(sdp: String): String {
+            if (sdp.isBlank()) return sdp
+            val lines = sdp.lines().toMutableList()
+            var opusFmtpIndex = -1
+            for (i in lines.indices) {
+                val line = lines[i]
+                if (line.startsWith("a=fmtp:111")) {
+                    opusFmtpIndex = i
+                    if (!line.contains("maxaveragebitrate=", ignoreCase = true)) {
+                        lines[i] = "$line;maxaveragebitrate=64000"
+                    }
+                    break
+                }
+            }
+            if (opusFmtpIndex == -1) {
+                val opusPayload = lines.indexOfFirst {
+                    it.contains("a=rtpmap:111", ignoreCase = true) &&
+                        it.contains("opus/48000", ignoreCase = true)
+                }
+                if (opusPayload >= 0) {
+                    lines.add(opusPayload + 1, "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000")
+                }
+            }
+            return lines.joinToString("\n")
         }
 
         /**
