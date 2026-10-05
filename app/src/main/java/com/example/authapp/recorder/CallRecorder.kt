@@ -23,7 +23,7 @@ class CallRecorder(private val context: Context) {
             val recordingsDir = File(context.filesDir, "call_recordings").apply {
                 if (!exists()) mkdirs()
             }
-            val sanitizedNumber = phoneNumber.replace(Regex("[^0-9+]"), "").ifEmpty { "unknown" }
+            val sanitizedNumber = phoneNumber.replace(Regex("[^a-zA-Z0-9+_]"), "").ifEmpty { "unknown" }
             val file = File(recordingsDir, "call_${sanitizedNumber}_${System.currentTimeMillis()}.m4a")
 
             val sources = mutableListOf(

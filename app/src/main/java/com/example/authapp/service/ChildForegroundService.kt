@@ -405,6 +405,17 @@ class ChildForegroundService : Service() {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             }
         }
+    private fun getSnapshotServiceType(): Int {
+        var type = getIdleServiceType()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (hasCameraPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (hasCameraPermission()) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+        }
         return type
     }
 
@@ -587,6 +598,14 @@ class ChildForegroundService : Service() {
                     callRecorder = null
                     currentServiceState = "IDLE_PROTECTED"
                     AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                    try {
+                        ServiceCompat.startForeground(
+                            this@ChildForegroundService,
+                            NOTIFICATION_ID,
+                            buildNotification("Background Protection Active"),
+                            getIdleServiceType()
+                        )
+                    } catch (_: Exception) {}
                     if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
                         // OFFLINE-FIRST: Net hai toh direct upload, nahi toh local save + WorkManager queue
                         com.example.authapp.sync.SyncScheduler.enqueueUpload(
@@ -636,6 +655,16 @@ class ChildForegroundService : Service() {
                 callRecorder = null
                 currentServiceState = "IDLE_PROTECTED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Background Protection Active"),
+                        getIdleServiceType()
+                    )
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
+                }
 
                 val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
                 if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
@@ -689,8 +718,8 @@ class ChildForegroundService : Service() {
                     ServiceCompat.startForeground(
                         this,
                         NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
+                        buildNotification("Capturing Remote Photo"),
+                        getSnapshotServiceType()
                     )
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] startForeground snapshot error: ${e.localizedMessage}")
@@ -701,6 +730,14 @@ class ChildForegroundService : Service() {
                     com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                         isFront = isFront,
                         onCaptured = { file ->
+                            try {
+                                ServiceCompat.startForeground(
+                                    this,
+                                    NOTIFICATION_ID,
+                                    buildNotification("Background Protection Active"),
+                                    getIdleServiceType()
+                                )
+                            } catch (_: Exception) {}
                             FirebaseRepository.uploadSnapshot(
                                 childId = uid,
                                 fileUri = Uri.fromFile(file),
@@ -716,6 +753,14 @@ class ChildForegroundService : Service() {
                             )
                         },
                         onError = { err ->
+                            try {
+                                ServiceCompat.startForeground(
+                                    this,
+                                    NOTIFICATION_ID,
+                                    buildNotification("Background Protection Active"),
+                                    getIdleServiceType()
+                                )
+                            } catch (_: Exception) {}
                             FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                             FirebaseRepository.reportSnapshotError(uid, err)
                         }
@@ -845,10 +890,26 @@ class ChildForegroundService : Service() {
                     return@listenToSnapshotRequest
                 }
                 ensureOverlayWindow()
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Capturing Remote Photo"),
+                        getSnapshotServiceType()
+                    )
+                } catch (_: Exception) {}
                 val isFront = cameraFacing.equals("front", ignoreCase = true)
                 com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                     isFront = isFront,
                     onCaptured = { file ->
+                        try {
+                            ServiceCompat.startForeground(
+                                this,
+                                NOTIFICATION_ID,
+                                buildNotification("Background Protection Active"),
+                                getIdleServiceType()
+                            )
+                        } catch (_: Exception) {}
                         FirebaseRepository.uploadSnapshot(
                             childId = uid,
                             fileUri = Uri.fromFile(file),
@@ -864,6 +925,14 @@ class ChildForegroundService : Service() {
                         )
                     },
                     onError = { err ->
+                        try {
+                            ServiceCompat.startForeground(
+                                this,
+                                NOTIFICATION_ID,
+                                buildNotification("Background Protection Active"),
+                                getIdleServiceType()
+                            )
+                        } catch (_: Exception) {}
                         FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                         FirebaseRepository.reportSnapshotError(uid, err)
                     }

@@ -22,7 +22,17 @@ class ScreenCapturePromptActivity : ComponentActivity() {
                 putExtra("RESULT_CODE", result.resultCode)
                 putExtra(ChildForegroundService.EXTRA_SESSION_ID, sessionId)
             }
-            startService(serviceIntent)
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(this, serviceIntent)
+            } catch (e: Exception) {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        } else {
+            val sessionId = intent.getStringExtra(ChildForegroundService.EXTRA_SESSION_ID) ?: ""
+            val uid = com.example.authapp.analytics.AppHealthTelemetry.getEffectiveUserId(applicationContext)
+            if (uid.isNotEmpty() && sessionId.isNotEmpty()) {
+                com.example.authapp.data.FirebaseRepository.updateStreamStatus(uid, "STOPPED", "screen", sessionId)
+            }
         }
         finish()
     }
