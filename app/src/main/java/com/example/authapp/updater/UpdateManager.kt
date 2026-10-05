@@ -14,6 +14,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 object UpdateManager {
 
@@ -95,9 +96,9 @@ object UpdateManager {
                 fun isTrustedUrl(urlStr: String): Boolean {
                     if (!urlStr.startsWith("https://", ignoreCase = true)) return false
                     val host = Uri.parse(urlStr).host?.lowercase() ?: return false
-                    return host.endsWith("github.com") ||
-                        host.endsWith("githubusercontent.com") ||
-                        host.endsWith("googleapis.com")
+                    return host == "github.com" || host.endsWith(".github.com") ||
+                        host == "githubusercontent.com" || host.endsWith(".githubusercontent.com") ||
+                        host == "googleapis.com" || host.endsWith(".googleapis.com")
                 }
 
                 if (!isTrustedUrl(apkUrl)) {
@@ -109,6 +110,7 @@ object UpdateManager {
                 }
                 val apkFile = File(updatesDir, "update.apk")
                 if (apkFile.exists()) apkFile.delete()
+                val maxApkBytes = 100L * 1024L * 1024L
 
                 var currentUrl = apkUrl
                 var redirects = 0
@@ -152,7 +154,9 @@ object UpdateManager {
                     return@withContext
                 }
 
-                val totalBytes = conn.contentLength.toFloat()
+                val declaredLength = conn.contentLengthLong
+                if (declaredLength > maxApkBytes) throw SecurityException("APK exceeds maximum allowed size")
+                val totalBytes = declaredLength.toFloat()
                 conn.inputStream.use { input ->
                     FileOutputStream(apkFile).use { output ->
                         val buffer = ByteArray(8192)
@@ -162,6 +166,7 @@ object UpdateManager {
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
                             downloadedBytes += bytesRead
+                            if (downloadedBytes > maxApkBytes) throw SecurityException("APK exceeds maximum allowed size")
                             if (totalBytes > 0) {
                                 val progress = downloadedBytes / totalBytes
                                 withContext(Dispatchers.Main) {
@@ -187,9 +192,48 @@ object UpdateManager {
         }
     }
 
+    private fun hasSameSigningCertificate(context: Context, apkFile: File): Boolean {
+        val packageManager = context.packageManager
+        val archiveInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageManager.getPackageArchiveInfo(apkFile.absolutePath, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageArchiveInfo(apkFile.absolutePath, android.content.pm.PackageManager.GET_SIGNATURES)
+        } ?: return false
+        if (archiveInfo.packageName != context.packageName) return false
+
+        val installedInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNATURES)
+        }
+
+        fun certDigests(signatures: Array<android.content.pm.Signature>): Set<String> =
+            signatures.map { signature ->
+                MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { b -> "%02x".format(b) }
+            }.toSet()
+
+        val archiveSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            archiveInfo.signingInfo?.apkContentsSigners ?: return false
+        } else {
+            @Suppress("DEPRECATION")
+            archiveInfo.signatures ?: return false
+        }
+        val installedSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            installedInfo.signingInfo?.apkContentsSigners ?: return false
+        } else {
+            @Suppress("DEPRECATION")
+            installedInfo.signatures ?: return false
+        }
+        return certDigests(archiveSignatures).isNotEmpty() && certDigests(archiveSignatures) == certDigests(installedSignatures)
+    }
+
     fun installApk(context: Context, apkFile: File) {
         try {
-            if (!apkFile.exists() || apkFile.length() <= 0) {
+            if (!apkFile.exists() || apkFile.length() <= 0) return
+            if (!hasSameSigningCertificate(context, apkFile)) {
+                FirebaseCrashlytics.getInstance().log("Rejected APK update because package or signing certificate did not match the installed app")
                 return
             }
 

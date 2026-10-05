@@ -34,7 +34,7 @@ class DataIntegrityTest {
             UserLocation(
                 latitude = (it["latitude"] as? Number)?.toDouble() ?: 0.0,
                 longitude = (it["longitude"] as? Number)?.toDouble() ?: 0.0,
-                accuracy = (it["accuracy"] as? Number)?.toFloat() ?: 0f,
+                accuracy = (it["accuracy"] as? Number)?.toDouble() ?: 0.0,
                 timestamp = (it["timestamp"] as? Number)?.toLong() ?: 0L,
                 provider = it["provider"] as? String ?: ""
             )
@@ -99,7 +99,7 @@ class DataIntegrityTest {
     fun userLocation_preservesCoordinatePrecisionWithoutRoundingLoss() {
         val originalLat = 26.76071311812848
         val originalLng = 80.94534315168858
-        val originalAccuracy = 30.0f
+        val originalAccuracy = 30.0
         val originalTime = 1789232981000L
 
         val location = UserLocation(
@@ -122,14 +122,14 @@ class DataIntegrityTest {
         val deserialized = UserLocation(
             latitude = (serialized["latitude"] as Number).toDouble(),
             longitude = (serialized["longitude"] as Number).toDouble(),
-            accuracy = (serialized["accuracy"] as Number).toFloat(),
+            accuracy = (serialized["accuracy"] as Number).toDouble(),
             timestamp = (serialized["timestamp"] as Number).toLong(),
             provider = serialized["provider"] as String
         )
 
         assertEquals(originalLat, deserialized.latitude, 0.0000000000001)
         assertEquals(originalLng, deserialized.longitude, 0.0000000000001)
-        assertEquals(originalAccuracy, deserialized.accuracy, 0.001f)
+        assertEquals(originalAccuracy, deserialized.accuracy, 0.001)
         assertEquals(originalTime, deserialized.timestamp)
     }
 

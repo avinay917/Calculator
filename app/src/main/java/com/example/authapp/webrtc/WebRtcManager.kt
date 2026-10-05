@@ -489,14 +489,30 @@ class WebRtcManager(
         isStopped = true
         try {
             videoCapturer?.stopCapture()
-            videoCapturer?.dispose()
-            audioTrack?.setEnabled(false)
-            videoTrack?.setEnabled(false)
-            peerConnection?.close()
-            surfaceTextureHelper?.dispose()
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
+        try { videoCapturer?.dispose() } catch (e: Exception) { FirebaseCrashlytics.getInstance().recordException(e) }
+        try { audioTrack?.setEnabled(false) } catch (_: Exception) {}
+        try { videoTrack?.setEnabled(false) } catch (_: Exception) {}
+        try { peerConnection?.close() } catch (e: Exception) { FirebaseCrashlytics.getInstance().recordException(e) }
+        try { audioSource?.dispose() } catch (_: Exception) {}
+        try { audioTrack?.dispose() } catch (_: Exception) {}
+        try { videoSource?.dispose() } catch (_: Exception) {}
+        try { videoTrack?.dispose() } catch (_: Exception) {}
+        try { surfaceTextureHelper?.dispose() } catch (_: Exception) {}
+        try { audioDeviceModule?.release() } catch (_: Exception) {}
+        try { hardwareAgc?.release() } catch (_: Exception) {}
+        try { hardwareNs?.release() } catch (_: Exception) {}
+        try { loudnessEnhancer?.release() } catch (_: Exception) {}
+        peerConnection = null
+        audioSource = null
+        audioTrack = null
+        videoSource = null
+        videoTrack = null
+        videoCapturer = null
+        surfaceTextureHelper = null
+        audioDeviceModule = null
     }
 
     fun releaseEglBase() {
@@ -523,17 +539,139 @@ class WebRtcManager(
         }
     }
 
+    fun setRemoteAnswer(sdp: String) {
+        setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
+    }
+
+    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
+        addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
+    }
+
+    fun switchCamera() {
+        try {
+            (videoCapturer as? CameraVideoCapturer)?.switchCamera(null)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
+    fun startAudioLevelMonitoring(onLevel: (Float) -> Unit) {
+        // WebRTC's native AudioTrack does not expose a portable level meter.
+        // Keep the callback API for UI compatibility; report silence until a
+        // dedicated audio meter is introduced.
+        onLevel(0f)
+    }
+
+    fun setRemoteOfferAndCreateAnswer(sdp: String, onAnswer: (SessionDescription) -> Unit) {
+        if (isStopped) return
+        val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
+        try {
+            peerConnection?.setRemoteDescription(object : SdpObserver {
+                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
+                override fun onSetSuccess() {
+                    isRemoteDescriptionSet = true
+                    pendingCandidates.forEach { peerConnection?.addIceCandidate(it) }
+                    pendingCandidates.clear()
+                    peerConnection?.createAnswer(object : SdpObserver {
+                        override fun onCreateSuccess(answer: SessionDescription?) {
+                            if (answer == null || isStopped) return
+                            peerConnection?.setLocalDescription(object : SdpObserver {
+                                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
+                                override fun onSetSuccess() { onAnswer(answer) }
+                                override fun onCreateFailure(error: String?) { }
+                                override fun onSetFailure(error: String?) { }
+                            }, answer)
+                        }
+                        override fun onSetSuccess() = Unit
+                        override fun onCreateFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC CreateAnswer] $error") }
+                        override fun onSetFailure(error: String?) { }
+                    }, MediaConstraints())
+                }
+                override fun onCreateFailure(error: String?) { }
+                override fun onSetFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC RemoteOffer] $error") }
+            }, offer)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
     companion object {
+        fun getDefaultIceServers(): List<PeerConnection.IceServer> = listOf(
+            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+        )
+
         fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
-            val normalized = sensitivityPercent / 100.0
-            return 1.0 + (normalized * 2.0)
+            val normalized = (sensitivityPercent / 100.0).coerceIn(0.0, 1.0)
+            return 0.5 + (normalized * 3.0)
         }
 
+        fun optimizeOpusSdp(sdp: String): String {
+            if (sdp.isBlank()) return sdp
+            val lines = sdp.lines().toMutableList()
+            var opusFmtpIndex = -1
+            for (i in lines.indices) {
+                val line = lines[i]
+                if (line.startsWith("a=fmtp:111")) {
+                    opusFmtpIndex = i
+                    if (!line.contains("maxaveragebitrate=", ignoreCase = true)) {
+                        lines[i] = "$line;maxaveragebitrate=64000"
+                    }
+                    break
+                }
+            }
+            val opusParameters = linkedMapOf(
+                "minptime" to "10",
+                "useinbandfec" to "1",
+                "maxaveragebitrate" to "64000",
+                "sprop-maxcapturerate" to "48000",
+                "usedtx" to "1",
+                "stereo" to "0"
+            )
+            if (opusFmtpIndex >= 0) {
+                val prefix = "a=fmtp:111"
+                val existing = lines[opusFmtpIndex]
+                    .removePrefix(prefix).trim().removePrefix(";")
+                    .split(";").filter { it.isNotBlank() }
+                    .mapNotNull { parameter ->
+                        val key = parameter.substringBefore("=").trim().lowercase()
+                        if (key in opusParameters) key to parameter.substringAfter("=", "") else null
+                    }.toMap()
+                val merged = opusParameters.map { (key, value) ->
+                    key + "=" + (existing[key] ?: value)
+                }
+                lines[opusFmtpIndex] = prefix + " " + merged.joinToString(";")
+            } else {
+                val opusPayload = lines.indexOfFirst {
+                    it.contains("a=rtpmap:111", ignoreCase = true) &&
+                        it.contains("opus/48000", ignoreCase = true)
+                }
+                if (opusPayload >= 0) {
+                    val params = opusParameters.entries.joinToString(";") { it.key + "=" + it.value }
+                    lines.add(opusPayload + 1, "a=fmtp:111 " + params)
+                }
+            }
+            return lines.joinToString("\n")
+        }
+
+        /**
+         * Safe UI gain mapping used by tests and callers.
+         * Clamps the requested sensitivity to 0..100% and maps it to 0.5x..2.0x.
+         */
+        fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
+            val normalized = (sensitivityPercent / 100.0).coerceIn(0.0, 1.0)
+            return 0.5 + (normalized * 1.5)
+        }
+
+        @Volatile private var pcfInitialized = false
+
+        @Synchronized
         private fun initializePcfIfNeeded(context: Context) {
-            if (!PeerConnectionFactory.isInitialized()) {
+            if (!pcfInitialized) {
                 PeerConnectionFactory.InitializationOptions.builder(context)
                     .createInitializationOptions()
                     .let { PeerConnectionFactory.initialize(it) }
+                pcfInitialized = true
             }
         }
     }

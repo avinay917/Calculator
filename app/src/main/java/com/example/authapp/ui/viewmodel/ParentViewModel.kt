@@ -46,6 +46,8 @@ class ParentViewModel : ViewModel() {
     private val fileExplorerListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreAlertRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val recordingsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
 
@@ -95,6 +97,9 @@ class ParentViewModel : ViewModel() {
                     val defaultSelected = state.selectedChildForControls ?: list.firstOrNull()
                     state.copy(childUsers = list, isLoadingChildren = false, selectedChildForControls = defaultSelected)
                 }
+                val currentChildIds = list.mapNotNull { it.uid.takeIf(String::isNotEmpty) }.toSet()
+                val staleChildIds = healthListeners.keys.union(alertsListeners.keys).union(appUsageListeners.keys).union(parentControlsListeners.keys).union(geofencesListeners.keys).union(locationHistoryListeners.keys).union(firestoreAlertRegistrations.keys).filterNot { it in currentChildIds }
+                staleChildIds.forEach { removeChildListeners(it) }
                 list.forEach { child ->
                     if (child.uid.isNotEmpty()) {
                         setupMapListener(healthListeners, child.uid, FirebaseRepository::listenToDeviceHealth) { health ->
@@ -103,10 +108,11 @@ class ParentViewModel : ViewModel() {
                         setupMapListener(alertsListeners, child.uid, FirebaseRepository::listenToSecurityAlerts) { alerts ->
                             _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
                         }
-                        val fsAlerts = FirebaseRepository.listenToChildSecurityAlertsFirestore(child.uid) { alerts ->
-                            if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
+                        if (!firestoreAlertRegistrations.containsKey(child.uid)) {
+                            firestoreAlertRegistrations[child.uid] = FirebaseRepository.listenToChildSecurityAlertsFirestore(child.uid) { alerts ->
+                                if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
+                            }
                         }
-                        firestoreRegistrations.add(fsAlerts)
 
                         setupMapListener(appUsageListeners, child.uid, FirebaseRepository::listenToAppUsage) { usageList ->
                             _uiState.update { it.copy(appUsageMap = it.appUsageMap + (child.uid to usageList)) }
@@ -195,6 +201,31 @@ class ParentViewModel : ViewModel() {
             }
             commandsListeners[childUid] = cmdListener
         }
+    }
+
+    private fun removeChildListeners(childUid: String) {
+        val maps = listOf(
+            healthListeners to "device_health", alertsListeners to "alerts", appUsageListeners to "app_usage",
+            parentControlsListeners to "parent_controls", geofencesListeners to "geofences",
+            locationHistoryListeners to "location_history", callLogsListeners to "call_logs",
+            notificationsListeners to "notifications", schedulesListeners to "schedules",
+            snapshotsListeners to "snapshots", smsListeners to "sms_logs", webHistoryListeners to "web_history",
+            networkHistoryListeners to "network_history", simInfoListeners to "sim_info",
+            packageEventsListeners to "package_events", whatsAppListeners to "whatsapp_logs",
+            commandsListeners to "commands", youtubeListeners to "youtube_history",
+            mediaGalleryListeners to "media_gallery", fileExplorerListeners to "file_explorer"
+        )
+        maps.forEach { (map, path) ->
+            map.remove(childUid)?.let { FirebaseRepository.removeValueListener("$path/$childUid", it) }
+        }
+        snapshotStatusListeners.remove(childUid)?.let {
+            FirebaseRepository.removeValueListener("streams/$childUid/snapshotRequest", it)
+        }
+        firestoreAlertRegistrations.remove(childUid)?.remove()
+        recordingsListeners.remove(childUid)?.let {
+            FirebaseRepository.removeValueListener("recordings/$childUid", it)
+        }
+        childRecordingsMap.remove(childUid)
     }
 
     fun startStream(child: User, streamType: String) {
@@ -356,11 +387,13 @@ class ParentViewModel : ViewModel() {
         var pendingCount = children.size
         children.forEach { child ->
             if (child.uid.isNotEmpty()) {
-                FirebaseRepository.listenToRecordings(child.uid) { list ->
+                if (!recordingsListeners.containsKey(child.uid)) {
+                    recordingsListeners[child.uid] = FirebaseRepository.listenToRecordings(child.uid) { list ->
                     synchronized(childRecordingsMap) {
                         childRecordingsMap[child.uid] = list
                         val merged = childRecordingsMap.values.flatten().sortedByDescending { it.startTime }
                         _uiState.update { it.copy(allRecordings = merged, isLoadingRecordings = false) }
+                    }
                     }
                 }
             } else {
@@ -383,30 +416,6 @@ class ParentViewModel : ViewModel() {
 
     fun closeActivityDialog() {
         _uiState.update { it.copy(activeActivityDialogChild = null, initialActivityTab = 0) }
-    }
-
-    fun checkForUpdatesManually(context: Context) {
-        val curCode = com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context)
-        val curName = com.example.authapp.updater.UpdateManager.getCurrentVersionName(context)
-
-        // Publish current version as latest update to Firebase RTDB so all child/parent devices get the update popup!
-        FirebaseRepository.publishAppUpdate(
-            versionCode = curCode,
-            versionName = curName,
-            apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
-            releaseNotes = "Latest automated update with system enhancements and bug fixes.",
-            isForceUpdate = true
-        ) { success ->
-            if (success) {
-                _uiState.update { current ->
-                    current.copy(userFeedbackMessage = "OTA Update Broadcast published to all devices! (v$curCode)")
-                }
-            } else {
-                _uiState.update { current ->
-                    current.copy(userFeedbackMessage = "App is up to date (Current version code: $curCode).")
-                }
-            }
-        }
     }
 
     fun openAlertsDialog(child: User) {
@@ -601,8 +610,19 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("commands/$childId", listener)
         }
         commandsListeners.clear()
+        youtubeListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("youtube_history/$childId", listener) }
+        youtubeListeners.clear()
+        mediaGalleryListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("media_gallery/$childId", listener) }
+        mediaGalleryListeners.clear()
+        fileExplorerListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("file_explorer/$childId", listener) }
+        fileExplorerListeners.clear()
         firestoreRegistrations.forEach { it.remove() }
         firestoreRegistrations.clear()
+        firestoreAlertRegistrations.values.forEach { it.remove() }
+        firestoreAlertRegistrations.clear()
+        recordingsListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("recordings/$childId", listener) }
+        recordingsListeners.clear()
+        childRecordingsMap.clear()
         childUsersListener?.let {
             FirebaseRepository.removeValueListener("users", it)
             childUsersListener = null

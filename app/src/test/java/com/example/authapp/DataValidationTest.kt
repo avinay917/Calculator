@@ -11,7 +11,7 @@ class DataValidationTest {
 
     private fun isValidEmail(email: String): Boolean {
         if (email.isBlank() || email.length > 254) return false
-        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$".toRegex()
+        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}\$".toRegex()
         return emailRegex.matches(email)
     }
 
@@ -47,7 +47,7 @@ class DataValidationTest {
         val validLoc = UserLocation(
             latitude = 26.760713,
             longitude = 80.945343,
-            accuracy = 12.5f,
+            accuracy = 12.5,
             timestamp = System.currentTimeMillis(),
             provider = "gps"
         )
@@ -57,19 +57,19 @@ class DataValidationTest {
     @Test
     fun gpsLocation_rejectsOutOfBoundCoordinates() {
         // Invalid latitude (> 90)
-        val badLat = UserLocation(latitude = 95.123456, longitude = 80.0, accuracy = 10f, timestamp = 1000L)
+        val badLat = UserLocation(latitude = 95.123456, longitude = 80.0, accuracy = 10.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badLat))
 
         // Invalid longitude (< -180)
-        val badLng = UserLocation(latitude = 20.0, longitude = -185.0, accuracy = 10f, timestamp = 1000L)
+        val badLng = UserLocation(latitude = 20.0, longitude = -185.0, accuracy = 10.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badLng))
 
         // Invalid accuracy (negative)
-        val badAccuracy = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = -5f, timestamp = 1000L)
+        val badAccuracy = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = -5.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badAccuracy))
 
         // Invalid timestamp (0)
-        val badTimestamp = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = 10f, timestamp = 0L)
+        val badTimestamp = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = 10.0, timestamp = 0L)
         assertFalse(isGpsCoordinateValid(badTimestamp))
     }
 

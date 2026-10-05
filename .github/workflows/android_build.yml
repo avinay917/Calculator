@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality_checks_and_build:
@@ -58,57 +58,14 @@ jobs:
 
       # Step 6: Unit Tests
       - name: 6. Run Unit Tests
-        run: ./gradlew testDebugUnitTest --continue || true
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       # Step 7: Code Quality & Linting Checks
       - name: 7. Run Android Lint Checks
-        run: ./gradlew lintDebug --continue || true
+        run: ./gradlew lintDebug --stacktrace
 
-      # Step 8: Automated OTA Release Publishing & Firebase Update Trigger
-      - name: 8. Publish In-App OTA Update Release
-        if: github.ref == 'refs/heads/main' && success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION_CODE=$((500 + ${{ github.run_number }}))
-          TAG_NAME="v2.${VERSION_CODE}"
-          APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
-          cp "$APK_PATH" "Calculator-latest.apk"
-
-          COMMIT_MSG=$(git log -1 --pretty=%s | tr '\n' ' ' | sed 's/"/\\"/g')
-          if [ -z "$COMMIT_MSG" ]; then
-            COMMIT_MSG="Latest automated update with system enhancements and bug fixes."
-          fi
-
-          # Cleanly remove old 'latest' release and its associated git tag
-          gh release delete "latest" --cleanup-tag --yes 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-
-          # Create public release with latest tag and APK asset
-          gh release create "latest" "Calculator-latest.apk" \
-            --title "Calculator OTA Release $TAG_NAME" \
-            --notes "$COMMIT_MSG" \
-            --latest
-
-          APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/latest/Calculator-latest.apk"
-          TIMESTAMP=$(date +%s%3N)
-          JSON_PAYLOAD=$(cat <<EOF
-          {
-            "versionCode": $VERSION_CODE,
-            "versionName": "$TAG_NAME",
-            "apkUrl": "$APK_DOWNLOAD_URL",
-            "releaseNotes": "$COMMIT_MSG",
-            "isForceUpdate": true,
-            "updatedAt": $TIMESTAMP
-          }
-          EOF
-          )
-
-          # Attempt to broadcast OTA update to Firebase RTDB (ignore if unauthenticated)
-          echo "$JSON_PAYLOAD" > /tmp/app_update.json || true
-          curl -f -s -X PUT -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD" \
-            "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app/app_update.json" || echo "Firebase RTDB update payload sent with status $?"
+      # Step 8: Firebase deployment is intentionally separate from APK OTA publishing.
+      # Debug APKs are never published as installable production updates.
 
       # Step 9: Deploy Firebase Database Rules & Cloud Functions
       - name: 9. Deploy Firebase Database Rules & Cloud Functions
@@ -117,9 +74,6 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           cd functions
-          npm install
+          npm ci
           cd ..
-          npx firebase-tools@latest deploy --only database,firestore,storage,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko || echo "Firebase deploy step completed"
-          if [ -f /tmp/app_update.json ]; then
-            npx firebase-tools@latest database:set /app_update /tmp/app_update.json --instance apnasatthilko-default-rtdb --token "$FIREBASE_TOKEN" --confirm --non-interactive || true
-          fi
+          npx firebase-tools@latest deploy --only database,firestore,storage,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko

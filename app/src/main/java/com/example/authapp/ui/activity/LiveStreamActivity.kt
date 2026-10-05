@@ -195,39 +195,40 @@ class LiveStreamActivity : ComponentActivity() {
                             FirebaseCrashlytics.getInstance().recordException(e)
                         }
                     },
-                    onRemoteVideoTrack = { track ->
+                    onRemoteTrackAdded = { track ->
                         mainHandler.post {
-                            remoteVideoTrackState.value = track
-                            val isScreen = streamType.contains("screen", ignoreCase = true)
-                            val isAudioActive = remoteAudioTrackState.value != null
-                            streamStatusTextState.value = when {
-                                isScreen -> "Live Screen Streaming 🟢"
-                                isAudioActive -> "Live Camera & Audio Streaming 🟢"
-                                else -> "Live Video Streaming 🟢"
-                            }
-                            AppAnalytics.logFeatureUsage(if (isScreen) "screen_cast" else "video_cast", "connected")
-                        }
-                    },
-                    onRemoteAudioTrack = { track ->
-                        mainHandler.post {
-                            remoteAudioTrackState.value = track
-                            val isVideoActive = remoteVideoTrackState.value != null
-                            val isScreen = streamType.contains("screen", ignoreCase = true)
-                            if (streamType.equals("audio", ignoreCase = true)) {
-                                streamStatusTextState.value = "Live Audio Streaming 🟢"
-                            } else if (isVideoActive && !isScreen) {
-                                streamStatusTextState.value = "Live Camera & Audio Streaming 🟢"
-                            }
-                            try {
-                                track.setEnabled(true)
-                                track.setVolume(WebRtcManager.calculateSuperBoostGain(audioSensitivityState.floatValue))
-                                if (!audioRouteManager.isBluetoothConnected.value) {
-                                    audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+                            when (track) {
+                                is org.webrtc.VideoTrack -> {
+                                    remoteVideoTrackState.value = track
+                                    val isScreen = streamType.contains("screen", ignoreCase = true)
+                                    val isAudioActive = remoteAudioTrackState.value != null
+                                    streamStatusTextState.value = when {
+                                        isScreen -> "Live Screen Streaming 🟢"
+                                        isAudioActive -> "Live Camera & Audio Streaming 🟢"
+                                        else -> "Live Video Streaming 🟢"
+                                    }
+                                    AppAnalytics.logFeatureUsage(if (isScreen) "screen_cast" else "video_cast", "connected")
                                 }
-                            } catch (e: Exception) {
-                                FirebaseCrashlytics.getInstance().recordException(e)
+                                is org.webrtc.AudioTrack -> {
+                                    remoteAudioTrackState.value = track
+                                    val isVideoActive = remoteVideoTrackState.value != null
+                                    val isScreen = streamType.contains("screen", ignoreCase = true)
+                                    if (streamType.equals("audio", ignoreCase = true)) {
+                                        streamStatusTextState.value = "Live Audio Streaming 🟢"
+                                    } else if (isVideoActive && !isScreen) {
+                                        streamStatusTextState.value = "Live Camera & Audio Streaming 🟢"
+                                    }
+                                    try {
+                                        track.setEnabled(true)
+                                        if (!audioRouteManager.isBluetoothConnected.value) {
+                                            audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
+                                        }
+                                    } catch (e: Exception) {
+                                        FirebaseCrashlytics.getInstance().recordException(e)
+                                    }
+                                    AppAnalytics.logFeatureUsage("audio_cast", "connected")
+                                }
                             }
-                            AppAnalytics.logFeatureUsage("audio_cast", "connected")
                         }
                     }
                 )

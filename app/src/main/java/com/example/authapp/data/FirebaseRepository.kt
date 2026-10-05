@@ -295,7 +295,18 @@ object FirebaseRepository {
     }
 
     fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit): ValueEventListener {
+        val parentUid = currentUser?.uid
+        if (parentUid.isNullOrEmpty()) {
+            return object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = onUsersUpdated(emptyList())
+                override fun onCancelled(error: DatabaseError) {
+                    recordNonFatalError("listenToChildUsers: not authenticated", error.toException())
+                }
+            }
+        }
         val ref = database.reference.child("users")
+            .orderByChild("parentId")
+            .equalTo(parentUid)
         try { ref.keepSynced(true) } catch (_: Exception) {}
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -304,15 +315,10 @@ object FirebaseRepository {
                 for (child in snapshot.children) {
                     try {
                         val user = child.getValue(User::class.java)
-                        if (user != null && user.role == "child") {
-                            // If child is linked to a parent, only show to that parent.
-                            // If not yet linked (legacy/unpaired), show so parent can claim/link.
-                            val isBelongingToParent = user.parentId.isEmpty() || (currentParentUid.isNotEmpty() && user.parentId == currentParentUid)
-                            if (isBelongingToParent) {
-                                val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
-                                val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
-                                list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
-                            }
+                        if (user != null && user.role == "child" && user.parentId == currentParentUid) {
+                            val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
+                            val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
+                            list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
                         }
                     } catch (e: Exception) {
                         // Corrupt/invalid RTDB record — skip this entry silently
@@ -373,12 +379,29 @@ object FirebaseRepository {
         try {
             database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
         } catch (_: Exception) {}
-        database.reference.child("streams").child(childId).child("status").setValue(requestData)
+        val signalingMetadata = mapOf<String, Any>(
+            "childId" to childId,
+            "parentId" to parentId,
+            "sessionId" to sessionId,
+            "createdAt" to ServerValue.TIMESTAMP
+        )
+        database.reference.child("signaling").child(sessionId).setValue(signalingMetadata)
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+                onError?.invoke(e)
+            }
+            .addOnSuccessListener {
+                database.reference.child("streams").child(childId).child("status").setValue(requestData)
             .addOnSuccessListener {
                 try {
                     database.reference.child("users").child(childId).child("streamWakeup").setValue(timestamp)
                 } catch (_: Exception) {}
                 onComplete(sessionId)
+            }
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+                onError?.invoke(e)
+            }
             }
             .addOnFailureListener { e ->
                 FirebaseCrashlytics.getInstance().recordException(e)
@@ -393,9 +416,8 @@ object FirebaseRepository {
         )
         database.reference.child("streams").child(childId).child("status").setValue(statusData)
         cleanupSignalingData(sessionId ?: "", childId)
-        val parentId = currentUser?.uid
-        if (parentId != null) {
-            database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
+        sessionId?.takeIf { it.isNotBlank() }?.let {
+            database.reference.child("signaling").child(it).removeValue()
         }
     }
 
@@ -1523,6 +1545,12 @@ object FirebaseRepository {
                     return
                 }
                 val isUsed = snapshot.child("isUsed").getValue(Boolean::class.java) ?: false
+                val createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: 0L
+                val pairingCodeLifetimeMs = 10 * 60 * 1000L
+                if (createdAt <= 0L || System.currentTimeMillis() - createdAt > pairingCodeLifetimeMs) {
+                    onResult(false, null, "Pairing code has expired. Please generate a new code.")
+                    return
+                }
                 if (isUsed) {
                     onResult(false, null, "Pairing code has already been used. Please generate a new code.")
                     return
