@@ -137,11 +137,13 @@ fun ChildActivityDialog(
     LaunchedEffect(currentlyPlayingAudioUrl) {
         if (currentlyPlayingAudioUrl != null) {
             while (currentlyPlayingAudioUrl != null) {
-                mediaPlayer?.let { mp ->
-                    if (mp.isPlaying) {
-                        audioPositionMs = mp.currentPosition
+                // BUG FIX: isPlaying() during async prepare state mein IllegalStateException throw karta tha
+                try {
+                    val mp = mediaPlayer
+                    if (mp != null && !isAudioBuffering) {
+                        audioPositionMs = try { mp.currentPosition } catch (_: Exception) { 0 }
                     }
-                }
+                } catch (_: Exception) {}
                 kotlinx.coroutines.delay(250L)
             }
         }

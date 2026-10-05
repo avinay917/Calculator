@@ -1060,9 +1060,12 @@ object FirebaseRepository {
                 for (child in snapshot.child("blockedPackages").children) {
                     val rawPkg = child.key ?: continue
                     val isBlocked = child.getValue(Boolean::class.java) ?: false
-                    val pkg = rawPkg.replace("_", ".")
-                    blockedMap[pkg] = isBlocked
+                    // BUG FIX: Sanitized key "com_google_android_youtube" → original "com.google.android.youtube"
+                    // setAppBlocked() mein "." ko "_" se replace kiya tha — yahan undo karo
+                    val decodedPkg = rawPkg.replace("_", ".")
+                    // Both forms store karo taaki purane aur naye data formats dono match hon
                     blockedMap[rawPkg] = isBlocked
+                    if (decodedPkg != rawPkg) blockedMap[decodedPkg] = isBlocked
                 }
 
                 val settings = ParentControlSettings(
@@ -1083,9 +1086,18 @@ object FirebaseRepository {
 
     // --- SMS Logs Sync (Phase 4) ---
     fun syncSmsLogs(childId: String, smsList: List<SmsItem>) {
-        if (childId.isEmpty()) return
-        database.reference.child("sms_logs").child(childId).setValue(smsList)
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        if (childId.isEmpty() || smsList.isEmpty()) return
+        // BUG FIX: setValue(list) poori list wipe kar deta tha agar ek bhi item fail ho
+        // Ab individual items as keyed map push karo — atomic aur safe
+        val ref = database.reference.child("sms_logs").child(childId)
+        val batchMap = mutableMapOf<String, Any>()
+        for (sms in smsList) {
+            val key = if (sms.id.isNotEmpty()) sms.id else "${sms.timestamp}_${sms.address.takeLast(4)}"
+            batchMap[key] = sms.copy(id = key)
+        }
+        if (batchMap.isNotEmpty()) {
+            ref.updateChildren(batchMap).addOnFailureListener { e -> crashlytics.recordException(e) }
+        }
     }
 
     fun listenToSmsLogs(childId: String, onSms: (List<SmsItem>) -> Unit): ValueEventListener =
@@ -1104,14 +1116,19 @@ object FirebaseRepository {
 
     fun listenToRemoteCommands(childId: String, onCommand: (String, Any?) -> Unit): ValueEventListener {
         val ref = database.reference.child("commands").child(childId)
+        // BUG FIX: Per-command timestamp track karo — same command baar baar trigger hota tha
+        val lastProcessedTsMap = mutableMapOf<String, Long>()
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 for (child in snapshot.children) {
                     val cmd = child.key ?: continue
                     val value = child.child("value").value
                     val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                    // Only process recent commands (within last 2 minutes)
-                    if (System.currentTimeMillis() - ts < 2 * 60 * 1000L) {
+                    val now = System.currentTimeMillis()
+                    // Only process recent commands (within last 2 minutes) AND not already processed
+                    val lastTs = lastProcessedTsMap[cmd] ?: 0L
+                    if (now - ts < 2 * 60 * 1000L && ts > lastTs) {
+                        lastProcessedTsMap[cmd] = ts
                         onCommand(cmd, value)
                     }
                 }
