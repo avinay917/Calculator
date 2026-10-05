@@ -95,9 +95,9 @@ object UpdateManager {
                 fun isTrustedUrl(urlStr: String): Boolean {
                     if (!urlStr.startsWith("https://", ignoreCase = true)) return false
                     val host = Uri.parse(urlStr).host?.lowercase() ?: return false
-                    return host.endsWith("github.com") ||
-                        host.endsWith("githubusercontent.com") ||
-                        host.endsWith("googleapis.com")
+                    return host == "github.com" || host.endsWith(".github.com") ||
+                        host == "githubusercontent.com" || host.endsWith(".githubusercontent.com") ||
+                        host == "googleapis.com" || host.endsWith(".googleapis.com")
                 }
 
                 if (!isTrustedUrl(apkUrl)) {
