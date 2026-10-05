@@ -53,3 +53,6 @@ build/
 dist/
 *.apk
 *.aab
+
+# Generated CI artifacts
+build_artifacts/
