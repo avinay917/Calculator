@@ -299,7 +299,7 @@ class ComprehensiveAllModulesSystemTest {
         val location = UserLocation(
             latitude = 26.8467,
             longitude = 80.9462,
-            accuracy = 12.5f,
+            accuracy = 12.5,
             timestamp = 1720000000000L
         )
 
