@@ -1529,6 +1529,12 @@ object FirebaseRepository {
                     return
                 }
                 val isUsed = snapshot.child("isUsed").getValue(Boolean::class.java) ?: false
+                val createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: 0L
+                val pairingCodeLifetimeMs = 10 * 60 * 1000L
+                if (createdAt <= 0L || System.currentTimeMillis() - createdAt > pairingCodeLifetimeMs) {
+                    onResult(false, null, "Pairing code has expired. Please generate a new code.")
+                    return
+                }
                 if (isUsed) {
                     onResult(false, null, "Pairing code has already been used. Please generate a new code.")
                     return
