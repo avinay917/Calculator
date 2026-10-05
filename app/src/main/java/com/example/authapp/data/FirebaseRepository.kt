@@ -402,6 +402,11 @@ object FirebaseRepository {
                 FirebaseCrashlytics.getInstance().recordException(e)
                 onError?.invoke(e)
             }
+            }
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+                onError?.invoke(e)
+            }
     }
 
     fun stopStream(childId: String, sessionId: String? = null) {
@@ -411,9 +416,8 @@ object FirebaseRepository {
         )
         database.reference.child("streams").child(childId).child("status").setValue(statusData)
         cleanupSignalingData(sessionId ?: "", childId)
-        val parentId = currentUser?.uid
-        if (parentId != null) {
-            database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
+        sessionId?.takeIf { it.isNotBlank() }?.let {
+            database.reference.child("signaling").child(it).removeValue()
         }
     }
 
