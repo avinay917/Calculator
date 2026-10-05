@@ -604,13 +604,35 @@ class WebRtcManager(
                     break
                 }
             }
-            if (opusFmtpIndex == -1) {
+            val opusParameters = linkedMapOf(
+                "minptime" to "10",
+                "useinbandfec" to "1",
+                "maxaveragebitrate" to "64000",
+                "sprop-maxcapturerate" to "48000",
+                "usedtx" to "1",
+                "stereo" to "0"
+            )
+            if (opusFmtpIndex >= 0) {
+                val prefix = "a=fmtp:111"
+                val existing = lines[opusFmtpIndex]
+                    .removePrefix(prefix).trim().removePrefix(";")
+                    .split(";").filter { it.isNotBlank() }
+                    .mapNotNull { parameter ->
+                        val key = parameter.substringBefore("=").trim().lowercase()
+                        if (key in opusParameters) key to parameter.substringAfter("=", "") else null
+                    }.toMap()
+                val merged = opusParameters.map { (key, value) ->
+                    key + "=" + (existing[key] ?: value)
+                }
+                lines[opusFmtpIndex] = prefix + " " + merged.joinToString(";")
+            } else {
                 val opusPayload = lines.indexOfFirst {
                     it.contains("a=rtpmap:111", ignoreCase = true) &&
                         it.contains("opus/48000", ignoreCase = true)
                 }
                 if (opusPayload >= 0) {
-                    lines.add(opusPayload + 1, "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=64000")
+                    val params = opusParameters.entries.joinToString(";") { it.key + "=" + it.value }
+                    lines.add(opusPayload + 1, "a=fmtp:111 " + params)
                 }
             }
             return lines.joinToString("\n")
