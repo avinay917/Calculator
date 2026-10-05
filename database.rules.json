@@ -28,7 +28,7 @@
     },
     "app_update": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": false
     },
     "ice_servers": {
       ".read": "auth != null",
