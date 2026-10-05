@@ -96,7 +96,7 @@
     "parent_controls": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'"
       }
     },
     "sms_logs": {
@@ -109,7 +109,7 @@
     "commands": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'"
       }
     },
     "location_history": {
@@ -162,8 +162,8 @@
     "pairing_codes": {
       "$code": {
         ".read": "auth != null && $code.matches(/^[0-9]{6}$/) && data.child('isUsed').val() != true && data.child('createdAt').isNumber() && now - data.child('createdAt').val() <= 600000",
-        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (data.child('linkedChildUid').val() == auth.uid && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true)) : newData.child('parentUid').val() == auth.uid)",
-        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').exists() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean())"
+        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (!data.child('isUsed').val() && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true && newData.child('parentUid').val() == data.child('parentUid').val() && newData.child('createdAt').val() == data.child('createdAt').val())) : newData.child('parentUid').val() == auth.uid)",
+        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').isNumber() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean()) && (!newData.child('linkedChildUid').exists() || newData.child('linkedChildUid').isString())"
       }
     },
     "youtube_history": {
