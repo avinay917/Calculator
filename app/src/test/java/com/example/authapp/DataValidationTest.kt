@@ -61,7 +61,7 @@ class DataValidationTest {
         assertFalse(isGpsCoordinateValid(badLat))
 
         // Invalid longitude (< -180)
-        val badLng = UserLocation(latitude = 20.0, longitude = -185.0, accuracy = 10, timestamp = 1000L)
+        val badLng = UserLocation(latitude = 20.0, longitude = -185.0, accuracy = 10.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badLng))
 
         // Invalid accuracy (negative)
