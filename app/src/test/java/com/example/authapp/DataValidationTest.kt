@@ -47,7 +47,7 @@ class DataValidationTest {
         val validLoc = UserLocation(
             latitude = 26.760713,
             longitude = 80.945343,
-            accuracy = 12.5f,
+            accuracy = 12.5,
             timestamp = System.currentTimeMillis(),
             provider = "gps"
         )
@@ -57,7 +57,7 @@ class DataValidationTest {
     @Test
     fun gpsLocation_rejectsOutOfBoundCoordinates() {
         // Invalid latitude (> 90)
-        val badLat = UserLocation(latitude = 95.123456, longitude = 80.0, accuracy = 10f, timestamp = 1000L)
+        val badLat = UserLocation(latitude = 95.123456, longitude = 80.0, accuracy = 10.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badLat))
 
         // Invalid longitude (< -180)
@@ -65,7 +65,7 @@ class DataValidationTest {
         assertFalse(isGpsCoordinateValid(badLng))
 
         // Invalid accuracy (negative)
-        val badAccuracy = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = -5f, timestamp = 1000L)
+        val badAccuracy = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = -5.0, timestamp = 1000L)
         assertFalse(isGpsCoordinateValid(badAccuracy))
 
         // Invalid timestamp (0)
