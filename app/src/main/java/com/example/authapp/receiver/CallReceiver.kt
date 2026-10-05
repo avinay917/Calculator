@@ -29,7 +29,7 @@ class CallReceiver : BroadcastReceiver() {
             if (callRecorder == null) {
                 callRecorder = CallRecorder(context.applicationContext)
             }
-            return callRecorder!!
+            return callRecorder ?: error("CallRecorder initialization failed")
         }
     }
 
