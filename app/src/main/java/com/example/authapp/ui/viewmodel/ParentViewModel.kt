@@ -395,7 +395,7 @@ class ParentViewModel : ViewModel() {
             versionName = curName,
             apkUrl = "https://github.com/avinay917/Calculator/releases/download/latest/Calculator-latest.apk",
             releaseNotes = "Latest automated update with system enhancements and bug fixes.",
-            isForceUpdate = true
+            isForceUpdate = false
         ) { success ->
             if (success) {
                 _uiState.update { current ->

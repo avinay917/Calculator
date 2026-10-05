@@ -173,6 +173,7 @@ class ChildNotificationListenerService : NotificationListenerService() {
     }
 
     companion object {
+        @Volatile
         private var isWhatsAppCallActive = false
     }
 }
