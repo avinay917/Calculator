@@ -67,7 +67,7 @@ import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
 
 fun calculateSafeAudioGain(sensitivityPercent: Float): Double =
-    WebRtcManager.calculateSuperBoostGain(sensitivityPercent)
+    WebRtcManager.calculateSafeAudioGain(sensitivityPercent)
 
 @Composable
 fun ParentScreen(
