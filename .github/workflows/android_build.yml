@@ -58,11 +58,11 @@ jobs:
 
       # Step 6: Unit Tests
       - name: 6. Run Unit Tests
-        run: ./gradlew testDebugUnitTest --continue || true
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       # Step 7: Code Quality & Linting Checks
       - name: 7. Run Android Lint Checks
-        run: ./gradlew lintDebug --continue || true
+        run: ./gradlew lintDebug --stacktrace
 
       # Step 8: Automated OTA Release Publishing & Firebase Update Trigger
       - name: 8. Publish In-App OTA Update Release
