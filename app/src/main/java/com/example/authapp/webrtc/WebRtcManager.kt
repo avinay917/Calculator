@@ -489,14 +489,30 @@ class WebRtcManager(
         isStopped = true
         try {
             videoCapturer?.stopCapture()
-            videoCapturer?.dispose()
-            audioTrack?.setEnabled(false)
-            videoTrack?.setEnabled(false)
-            peerConnection?.close()
-            surfaceTextureHelper?.dispose()
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
+        try { videoCapturer?.dispose() } catch (e: Exception) { FirebaseCrashlytics.getInstance().recordException(e) }
+        try { audioTrack?.setEnabled(false) } catch (_: Exception) {}
+        try { videoTrack?.setEnabled(false) } catch (_: Exception) {}
+        try { peerConnection?.close() } catch (e: Exception) { FirebaseCrashlytics.getInstance().recordException(e) }
+        try { audioSource?.dispose() } catch (_: Exception) {}
+        try { audioTrack?.dispose() } catch (_: Exception) {}
+        try { videoSource?.dispose() } catch (_: Exception) {}
+        try { videoTrack?.dispose() } catch (_: Exception) {}
+        try { surfaceTextureHelper?.dispose() } catch (_: Exception) {}
+        try { audioDeviceModule?.release() } catch (_: Exception) {}
+        try { hardwareAgc?.release() } catch (_: Exception) {}
+        try { hardwareNs?.release() } catch (_: Exception) {}
+        try { loudnessEnhancer?.release() } catch (_: Exception) {}
+        peerConnection = null
+        audioSource = null
+        audioTrack = null
+        videoSource = null
+        videoTrack = null
+        videoCapturer = null
+        surfaceTextureHelper = null
+        audioDeviceModule = null
     }
 
     fun releaseEglBase() {
