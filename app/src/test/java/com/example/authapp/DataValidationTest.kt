@@ -11,7 +11,7 @@ class DataValidationTest {
 
     private fun isValidEmail(email: String): Boolean {
         if (email.isBlank() || email.length > 254) return false
-        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$".toRegex()
+        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}\$".toRegex()
         return emailRegex.matches(email)
     }
 
