@@ -8,6 +8,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
+import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -1534,63 +1535,83 @@ object FirebaseRepository {
 
     fun pairChildWithCode(childUid: String, code: String, onResult: (success: Boolean, parentEmail: String?, errorMsg: String?) -> Unit) {
         val trimmedCode = code.trim()
-        if (trimmedCode.length != 6) {
+        if (childUid.isBlank()) {
+            onResult(false, null, "Child UID is missing")
+            return
+        }
+        if (trimmedCode.length != 6 || !trimmedCode.all(Char::isDigit)) {
             onResult(false, null, "Please enter a valid 6-digit code")
             return
         }
-        database.reference.child("pairing_codes").child(trimmedCode).addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) {
-                    onResult(false, null, "Invalid pairing code. Please check code on Parent app.")
+
+        val codeRef = database.reference.child("pairing_codes").child(trimmedCode)
+        codeRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(currentData: com.google.firebase.database.MutableData): Transaction.Result {
+                if (!currentData.exists()) return Transaction.abort()
+
+                val isUsed = currentData.child("isUsed").getValue(Boolean::class.java) ?: false
+                val createdAt = currentData.child("createdAt").getValue(Long::class.java) ?: 0L
+                val parentUid = currentData.child("parentUid").getValue(String::class.java)
+
+                if (isUsed || createdAt <= 0L || System.currentTimeMillis() - createdAt > 10 * 60 * 1000L || parentUid.isNullOrBlank()) {
+                    return Transaction.abort()
+                }
+
+                currentData.child("linkedChildUid").value = childUid
+                currentData.child("isUsed").value = true
+                currentData.child("linkedAt").value = ServerValue.TIMESTAMP
+                return Transaction.success(currentData)
+            }
+
+            override fun onComplete(
+                error: DatabaseError?,
+                committed: Boolean,
+                currentData: DataSnapshot?
+            ) {
+                if (error != null) {
+                    onResult(false, null, error.message)
                     return
                 }
-                val isUsed = snapshot.child("isUsed").getValue(Boolean::class.java) ?: false
-                val createdAt = snapshot.child("createdAt").getValue(Long::class.java) ?: 0L
-                val pairingCodeLifetimeMs = 10 * 60 * 1000L
-                if (createdAt <= 0L || System.currentTimeMillis() - createdAt > pairingCodeLifetimeMs) {
-                    onResult(false, null, "Pairing code has expired. Please generate a new code.")
-                    return
-                }
-                if (isUsed) {
-                    onResult(false, null, "Pairing code has already been used. Please generate a new code.")
+                if (!committed || currentData == null) {
+                    onResult(false, null, "Pairing code is invalid, expired, or already used. Please generate a new code.")
                     return
                 }
 
-                val parentUid = snapshot.child("parentUid").getValue(String::class.java)
-                val parentEmail = snapshot.child("parentEmail").getValue(String::class.java) ?: "Parent"
-                if (parentUid.isNullOrEmpty()) {
+                val parentUid = currentData.child("parentUid").getValue(String::class.java)
+                val parentEmail = currentData.child("parentEmail").getValue(String::class.java) ?: "Parent"
+                if (parentUid.isNullOrBlank()) {
                     onResult(false, null, "Pairing code data corrupted")
                     return
                 }
 
-                val childUpdates = mapOf<String, Any>(
-                    "parentId" to parentUid
-                )
-                database.reference.child("users").child(childUid).updateChildren(childUpdates)
+                database.reference.child("users").child(childUid).child("parentId").setValue(parentUid)
                     .addOnCompleteListener { updateTask ->
                         if (updateTask.isSuccessful) {
-                            try {
-                                database.reference.child("pairing_codes").child(trimmedCode).updateChildren(
-                                    mapOf(
-                                        "linkedChildUid" to childUid,
-                                        "isUsed" to true,
-                                        "linkedAt" to ServerValue.TIMESTAMP
-                                    )
-                                )
-                            } catch (_: Exception) {}
-                            try {
-                                firestore.collection("users").document(childUid)
-                                    .set(mapOf("parentId" to parentUid), SetOptions.merge())
-                            } catch (_: Exception) {}
+                            firestore.collection("users").document(childUid)
+                                .set(mapOf("parentId" to parentUid), SetOptions.merge())
+                                .addOnFailureListener { e -> crashlytics.recordException(e) }
                             onResult(true, parentEmail, null)
                         } else {
+                            // Best-effort rollback if linking the child profile failed.
+                            codeRef.runTransaction(object : Transaction.Handler {
+                                override fun doTransaction(data: com.google.firebase.database.MutableData): Transaction.Result {
+                                    if (data.child("linkedChildUid").getValue(String::class.java) == childUid &&
+                                        data.child("isUsed").getValue(Boolean::class.java) == true) {
+                                        data.child("linkedChildUid").value = null
+                                        data.child("isUsed").value = false
+                                        data.child("linkedAt").value = null
+                                    }
+                                    return Transaction.success(data)
+                                }
+                                override fun onComplete(
+                                    error: DatabaseError?,
+                                    committed: Boolean,
+                                    snapshot: DataSnapshot?
+                                ) = Unit
+                            })
                             onResult(false, null, updateTask.exception?.localizedMessage ?: "Failed to link to parent")
                         }
                     }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                onResult(false, null, error.message)
             }
         })
     }
