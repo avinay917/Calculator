@@ -295,7 +295,18 @@ object FirebaseRepository {
     }
 
     fun listenToChildUsers(onUsersUpdated: (List<User>) -> Unit): ValueEventListener {
+        val parentUid = currentUser?.uid
+        if (parentUid.isNullOrEmpty()) {
+            return object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = onUsersUpdated(emptyList())
+                override fun onCancelled(error: DatabaseError) {
+                    recordNonFatalError("listenToChildUsers: not authenticated", error.toException())
+                }
+            }
+        }
         val ref = database.reference.child("users")
+            .orderByChild("parentId")
+            .equalTo(parentUid)
         try { ref.keepSynced(true) } catch (_: Exception) {}
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -304,15 +315,10 @@ object FirebaseRepository {
                 for (child in snapshot.children) {
                     try {
                         val user = child.getValue(User::class.java)
-                        if (user != null && user.role == "child") {
-                            // If child is linked to a parent, only show to that parent.
-                            // If not yet linked (legacy/unpaired), show so parent can claim/link.
-                            val isBelongingToParent = user.parentId.isEmpty() || (currentParentUid.isNotEmpty() && user.parentId == currentParentUid)
-                            if (isBelongingToParent) {
-                                val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
-                                val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
-                                list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
-                            }
+                        if (user != null && user.role == "child" && user.parentId == currentParentUid) {
+                            val isOnlineVal = child.child("isOnline").getValue(Boolean::class.java) ?: user.isOnline
+                            val lastSeenVal = child.child("lastSeen").getValue(Long::class.java) ?: user.lastSeen
+                            list.add(user.copy(isOnline = isOnlineVal, lastSeen = lastSeenVal))
                         }
                     } catch (e: Exception) {
                         // Corrupt/invalid RTDB record — skip this entry silently
