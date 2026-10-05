@@ -1165,7 +1165,18 @@ class ChildForegroundService : Service() {
     }
 
     private fun registerNetworkCallback(uid: String) {
-        if (uid.isEmpty() || networkCallback != null) return
+        // BUG FIX: startNetworkRestoreSync() already networkCallback register kar deta hai onCreate mein
+        // Yahan sirf location flush karne ke liye hook karo — naya callback mat banao duplicate ban jaata tha
+        if (uid.isEmpty()) return
+        // Agar pehle se networkCallback registered hai (startNetworkRestoreSync se), sirf location flush ensure karo
+        if (networkCallback != null) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] registerNetworkCallback: callback already registered via startNetworkRestoreSync, skipping duplicate")
+            // Offline cache abhi flush karo agar net connected hai
+            if (isNetworkConnected()) {
+                com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
+            }
+            return
+        }
         try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
             val request = android.net.NetworkRequest.Builder()
@@ -1175,6 +1186,10 @@ class ChildForegroundService : Service() {
                 override fun onAvailable(network: android.net.Network) {
                     FirebaseCrashlytics.getInstance().log("[ChildService] Network restored. Flushing offline cached locations for $uid")
                     com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
+                    // Also trigger pending upload sync
+                    if (!com.example.authapp.sync.PendingUploadQueue.isEmpty(applicationContext)) {
+                        com.example.authapp.sync.SyncScheduler.scheduleWorker(applicationContext)
+                    }
                 }
             }
             cm.registerNetworkCallback(request, networkCallback!!)

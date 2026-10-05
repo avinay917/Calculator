@@ -911,7 +911,9 @@ object FirebaseRepository {
         onFailure: (String) -> Unit
     ) {
         val timestamp = System.currentTimeMillis()
-        val storageRef = storage.reference.child("snapshots/$childId/$timestamp.jpg")
+        // BUG FIX: Hardcoded ".jpg" tha — ab actual file extension fileUri se dynamically extract karo
+        val ext = fileUri.path?.substringAfterLast('.')?.takeIf { it.length in 2..5 } ?: "jpg"
+        val storageRef = storage.reference.child("snapshots/$childId/$timestamp.$ext")
         storageRef.putFile(fileUri)
             .addOnSuccessListener {
                 storageRef.downloadUrl.addOnSuccessListener { downloadUrl ->

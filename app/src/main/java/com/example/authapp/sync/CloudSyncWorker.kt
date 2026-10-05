@@ -1,4 +1,4 @@
-﻿package com.example.authapp.sync
+package com.example.authapp.sync
 
 import android.content.Context
 import android.net.Uri
@@ -38,7 +38,7 @@ class CloudSyncWorker(
             return Result.success()
         }
 
-        FirebaseCrashlytics.getInstance().log("[CloudSync] Starting sync:  pending uploads")
+        FirebaseCrashlytics.getInstance().log("[CloudSync] Starting sync: ${pending.size} pending uploads")
 
         var anyFailed = false
 
@@ -46,7 +46,7 @@ class CloudSyncWorker(
             val file = File(upload.filePath)
             if (!file.exists() || file.length() == 0L) {
                 // File gone — stale entry remove karo
-                FirebaseCrashlytics.getInstance().log("[CloudSync] Stale entry removed: ")
+                FirebaseCrashlytics.getInstance().log("[CloudSync] Stale entry removed: ${upload.filePath}")
                 PendingUploadQueue.remove(appContext, upload.id)
                 continue
             }
@@ -56,12 +56,12 @@ class CloudSyncWorker(
                 PendingUploadQueue.remove(appContext, upload.id)
                 try { file.delete() } catch (_: Exception) {}
                 FirebaseCrashlytics.getInstance().log(
-                    "[CloudSync] ✅ Uploaded & queued entry removed:  (s)"
+                    "[CloudSync] ✅ Uploaded & queued entry removed: ${upload.streamType} (${upload.durationSeconds}s)"
                 )
             } else {
                 anyFailed = true
                 FirebaseCrashlytics.getInstance().log(
-                    "[CloudSync] ❌ Upload failed, will retry: "
+                    "[CloudSync] ❌ Upload failed, will retry: ${upload.filePath}"
                 )
             }
         }

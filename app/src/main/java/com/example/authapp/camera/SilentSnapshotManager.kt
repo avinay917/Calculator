@@ -99,7 +99,11 @@ class SilentSnapshotManager(private val context: Context) {
                                     val bytes = ByteArray(buffer.remaining())
                                     buffer.get(bytes)
 
-                                    val outFile = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.webp")
+                                    // BUG FIX: .webp extension tha lekin uploadSnapshot Firebase Storage mein ".jpg" path use karta tha
+                                    // Ab consistent file extension rakho
+                                    val isWebpSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
+                                    val ext = if (isWebpSupported) "webp" else "jpg"
+                                    val outFile = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.$ext")
                                     val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                                     if (bitmap != null) {
                                         // Downscale to max 1280x720 while maintaining aspect ratio
@@ -116,11 +120,10 @@ class SilentSnapshotManager(private val context: Context) {
                                             Pair(width, height)
                                         }
                                         val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-                                        val format = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                        val format = if (isWebpSupported) {
                                             android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
                                         } else {
-                                            @Suppress("DEPRECATION")
-                                            android.graphics.Bitmap.CompressFormat.WEBP
+                                            android.graphics.Bitmap.CompressFormat.JPEG
                                         }
                                         FileOutputStream(outFile).use { fos ->
                                             scaledBitmap.compress(format, 80, fos)
