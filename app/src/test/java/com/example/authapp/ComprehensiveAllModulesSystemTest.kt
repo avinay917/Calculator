@@ -144,7 +144,7 @@ class ComprehensiveAllModulesSystemTest {
     @Test
     fun audioRouting_allThreeRoutesExist() {
         val routes = AudioOutputRoute.values()
-        assertEquals(3, routes.size)
+        assertEquals(4, routes.size)
         assertTrue(routes.contains(AudioOutputRoute.SPEAKER))
         assertTrue(routes.contains(AudioOutputRoute.EARPIECE))
         assertTrue(routes.contains(AudioOutputRoute.BLUETOOTH))
@@ -162,12 +162,16 @@ class ComprehensiveAllModulesSystemTest {
                     AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                     AudioOutputRoute.EARPIECE -> AudioOutputRoute.BLUETOOTH
                     AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
                 }
             } else {
                 when (current) {
                     AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                     AudioOutputRoute.EARPIECE -> AudioOutputRoute.SPEAKER
                     AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
                 }
             }
         }
@@ -191,12 +195,16 @@ class ComprehensiveAllModulesSystemTest {
                     AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                     AudioOutputRoute.EARPIECE -> AudioOutputRoute.BLUETOOTH
                     AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
                 }
             } else {
                 when (current) {
                     AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                     AudioOutputRoute.EARPIECE -> AudioOutputRoute.SPEAKER
                     AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
                 }
             }
         }
