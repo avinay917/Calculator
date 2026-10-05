@@ -491,7 +491,7 @@ class ChildForegroundService : Service() {
                     FirebaseCrashlytics.getInstance().log("[ChildService] Stream auto-stopping after $maxMinutes min safety timeout")
                     stopStream()
                 }
-                mainHandler.postDelayed(scheduledStopRunnable!!, maxMinutes * 60 * 1000L)
+                scheduledStopRunnable?.let { mainHandler.postDelayed(it, maxMinutes * 60 * 1000L) }
 
                 if (streamType.equals("video", ignoreCase = true)) {
                     ensureOverlayWindow()
@@ -1515,6 +1515,8 @@ class ChildForegroundService : Service() {
         RemoteActionsManager.stopSiren()
         RemoteActionsManager.setTorch(applicationContext, false)
         updateStudyModeOverlay(false, "")
+        scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        scheduledStopRunnable = null
         if (locationListener != null && locationManager != null) {
             try {
                 locationManager?.removeUpdates(locationListener!!)
