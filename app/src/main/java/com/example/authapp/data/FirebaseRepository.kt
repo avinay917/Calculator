@@ -379,7 +379,19 @@ object FirebaseRepository {
         try {
             database.reference.child("signaling").child("session_${childId}_$parentId").removeValue()
         } catch (_: Exception) {}
-        database.reference.child("streams").child(childId).child("status").setValue(requestData)
+        val signalingMetadata = mapOf<String, Any>(
+            "childId" to childId,
+            "parentId" to parentId,
+            "sessionId" to sessionId,
+            "createdAt" to ServerValue.TIMESTAMP
+        )
+        database.reference.child("signaling").child(sessionId).setValue(signalingMetadata)
+            .addOnFailureListener { e ->
+                FirebaseCrashlytics.getInstance().recordException(e)
+                onError?.invoke(e)
+            }
+            .addOnSuccessListener {
+                database.reference.child("streams").child(childId).child("status").setValue(requestData)
             .addOnSuccessListener {
                 try {
                     database.reference.child("users").child(childId).child("streamWakeup").setValue(timestamp)
