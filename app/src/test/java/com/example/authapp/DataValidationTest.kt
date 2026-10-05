@@ -69,7 +69,7 @@ class DataValidationTest {
         assertFalse(isGpsCoordinateValid(badAccuracy))
 
         // Invalid timestamp (0)
-        val badTimestamp = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = 10, timestamp = 0L)
+        val badTimestamp = UserLocation(latitude = 20.0, longitude = 80.0, accuracy = 10.0, timestamp = 0L)
         assertFalse(isGpsCoordinateValid(badTimestamp))
     }
 
