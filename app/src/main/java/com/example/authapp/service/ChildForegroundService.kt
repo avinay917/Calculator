@@ -128,7 +128,7 @@ class ChildForegroundService : Service() {
     private fun startNetworkRestoreSync() {
         try {
             val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
-            val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: android.net.Network) {
                     super.onAvailable(network)
                     // Internet restore hua — pending queue check karo
@@ -140,7 +140,7 @@ class ChildForegroundService : Service() {
                     }
                 }
             }
-            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            connectivityManager.registerDefaultNetworkCallback(networkCallback ?: return)
             FirebaseCrashlytics.getInstance().log("[ChildService] Network restore sync listener registered")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[ChildService] Network callback register error: ${e.localizedMessage}")
@@ -181,7 +181,7 @@ class ChildForegroundService : Service() {
                 heartbeatHandler?.postDelayed(this, 60000L)
             }
         }
-        heartbeatHandler?.postDelayed(heartbeatRunnable!!, 60000L)
+        heartbeatRunnable?.let { heartbeatHandler?.postDelayed(it, 60000L) }
     }
 
     private fun hasOverlayPermission(): Boolean {
@@ -1460,6 +1460,7 @@ class ChildForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        heartbeatHandler?.removeCallbacksAndMessages(null)
         heartbeatHandler?.removeCallbacksAndMessages(null)
         heartbeatHandler = null
         heartbeatRunnable = null
