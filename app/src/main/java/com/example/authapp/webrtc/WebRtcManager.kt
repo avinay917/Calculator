@@ -590,6 +590,15 @@ class WebRtcManager(
             return 1.0 + (normalized * 2.0)
         }
 
+        /**
+         * Safe UI gain mapping used by tests and callers.
+         * Clamps the requested sensitivity to 0..100% and maps it to 0.5x..2.0x.
+         */
+        fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
+            val normalized = (sensitivityPercent / 100.0).coerceIn(0.0, 1.0)
+            return 0.5 + (normalized * 1.5)
+        }
+
         @Volatile private var pcfInitialized = false
 
         @Synchronized
