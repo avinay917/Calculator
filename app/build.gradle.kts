@@ -27,18 +27,11 @@ android {
         disable += setOf("UnusedResources", "MissingTranslation")
     }
 
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
-            keyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
-            keyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
-        }
-    }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            // Use the Android Gradle Plugin's generated debug keystore.
+            // No repository-tracked keystore is required.
         }
         release {
             isMinifyEnabled = true
