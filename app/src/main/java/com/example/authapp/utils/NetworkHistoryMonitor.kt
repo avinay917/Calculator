@@ -92,7 +92,7 @@ class NetworkHistoryMonitor(private val context: Context) {
         }
 
         try {
-            connectivityManager.registerNetworkCallback(request, networkCallback!!)
+            connectivityManager.registerNetworkCallback(request, networkCallback ?: return)
         } catch (e: Exception) {
             // Ignore permission or OS level errors
         }
