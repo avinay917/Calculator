@@ -220,7 +220,6 @@ class LiveStreamActivity : ComponentActivity() {
                             }
                             try {
                                 track.setEnabled(true)
-                                track.setVolume(WebRtcManager.calculateSuperBoostGain(audioSensitivityState.floatValue))
                                 if (!audioRouteManager.isBluetoothConnected.value) {
                                     audioRouteManager.setRoute(AudioOutputRoute.SPEAKER)
                                 }
