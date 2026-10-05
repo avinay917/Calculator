@@ -161,8 +161,8 @@
     "pairing_codes": {
       "$code": {
         ".read": "auth != null && $code.matches(/^[0-9]{6}$/)",
-        ".write": "auth != null && (data.exists() ? data.child('parentUid').val() == auth.uid : newData.child('parentUid').val() == auth.uid)",
-        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').exists()"
+        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || data.child('linkedChildUid').val() == auth.uid) : newData.child('parentUid').val() == auth.uid)",
+        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').exists() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean())"
       }
     },
     "youtube_history": {
