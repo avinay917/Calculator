@@ -95,11 +95,12 @@ class AudioRouteManager(context: Context) {
                     checkAndAutoRoute()
                 }
             }
+            val receiver = headsetPlugReceiver ?: return
             ContextCompat.registerReceiver(
                 appContext,
-                headsetPlugReceiver!!,
+                receiver,
                 filter,
-                ContextCompat.RECEIVER_NOT_EXPORTED
+                ContextCompat.RECEIVER_EXPORTED
             )
         } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().log("[AudioRouteManager] registerReceiver error: ${t.localizedMessage}")

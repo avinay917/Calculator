@@ -302,7 +302,7 @@ class LiveStreamActivity : ComponentActivity() {
                 }
             }
         }
-        recordingHandler?.post(recordingRunnable!!)
+        recordingRunnable?.let { recordingHandler?.post(it) }
     }
 
     private fun stopRecordingTimer() {
