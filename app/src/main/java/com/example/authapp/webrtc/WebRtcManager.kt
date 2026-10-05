@@ -523,17 +523,82 @@ class WebRtcManager(
         }
     }
 
+    fun setRemoteAnswer(sdp: String) {
+        setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
+    }
+
+    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
+        addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
+    }
+
+    fun switchCamera() {
+        try {
+            (videoCapturer as? CameraVideoCapturer)?.switchCamera(null)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
+    fun startAudioLevelMonitoring(onLevel: (Float) -> Unit) {
+        // WebRTC's native AudioTrack does not expose a portable level meter.
+        // Keep the callback API for UI compatibility; report silence until a
+        // dedicated audio meter is introduced.
+        onLevel(0f)
+    }
+
+    fun setRemoteOfferAndCreateAnswer(sdp: String, onAnswer: (SessionDescription) -> Unit) {
+        if (isStopped) return
+        val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
+        try {
+            peerConnection?.setRemoteDescription(object : SdpObserver {
+                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
+                override fun onSetSuccess() {
+                    isRemoteDescriptionSet = true
+                    pendingCandidates.forEach { peerConnection?.addIceCandidate(it) }
+                    pendingCandidates.clear()
+                    peerConnection?.createAnswer(object : SdpObserver {
+                        override fun onCreateSuccess(answer: SessionDescription?) {
+                            if (answer == null || isStopped) return
+                            peerConnection?.setLocalDescription(object : SdpObserver {
+                                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
+                                override fun onSetSuccess() { onAnswer(answer) }
+                                override fun onCreateFailure(error: String?) { }
+                                override fun onSetFailure(error: String?) { }
+                            }, answer)
+                        }
+                        override fun onSetSuccess() = Unit
+                        override fun onCreateFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC CreateAnswer] $error") }
+                        override fun onSetFailure(error: String?) { }
+                    }, MediaConstraints())
+                }
+                override fun onCreateFailure(error: String?) { }
+                override fun onSetFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC RemoteOffer] $error") }
+            }, offer)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
     companion object {
+        fun getDefaultIceServers(): List<PeerConnection.IceServer> = listOf(
+            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+        )
+
         fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
             val normalized = sensitivityPercent / 100.0
             return 1.0 + (normalized * 2.0)
         }
 
+        @Volatile private var pcfInitialized = false
+
+        @Synchronized
         private fun initializePcfIfNeeded(context: Context) {
-            if (!PeerConnectionFactory.isInitialized()) {
+            if (!pcfInitialized) {
                 PeerConnectionFactory.InitializationOptions.builder(context)
                     .createInitializationOptions()
                     .let { PeerConnectionFactory.initialize(it) }
+                pcfInitialized = true
             }
         }
     }
