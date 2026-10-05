@@ -22,7 +22,7 @@ android {
     }
 
     lint {
-        abortOnError = false
+        abortOnError = true
         checkReleaseBuilds = true
         disable += setOf("UnusedResources", "MissingTranslation")
     }
