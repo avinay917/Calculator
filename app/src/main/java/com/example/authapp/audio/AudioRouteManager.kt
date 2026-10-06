@@ -131,8 +131,8 @@ class AudioRouteManager(context: Context) {
                     @Suppress("DEPRECATION")
                     val btAdapter = BluetoothAdapter.getDefaultAdapter()
                     if (btAdapter != null && btAdapter.isEnabled) {
-                        val headsetConnected = btAdapter.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothProfile.STATE_CONNECTED
-                        val a2dpConnected = btAdapter.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_CONNECTED
+                        val headsetConnected = btAdapter.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothAdapter.STATE_CONNECTED
+                        val a2dpConnected = btAdapter.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothAdapter.STATE_CONNECTED
                         if (headsetConnected || a2dpConnected) {
                             hasBt = true
                         }
