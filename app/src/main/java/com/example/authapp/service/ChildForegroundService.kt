@@ -62,8 +62,7 @@ class ChildForegroundService : Service() {
     private var candidateBatcher: com.example.authapp.webrtc.CandidateBatcher? = null
     private var overlayView: android.view.View? = null
     private var studyModeOverlayView: android.view.View? = null
-    private var heartbeatHandler: android.os.Handler? = null
-    private var heartbeatRunnable: Runnable? = null
+    private var adaptiveHeartbeatManager: com.example.authapp.utils.AdaptiveHeartbeatManager? = null
     private var currentServiceState: String = "IDLE_PROTECTED"
     private var networkMonitor: com.example.authapp.utils.NetworkHistoryMonitor? = null
     private var batteryReceiver: com.example.authapp.receiver.BatteryStatusReceiver? = null
@@ -95,7 +94,7 @@ class ChildForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        acquireWakeLock()
+        // Battery Optimization: WakeLock is acquired only during active streaming/recording, not during idle monitoring
         startLocationMonitoring()
         startHeartbeatTimer()
 
@@ -174,15 +173,11 @@ class ChildForegroundService : Service() {
     }
 
     private fun startHeartbeatTimer() {
-        heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        heartbeatRunnable = object : Runnable {
-            override fun run() {
-                val state = if (isStreaming) currentServiceState else "IDLE_PROTECTED"
-                AppHealthTelemetry.sendHeartbeat(applicationContext, state)
-                heartbeatHandler?.postDelayed(this, 60000L)
-            }
+        adaptiveHeartbeatManager = com.example.authapp.utils.AdaptiveHeartbeatManager(this) {
+            if (isStreaming) currentServiceState else "IDLE_PROTECTED"
+        }.apply {
+            start()
         }
-        heartbeatHandler?.postDelayed(heartbeatRunnable!!, 60000L)
     }
 
     private fun hasOverlayPermission(): Boolean {
@@ -561,10 +556,12 @@ class ChildForegroundService : Service() {
                 startMonitoringStreamRequests()
                 updateForegroundNotification("Auto-Recording Active ($durationMinutes min)", getIdleServiceType())
                 // Use CallRecorder for standalone mic capture (no WebRTC peer needed)
+                acquireWakeLock()
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
                 }
                 callRecorder?.startCallRecording("scheduled_$scheduleId")
+                adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
                 // Auto-stop after durationMinutes
                 scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
                 scheduledStopRunnable = Runnable {
@@ -575,8 +572,10 @@ class ChildForegroundService : Service() {
                     } ?: 0L
                     val recordedFile = callRecorder?.stopCallRecording()
                     callRecorder = null
+                    if (!isStreaming) releaseWakeLock()
                     currentServiceState = "IDLE_PROTECTED"
                     AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                    adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
                     updateForegroundNotification("Background Protection Active", getIdleServiceType())
                     if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
                         // OFFLINE-FIRST: Net hai toh direct upload, nahi toh local save + WorkManager queue
@@ -604,10 +603,12 @@ class ChildForegroundService : Service() {
                     "Call recording initiated via foreground service for number: $phoneNumber"
                 )
                 updateForegroundNotification("Recording Active Call", getStreamingServiceType("audio"))
+                acquireWakeLock()
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
                 }
                 callRecorder?.startCallRecording(phoneNumber)
+                adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
             }
             ACTION_STOP_CALL_RECORDING -> {
                 val durationSec = callRecorder?.recordingStartTimeMillis?.let {
@@ -615,8 +616,10 @@ class ChildForegroundService : Service() {
                 } ?: 0L
                 val recordedFile = callRecorder?.stopCallRecording()
                 callRecorder = null
+                if (!isStreaming) releaseWakeLock()
                 currentServiceState = "IDLE_PROTECTED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
+                adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
                 updateForegroundNotification("Background Protection Active", getIdleServiceType())
 
                 val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
@@ -957,6 +960,7 @@ class ChildForegroundService : Service() {
         currentSessionId = sessionId
         isStreaming = true
         acquireWakeLock()
+        adaptiveHeartbeatManager?.setStreamingState(true)
 
         // Update RTDB to STREAMING so parent reconnecting sees the active session
         val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
@@ -1066,6 +1070,7 @@ class ChildForegroundService : Service() {
         }
         webRtcManager = null
         releaseWakeLock()
+        adaptiveHeartbeatManager?.setStreamingState(false)
         removeOverlayWindow()
     }
 
@@ -1393,9 +1398,8 @@ class ChildForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        heartbeatHandler?.removeCallbacksAndMessages(null)
-        heartbeatHandler = null
-        heartbeatRunnable = null
+        adaptiveHeartbeatManager?.stop()
+        adaptiveHeartbeatManager = null
         scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
         scheduledStopRunnable = null
         AppHealthTelemetry.syncDeviceHealth(applicationContext, "STOPPED")
