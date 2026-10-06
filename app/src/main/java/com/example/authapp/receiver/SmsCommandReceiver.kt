@@ -102,14 +102,22 @@ class SmsCommandReceiver : BroadcastReceiver() {
                     latitude = bestLoc.latitude,
                     longitude = bestLoc.longitude,
                     accuracy = bestLoc.accuracy.toDouble(),
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = if (bestLoc.time > 0L) bestLoc.time else System.currentTimeMillis(),
                     provider = "sms_emergency_fix"
                 )
                 FirebaseRepository.updateChildLocation(childId, userLoc)
                 FirebaseRepository.recordLocationHistoryPoint(childId, userLoc)
             }
         } else {
-            sendSmsReply(context, sender, "📍 GPS coordinates not available yet. Phone is trying to acquire satellite fix.")
+            val cachedLoc = com.example.authapp.utils.OfflineLocationCache.getLatestCachedLocation(context)
+            if (cachedLoc != null && cachedLoc.latitude != 0.0) {
+                val mapsUrl = "https://maps.google.com/?q=${cachedLoc.latitude},${cachedLoc.longitude}"
+                val ageMinutes = ((System.currentTimeMillis() - cachedLoc.timestamp) / 60000L).coerceAtLeast(0L)
+                val replyText = "📍 Child Location (Last Cached Fix - ${ageMinutes}m ago):\n$mapsUrl\nAccuracy: ±${cachedLoc.accuracy.toInt()}m"
+                sendSmsReply(context, sender, replyText)
+            } else {
+                sendSmsReply(context, sender, "📍 GPS coordinates not available yet. Phone is trying to acquire satellite fix.")
+            }
         }
         logSmsAlert(childId, "Emergency GPS requested via SMS from $sender")
     }

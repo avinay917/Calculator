@@ -601,6 +601,18 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("commands/$childId", listener)
         }
         commandsListeners.clear()
+        youtubeListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("youtube_history/$childId", listener)
+        }
+        youtubeListeners.clear()
+        mediaGalleryListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("media_gallery/$childId", listener)
+        }
+        mediaGalleryListeners.clear()
+        fileExplorerListeners.forEach { (childId, listener) ->
+            FirebaseRepository.removeValueListener("file_explorer/$childId", listener)
+        }
+        fileExplorerListeners.clear()
         firestoreRegistrations.forEach { it.remove() }
         firestoreRegistrations.clear()
         childUsersListener?.let {

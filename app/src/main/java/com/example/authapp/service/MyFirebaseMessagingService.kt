@@ -25,6 +25,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val type = data["type"]
         val facing = data["facing"] ?: "back"
         val command = data["command"] ?: ""
+        val commandValue = data["value"] ?: "true"
         val streamType = data["streamType"] ?: "audio"
         val sessionId = data["sessionId"] ?: ""
 
@@ -77,6 +78,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val intent = Intent(this, ChildForegroundService::class.java).apply {
                 this.action = ChildForegroundService.ACTION_EXECUTE_COMMAND
                 putExtra(ChildForegroundService.EXTRA_COMMAND, command)
+                putExtra(ChildForegroundService.EXTRA_COMMAND_VALUE, commandValue)
             }
             try {
                 ContextCompat.startForegroundService(this, intent)

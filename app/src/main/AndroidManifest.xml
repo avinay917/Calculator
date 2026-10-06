@@ -154,8 +154,7 @@
         <receiver
             android:name="com.example.authapp.receiver.SimChangeReceiver"
             android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.READ_PHONE_STATE">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SIM_STATE_CHANGED" />
             </intent-filter>

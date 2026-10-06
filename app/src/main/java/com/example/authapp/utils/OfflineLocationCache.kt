@@ -97,4 +97,25 @@ object OfflineLocationCache {
             }
         }
     }
+
+    fun getLatestCachedLocation(context: Context): UserLocation? {
+        synchronized(lock) {
+            return try {
+                val file = File(context.filesDir, CACHE_FILE_NAME)
+                if (!file.exists() || file.length() == 0L) return null
+                val jsonArray = JSONArray(file.readText())
+                if (jsonArray.length() == 0) return null
+                val obj = jsonArray.getJSONObject(jsonArray.length() - 1)
+                UserLocation(
+                    latitude = obj.optDouble("latitude", 0.0),
+                    longitude = obj.optDouble("longitude", 0.0),
+                    accuracy = obj.optDouble("accuracy", 0.0),
+                    timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                    provider = obj.optString("provider", "offline_cache")
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 }
