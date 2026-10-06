@@ -528,7 +528,7 @@ class WebRtcManager(
         }, offerDesc)
     }
 
-    fun addRemoteCandidate(sdpMid: String, sdpMLineIndex: Int, sdp: String) {
+    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
         if (isStopped) return
         val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
         synchronized(pendingCandidates) {
@@ -664,15 +664,6 @@ class WebRtcManager(
             } catch (_: Throwable) {}
         }
         return null
-    }
-
-    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
-        val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
-        if (isRemoteDescriptionSet) {
-            peerConnection?.addIceCandidate(candidate)
-        } else {
-            pendingCandidates.add(candidate)
-        }
     }
 
     companion object {
