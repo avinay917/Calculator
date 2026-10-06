@@ -105,27 +105,6 @@ class ParentViewModel : ViewModel() {
                         setupMapListener(healthListeners, child.uid, FirebaseRepository::listenToDeviceHealth) { health ->
                             if (health != null) _uiState.update { it.copy(deviceHealthMap = it.deviceHealthMap + (child.uid to health)) }
                         }
-                        setupMapListener(alertsListeners, child.uid, FirebaseRepository::listenToSecurityAlerts) { alerts ->
-                            _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
-                        }
-                        if (!firestoreAlertRegistrations.containsKey(child.uid)) {
-                            firestoreAlertRegistrations[child.uid] = FirebaseRepository.listenToChildSecurityAlertsFirestore(child.uid) { alerts ->
-                                if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (child.uid to alerts)) }
-                            }
-                        }
-
-                        setupMapListener(appUsageListeners, child.uid, FirebaseRepository::listenToAppUsage) { usageList ->
-                            _uiState.update { it.copy(appUsageMap = it.appUsageMap + (child.uid to usageList)) }
-                        }
-                        setupMapListener(parentControlsListeners, child.uid, FirebaseRepository::listenToParentControls) { settings ->
-                            _uiState.update { it.copy(parentControlsMap = it.parentControlsMap + (child.uid to settings)) }
-                        }
-                        setupMapListener(geofencesListeners, child.uid, FirebaseRepository::listenToGeofences) { zones ->
-                            _uiState.update { it.copy(geofencesMap = it.geofencesMap + (child.uid to zones)) }
-                        }
-                        setupMapListener(locationHistoryListeners, child.uid, FirebaseRepository::listenToLocationHistory) { history ->
-                            _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (child.uid to history)) }
-                        }
                     }
                 }
             }
@@ -140,6 +119,26 @@ class ParentViewModel : ViewModel() {
      */
     fun attachChildActivityListeners(childUid: String) {
         if (childUid.isEmpty()) return
+        setupMapListener(alertsListeners, childUid, FirebaseRepository::listenToSecurityAlerts) { alerts ->
+            _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (childUid to alerts)) }
+        }
+        if (!firestoreAlertRegistrations.containsKey(childUid)) {
+            firestoreAlertRegistrations[childUid] = FirebaseRepository.listenToChildSecurityAlertsFirestore(childUid) { alerts ->
+                if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (childUid to alerts)) }
+            }
+        }
+        setupMapListener(appUsageListeners, childUid, FirebaseRepository::listenToAppUsage) { usageList ->
+            _uiState.update { it.copy(appUsageMap = it.appUsageMap + (childUid to usageList)) }
+        }
+        setupMapListener(parentControlsListeners, childUid, FirebaseRepository::listenToParentControls) { settings ->
+            _uiState.update { it.copy(parentControlsMap = it.parentControlsMap + (childUid to settings)) }
+        }
+        setupMapListener(geofencesListeners, childUid, FirebaseRepository::listenToGeofences) { zones ->
+            _uiState.update { it.copy(geofencesMap = it.geofencesMap + (childUid to zones)) }
+        }
+        setupMapListener(locationHistoryListeners, childUid, FirebaseRepository::listenToLocationHistory) { history ->
+            _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (childUid to history)) }
+        }
         setupMapListener(callLogsListeners, childUid, FirebaseRepository::listenToCallLogs) { logs ->
             _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
         }
@@ -318,7 +317,7 @@ class ParentViewModel : ViewModel() {
         val childId = current.activeChildId
         if (childId != null && sessionId != null) {
             try {
-                FirebaseRepository.stopStream(childId, sessionId)
+                FirebaseControlRepository.stopStream(childId, sessionId)
             } catch (e: Exception) {}
         }
         onRecordingStopped()
@@ -461,7 +460,7 @@ class ParentViewModel : ViewModel() {
             }
         }
         try {
-            FirebaseRepository.requestSnapshot(childId, cameraFacing)
+            FirebaseControlRepository.requestSnapshot(childId, cameraFacing)
         } catch (e: Exception) {
             snapshotTimeoutJob?.cancel()
             _uiState.update { it.copy(
@@ -511,7 +510,7 @@ class ParentViewModel : ViewModel() {
             current.copy(isTorchActiveMap = updated)
         }
         try {
-            FirebaseRepository.sendRemoteCommand(childId, "TORCH", nextState)
+            FirebaseControlRepository.sendRemoteCommand(childId, "TORCH", nextState)
         } catch (_: Exception) {}
     }
 
@@ -523,7 +522,7 @@ class ParentViewModel : ViewModel() {
             current.copy(isSirenActiveMap = updated)
         }
         try {
-            FirebaseRepository.sendRemoteCommand(childId, "SIREN", nextState)
+            FirebaseControlRepository.sendRemoteCommand(childId, "SIREN", nextState)
         } catch (_: Exception) {}
     }
 

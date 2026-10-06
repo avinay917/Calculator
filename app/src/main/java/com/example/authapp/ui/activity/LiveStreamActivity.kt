@@ -20,6 +20,7 @@ import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
+import com.example.authapp.data.FirebaseControlRepository
 import com.example.authapp.ui.components.LiveStreamDialog
 import com.example.authapp.theme.AuthAppTheme
 import com.example.authapp.webrtc.WebRtcManager
@@ -261,11 +262,11 @@ class LiveStreamActivity : ComponentActivity() {
     private fun toggleRecording(streamTypeParam: String) {
         if (isRecordingState.value) {
             stopRecordingTimer()
-            FirebaseRepository.requestRemoteRecording(childId, false, streamTypeParam.lowercase())
+            FirebaseControlRepository.requestRemoteRecording(childId, false, streamTypeParam.lowercase())
             Toast.makeText(this, "Recording stopped. Syncing to Cloud History...", Toast.LENGTH_SHORT).show()
         } else {
             startRecordingTimer()
-            FirebaseRepository.requestRemoteRecording(childId, true, streamTypeParam.lowercase())
+            FirebaseControlRepository.requestRemoteRecording(childId, true, streamTypeParam.lowercase())
             Toast.makeText(this, "High-quality master recording started on child device...", Toast.LENGTH_SHORT).show()
         }
     }
@@ -299,7 +300,7 @@ class LiveStreamActivity : ComponentActivity() {
             toggleRecording(streamType)
         }
         try {
-            FirebaseRepository.stopStream(childId, sessionId)
+            FirebaseControlRepository.stopStream(childId, sessionId)
         } catch (_: Exception) {}
         cleanupWebRtc()
         finish()

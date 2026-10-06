@@ -218,7 +218,7 @@ exports.onCommandSent = functions.database
  * Scheduled Cloud Function: Daily auto-cleanup for logs older than 30 days
  * Keeps Realtime Database fast, optimizes quotas, and prevents memory bloat.
  */
-exports.cleanupOldData = functions.pubsub
+  exports.cleanupOldData = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async (context) => {
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -227,7 +227,9 @@ exports.cleanupOldData = functions.pubsub
 
     const nodesToPrune = [
       "whatsapp_logs",
+      "youtube_history",
       "notifications",
+      "alerts",
       "call_logs",
       "sms_logs",
       "web_history",
@@ -276,6 +278,35 @@ exports.cleanupOldData = functions.pubsub
       } catch (err) {
         console.error(`Failed to prune node ${node}:`, err);
       }
+    }
+
+    // Keep recording metadata and binary files on the same retention policy.
+    // This is intentionally separate because recording metadata uses startTime,
+    // while the other history nodes use timestamp.
+    try {
+      const recordingCutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
+      const recordingRoot = db.ref("recordings");
+      const recordingSnapshot = await recordingRoot.once("value");
+      const recordingUpdates = {};
+      recordingSnapshot.forEach((childSnap) => {
+        childSnap.forEach((recordingSnap) => {
+          const recording = recordingSnap.val() || {};
+          if (Number(recording.startTime || 0) > 0 && Number(recording.startTime) < recordingCutoff) {
+            recordingUpdates[`${childSnap.key}/${recordingSnap.key}`] = null;
+          }
+        });
+      });
+      if (Object.keys(recordingUpdates).length > 0) {
+        await recordingRoot.update(recordingUpdates);
+      }
+
+      const bucket = admin.storage().bucket();
+      const [files] = await bucket.getFiles({ prefix: "recordings/" });
+      await Promise.all(files
+        .filter((file) => Number(new Date(file.metadata.timeCreated || 0)) < recordingCutoff)
+        .map((file) => file.delete().catch((err) => console.error("Failed to delete recording file:", err))));
+    } catch (err) {
+      console.error("Failed to clean up recordings:", err);
     }
 
     // Clean up stale WebRTC signaling sessions older than 2 hours

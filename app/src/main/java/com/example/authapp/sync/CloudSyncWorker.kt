@@ -87,7 +87,12 @@ class CloudSyncWorker(
                         streamType = upload.streamType,
                         durationSeconds = upload.durationSeconds,
                         localFilePath = upload.filePath,
-                        onSuccess = { cont.resume(true) },
+                        onSuccess = { session ->
+                            if (upload.streamType.equals("call", ignoreCase = true) && session.storageUrl.isNotEmpty()) {
+                                FirebaseRepository.attachRecordingUrlToLatestCallLog(upload.childId, session.storageUrl)
+                            }
+                            cont.resume(true)
+                        },
                         onFailure = { cont.resume(false) }
                     )
                 } catch (e: Exception) {

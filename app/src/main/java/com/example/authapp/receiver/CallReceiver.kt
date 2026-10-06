@@ -8,6 +8,7 @@ import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.data.AppPreferences
+import com.example.authapp.data.CallRecordingPreferences
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.recorder.CallRecorder
 import com.example.authapp.service.ChildForegroundService
@@ -24,6 +25,7 @@ class CallReceiver : BroadcastReceiver() {
         private var incomingNumber: String = ""
         private var isIncoming: Boolean = false
         private var callStartTime: Long = 0L
+        private var lastLoggedSystemCallId: String = ""
 
         fun getRecorder(context: Context): CallRecorder {
             if (callRecorder == null) {
@@ -39,6 +41,7 @@ class CallReceiver : BroadcastReceiver() {
             incomingNumber = ""
             isIncoming = false
             callStartTime = 0L
+            lastLoggedSystemCallId = ""
         }
     }
 
@@ -98,53 +101,55 @@ class CallReceiver : BroadcastReceiver() {
                         "Call active (connected) for: $incomingNumber"
                     )
 
-                    val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
-                        action = ChildForegroundService.ACTION_START_CALL_RECORDING
-                        putExtra(ChildForegroundService.EXTRA_PHONE_NUMBER, incomingNumber)
-                    }
-                    try {
-                        ContextCompat.startForegroundService(context, serviceIntent)
-                    } catch (e: Exception) {
-                        AppHealthTelemetry.logDiagnostic(
-                            context,
-                            "CALL_MONITORING",
-                            "FAILED",
-                            "Foreground service start error, fallback to direct recorder: ${e.localizedMessage}",
-                            e.localizedMessage
-                        )
-                        getRecorder(context).startCallRecording(incomingNumber)
+                    if (CallRecordingPreferences.isEnabled(context)) {
+                        val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
+                            action = ChildForegroundService.ACTION_START_CALL_RECORDING
+                            putExtra(ChildForegroundService.EXTRA_PHONE_NUMBER, incomingNumber)
+                        }
+                        try {
+                            ContextCompat.startForegroundService(context, serviceIntent)
+                        } catch (e: Exception) {
+                            AppHealthTelemetry.logDiagnostic(
+                                context,
+                                "CALL_MONITORING",
+                                "FAILED",
+                                "Foreground service start error, fallback to direct recorder: ${e.localizedMessage}",
+                                e.localizedMessage
+                            )
+                            getRecorder(context).startCallRecording(incomingNumber)
+                        }
                     }
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
-                // Call terminated
-                if (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK) {
-                    lastState = TelephonyManager.EXTRA_STATE_IDLE
+                // Call terminated. The system CallLog is authoritative and also
+                // contains missed calls that never reached OFFHOOK.
+                val wasAnswered = lastState == TelephonyManager.EXTRA_STATE_OFFHOOK
+                val wasRinging = lastState == TelephonyManager.EXTRA_STATE_RINGING
+                if (wasAnswered || wasRinging) {
                     val durationSeconds = if (callStartTime > 0L) {
                         (System.currentTimeMillis() - callStartTime) / 1000
                     } else 0L
+                    val currentUid = AppHealthTelemetry.getEffectiveUserId(context)
+                    if (currentUid.isNotEmpty()) {
+                        syncLatestSystemCallLog(
+                            context = context,
+                            childId = currentUid,
+                            fallbackNumber = incomingNumber,
+                            fallbackType = if (wasRinging) "MISSED" else if (isIncoming) "INCOMING" else "OUTGOING",
+                            fallbackTimestamp = if (callStartTime > 0L) callStartTime else System.currentTimeMillis(),
+                            fallbackDurationSeconds = durationSeconds
+                        )
+                    }
 
+                    if (wasAnswered) {
+                    lastState = TelephonyManager.EXTRA_STATE_IDLE
                     AppHealthTelemetry.logDiagnostic(
                         context,
                         "CALL_MONITORING",
                         "ENDED",
                         "Call finished with duration: ${durationSeconds}s"
                     )
-
-                    val contactName = resolveContactName(context, incomingNumber)
-                    val callTypeStr = if (isIncoming) "INCOMING" else "OUTGOING"
-                    val callLog = com.example.authapp.data.CallLogItem(
-                        number = incomingNumber,
-                        name = contactName,
-                        type = callTypeStr,
-                        timestamp = if (callStartTime > 0L) callStartTime else System.currentTimeMillis(),
-                        durationSeconds = durationSeconds
-                    )
-
-                    val currentUid = AppHealthTelemetry.getEffectiveUserId(context)
-                    if (currentUid.isNotEmpty()) {
-                        FirebaseRepository.logSingleCallLog(currentUid, callLog)
-                    }
 
                     val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
                         action = ChildForegroundService.ACTION_STOP_CALL_RECORDING
@@ -163,7 +168,12 @@ class CallReceiver : BroadcastReceiver() {
                                             fileUri = fileUri,
                                             streamType = "call",
                                             durationSeconds = durationSeconds,
-                                            localFilePath = recordedFile.absolutePath
+                                            localFilePath = recordedFile.absolutePath,
+                                            onSuccess = { session ->
+                                                if (session.storageUrl.isNotEmpty()) {
+                                                    FirebaseRepository.attachRecordingUrlToLatestCallLog(currentUid, session.storageUrl)
+                                                }
+                                            }
                                         )
                                     } catch (err: Exception) {
                                         AppHealthTelemetry.logDiagnostic(
@@ -178,13 +188,88 @@ class CallReceiver : BroadcastReceiver() {
                             }
                         }
                     }
-                    incomingNumber = ""
-                    isIncoming = false
-                    callStartTime = 0L
-                } else {
+                    }
+                }
+                if (lastState != TelephonyManager.EXTRA_STATE_IDLE) {
                     lastState = TelephonyManager.EXTRA_STATE_IDLE
                 }
+                incomingNumber = ""
+                isIncoming = false
+                callStartTime = 0L
             }
+        }
+    }
+
+    private fun syncLatestSystemCallLog(
+        context: Context,
+        childId: String,
+        fallbackNumber: String,
+        fallbackType: String,
+        fallbackTimestamp: Long,
+        fallbackDurationSeconds: Long
+    ) {
+        var synced = false
+        try {
+            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                context.contentResolver.query(
+                    android.provider.CallLog.Calls.CONTENT_URI,
+                    arrayOf(
+                        android.provider.CallLog.Calls._ID,
+                        android.provider.CallLog.Calls.NUMBER,
+                        android.provider.CallLog.Calls.CACHED_NAME,
+                        android.provider.CallLog.Calls.TYPE,
+                        android.provider.CallLog.Calls.DATE,
+                        android.provider.CallLog.Calls.DURATION
+                    ),
+                    null,
+                    null,
+                    "${android.provider.CallLog.Calls.DATE} DESC"
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getString(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls._ID))
+                        if (id != lastLoggedSystemCallId) {
+                            val number = cursor.getString(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls.NUMBER)).orEmpty()
+                            val name = cursor.getString(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls.CACHED_NAME)).orEmpty()
+                            val typeValue = cursor.getInt(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls.TYPE))
+                            val type = when (typeValue) {
+                                android.provider.CallLog.Calls.MISSED_TYPE -> "MISSED"
+                                android.provider.CallLog.Calls.OUTGOING_TYPE -> "OUTGOING"
+                                android.provider.CallLog.Calls.REJECTED_TYPE -> "REJECTED"
+                                else -> "INCOMING"
+                            }
+                            val timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls.DATE))
+                            val duration = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.CallLog.Calls.DURATION))
+                            FirebaseRepository.logSingleCallLog(
+                                childId,
+                                com.example.authapp.data.CallLogItem(
+                                    id = id,
+                                    number = number.ifEmpty { fallbackNumber },
+                                    name = name.ifEmpty { resolveContactName(context, number.ifEmpty { fallbackNumber }) },
+                                    type = type,
+                                    timestamp = timestamp,
+                                    durationSeconds = duration
+                                )
+                            )
+                            lastLoggedSystemCallId = id
+                            synced = true
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+        if (!synced && fallbackNumber.isNotEmpty()) {
+            FirebaseRepository.logSingleCallLog(
+                childId,
+                com.example.authapp.data.CallLogItem(
+                    number = fallbackNumber,
+                    name = resolveContactName(context, fallbackNumber),
+                    type = fallbackType,
+                    timestamp = fallbackTimestamp,
+                    durationSeconds = fallbackDurationSeconds
+                )
+            )
         }
     }
 
