@@ -24,7 +24,11 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
             putExtra("schedule_id", scheduleId)
         }
         try {
-            context.startForegroundService(serviceIntent)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
             FirebaseCrashlytics.getInstance().log("[ScheduleAlarm] Triggered schedule=$scheduleId, duration=$durationMinutes min")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
