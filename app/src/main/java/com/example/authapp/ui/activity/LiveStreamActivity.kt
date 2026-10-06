@@ -47,8 +47,7 @@ class LiveStreamActivity : ComponentActivity() {
 
     private var sdpOfferListener: com.google.firebase.database.ValueEventListener? = null
     private var candidateListener: com.google.firebase.database.ChildEventListener? = null
-    private val candidateBuffer = mutableListOf<Map<String, Any>>()
-    private val candidateHandler = Handler(Looper.getMainLooper())
+    private var candidateBatcher: com.example.authapp.webrtc.CandidateBatcher? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recordingHandler: Handler? = null
     private var recordingRunnable: Runnable? = null
@@ -168,32 +167,11 @@ class LiveStreamActivity : ComponentActivity() {
                     FirebaseCrashlytics.getInstance().log("[LiveStreamActivity] audioRouteManager error: ${e.localizedMessage}")
                 }
 
+                candidateBatcher = com.example.authapp.webrtc.CandidateBatcher(sessionId, isParent = true)
                 manager.startReceiver(
                     iceServers = iceServers,
                     onIceCandidate = { candidate ->
-                        try {
-                            val candMap = mapOf(
-                                "sdpMid" to candidate.sdpMid,
-                                "sdpMLineIndex" to candidate.sdpMLineIndex,
-                                "sdp" to candidate.sdp
-                            )
-                            synchronized(candidateBuffer) {
-                                candidateBuffer.add(candMap)
-                            }
-                            candidateHandler.removeCallbacksAndMessages(null)
-                            candidateHandler.postDelayed({
-                                val batch = synchronized(candidateBuffer) {
-                                    val list = candidateBuffer.toList()
-                                    candidateBuffer.clear()
-                                    list
-                                }
-                                if (batch.isNotEmpty()) {
-                                    FirebaseRepository.sendIceCandidatesBatch(sessionId, batch, isParent = true)
-                                }
-                            }, 500L)
-                        } catch (e: Exception) {
-                            FirebaseCrashlytics.getInstance().recordException(e)
-                        }
+                        candidateBatcher?.addCandidate(candidate)
                     },
                     onRemoteVideoTrack = { track ->
                         mainHandler.post {
@@ -328,15 +306,9 @@ class LiveStreamActivity : ComponentActivity() {
         remoteVideoTrackState.value = null
         remoteAudioTrackState.value = null
         mainHandler.removeCallbacksAndMessages(null)
-        candidateHandler.removeCallbacksAndMessages(null)
-        val remaining = synchronized(candidateBuffer) {
-            val list = candidateBuffer.toList()
-            candidateBuffer.clear()
-            list
-        }
-        if (remaining.isNotEmpty()) {
-            FirebaseRepository.sendIceCandidatesBatch(sessionId, remaining, isParent = true)
-        }
+        candidateBatcher?.flush()
+        candidateBatcher?.clear()
+        candidateBatcher = null
         FirebaseRepository.cleanupSignalingData(sessionId, childId)
         try {
             sdpOfferListener?.let {

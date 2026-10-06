@@ -59,8 +59,7 @@ class ChildForegroundService : Service() {
     private var currentSessionId: String? = null
     private var isStreaming = false
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val candidateBuffer = mutableListOf<Map<String, Any>>()
-    private val candidateHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var candidateBatcher: com.example.authapp.webrtc.CandidateBatcher? = null
     private var overlayView: android.view.View? = null
     private var studyModeOverlayView: android.view.View? = null
     private var heartbeatHandler: android.os.Handler? = null
@@ -464,6 +463,19 @@ class ChildForegroundService : Service() {
         return type
     }
 
+    private fun updateForegroundNotification(title: String, serviceType: Int) {
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(title),
+                serviceType
+            )
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] startForeground ($title) notice: ${e.localizedMessage}")
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START_SCREEN_STREAM -> {
@@ -477,16 +489,7 @@ class ChildForegroundService : Service() {
                 val serviceType = getStreamingServiceType("screen")
                 currentServiceState = "STREAMING_SCREEN"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Live Screen Sharing Active"),
-                        serviceType
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground screen stream error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Live Screen Sharing Active", serviceType)
                 startWebRtcStream(sessionId, "screen", mediaProjectionData)
             }
             ACTION_START -> {
@@ -525,16 +528,7 @@ class ChildForegroundService : Service() {
                     "STARTED",
                     "Stream command received ($streamType), session: $sessionId, duration: ${if (durationMinutes > 0) "$durationMinutes min" else "unlimited"}"
                 )
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Active Remote Stream ($streamType)"),
-                        serviceType
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Active Remote Stream ($streamType)", serviceType)
 
                 if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {
                     val promptIntent = Intent(this, com.example.authapp.ui.activity.ScreenCapturePromptActivity::class.java).apply {
@@ -549,16 +543,7 @@ class ChildForegroundService : Service() {
             ACTION_START_MONITORING -> {
                 currentServiceState = "IDLE_PROTECTED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground idle error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
                 startMonitoringStreamRequests()
             }
             ACTION_SCHEDULED_RECORDING -> {
@@ -574,16 +559,7 @@ class ChildForegroundService : Service() {
                 )
                 // Ensure monitoring listeners are running (presence, RTDB, etc.)
                 startMonitoringStreamRequests()
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Auto-Recording Active ($durationMinutes min)"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground scheduled error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Auto-Recording Active ($durationMinutes min)", getIdleServiceType())
                 // Use CallRecorder for standalone mic capture (no WebRTC peer needed)
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
@@ -601,14 +577,7 @@ class ChildForegroundService : Service() {
                     callRecorder = null
                     currentServiceState = "IDLE_PROTECTED"
                     AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
-                    try {
-                        ServiceCompat.startForeground(
-                            this@ChildForegroundService,
-                            NOTIFICATION_ID,
-                            buildNotification("Background Protection Active"),
-                            getIdleServiceType()
-                        )
-                    } catch (_: Exception) {}
+                    updateForegroundNotification("Background Protection Active", getIdleServiceType())
                     if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
                         // OFFLINE-FIRST: Net hai toh direct upload, nahi toh local save + WorkManager queue
                         com.example.authapp.sync.SyncScheduler.enqueueUpload(
@@ -634,17 +603,7 @@ class ChildForegroundService : Service() {
                     "STARTED",
                     "Call recording initiated via foreground service for number: $phoneNumber"
                 )
-                try {
-                    val serviceType = getStreamingServiceType("audio")
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Recording Active Call"),
-                        serviceType
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] Call recording startForeground error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Recording Active Call", getStreamingServiceType("audio"))
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
                 }
@@ -658,16 +617,7 @@ class ChildForegroundService : Service() {
                 callRecorder = null
                 currentServiceState = "IDLE_PROTECTED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
 
                 val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
                 if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
@@ -702,45 +652,20 @@ class ChildForegroundService : Service() {
                 streamAudioRecorder = null
                 currentServiceState = "IDLE_PROTECTED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
             }
             ACTION_TAKE_SNAPSHOT -> {
                 val facing = intent.getStringExtra(EXTRA_CAMERA_FACING) ?: "back"
                 val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
                 ensureOverlayWindow()
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Capturing Remote Photo"),
-                        getSnapshotServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground snapshot error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Capturing Remote Photo", getSnapshotServiceType())
                 startMonitoringStreamRequests()
                 if (uid.isNotEmpty()) {
                     val isFront = facing.equals("front", ignoreCase = true)
                     com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                         isFront = isFront,
                         onCaptured = { file ->
-                            try {
-                                ServiceCompat.startForeground(
-                                    this,
-                                    NOTIFICATION_ID,
-                                    buildNotification("Background Protection Active"),
-                                    getIdleServiceType()
-                                )
-                            } catch (_: Exception) {}
+                            updateForegroundNotification("Background Protection Active", getIdleServiceType())
                             FirebaseRepository.uploadSnapshot(
                                 childId = uid,
                                 fileUri = Uri.fromFile(file),
@@ -756,14 +681,7 @@ class ChildForegroundService : Service() {
                             )
                         },
                         onError = { err ->
-                            try {
-                                ServiceCompat.startForeground(
-                                    this,
-                                    NOTIFICATION_ID,
-                                    buildNotification("Background Protection Active"),
-                                    getIdleServiceType()
-                                )
-                            } catch (_: Exception) {}
+                            updateForegroundNotification("Background Protection Active", getIdleServiceType())
                             FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                             FirebaseRepository.reportSnapshotError(uid, err)
                         }
@@ -773,14 +691,7 @@ class ChildForegroundService : Service() {
             ACTION_EXECUTE_COMMAND -> {
                 val cmd = intent.getStringExtra(EXTRA_COMMAND) ?: ""
                 val value = intent.getStringExtra(EXTRA_COMMAND_VALUE) ?: "true"
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (_: Exception) {}
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
                 startMonitoringStreamRequests()
                 when (cmd) {
                     "TORCH" -> {
@@ -814,16 +725,7 @@ class ChildForegroundService : Service() {
                     return START_NOT_STICKY
                 }
 
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground default error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
                 startMonitoringStreamRequests()
             }
         }
@@ -893,26 +795,12 @@ class ChildForegroundService : Service() {
                     return@listenToSnapshotRequest
                 }
                 ensureOverlayWindow()
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Capturing Remote Photo"),
-                        getSnapshotServiceType()
-                    )
-                } catch (_: Exception) {}
+                updateForegroundNotification("Capturing Remote Photo", getSnapshotServiceType())
                 val isFront = cameraFacing.equals("front", ignoreCase = true)
                 com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                     isFront = isFront,
                     onCaptured = { file ->
-                        try {
-                            ServiceCompat.startForeground(
-                                this,
-                                NOTIFICATION_ID,
-                                buildNotification("Background Protection Active"),
-                                getIdleServiceType()
-                            )
-                        } catch (_: Exception) {}
+                        updateForegroundNotification("Background Protection Active", getIdleServiceType())
                         FirebaseRepository.uploadSnapshot(
                             childId = uid,
                             fileUri = Uri.fromFile(file),
@@ -928,14 +816,7 @@ class ChildForegroundService : Service() {
                         )
                     },
                     onError = { err ->
-                        try {
-                            ServiceCompat.startForeground(
-                                this,
-                                NOTIFICATION_ID,
-                                buildNotification("Background Protection Active"),
-                                getIdleServiceType()
-                            )
-                        } catch (_: Exception) {}
+                        updateForegroundNotification("Background Protection Active", getIdleServiceType())
                         FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                         FirebaseRepository.reportSnapshotError(uid, err)
                     }
@@ -1049,12 +930,7 @@ class ChildForegroundService : Service() {
                         }
                         try {
                             val serviceType = getStreamingServiceType(streamType)
-                            ServiceCompat.startForeground(
-                                this,
-                                NOTIFICATION_ID,
-                                buildNotification("Active Remote Stream ($streamType)"),
-                                serviceType
-                            )
+                            updateForegroundNotification("Active Remote Stream ($streamType)", serviceType)
                             startWebRtcStream(sessionId, streamType)
                         } catch (e: SecurityException) {
                             FirebaseCrashlytics.getInstance().log("[ChildService] SecurityException on stream start (Android 14 policy): ${e.localizedMessage}")
@@ -1069,16 +945,7 @@ class ChildForegroundService : Service() {
             onStopped = {
                 FirebaseCrashlytics.getInstance().log("[ChildService] Remote stream stopped by Parent")
                 stopStream()
-                try {
-                    ServiceCompat.startForeground(
-                        this,
-                        NOTIFICATION_ID,
-                        buildNotification("Background Protection Active"),
-                        getIdleServiceType()
-                    )
-                } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] startForeground restore error: ${e.localizedMessage}")
-                }
+                updateForegroundNotification("Background Protection Active", getIdleServiceType())
             }
         )
     }
@@ -1118,6 +985,7 @@ class ChildForegroundService : Service() {
             }
 
             webRtcManager = WebRtcManager(applicationContext)
+            candidateBatcher = com.example.authapp.webrtc.CandidateBatcher(sessionId, isParent = false)
             FirebaseRepository.fetchIceServers { iceServers ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) with ${iceServers.size} ICE servers for session: $sessionId")
 
@@ -1126,25 +994,7 @@ class ChildForegroundService : Service() {
                     iceServers = iceServers,
                     mediaProjectionData = projectionData,
                     onIceCandidate = { candidate ->
-                        val candMap = mapOf(
-                            "sdpMid" to candidate.sdpMid,
-                            "sdpMLineIndex" to candidate.sdpMLineIndex,
-                            "sdp" to candidate.sdp
-                        )
-                        synchronized(candidateBuffer) {
-                            candidateBuffer.add(candMap)
-                        }
-                        candidateHandler.removeCallbacksAndMessages(null)
-                        candidateHandler.postDelayed({
-                            val batch = synchronized(candidateBuffer) {
-                                val list = candidateBuffer.toList()
-                                candidateBuffer.clear()
-                                list
-                            }
-                            if (batch.isNotEmpty()) {
-                                FirebaseRepository.sendIceCandidatesBatch(sessionId, batch, isParent = false)
-                            }
-                        }, 500L)
+                        candidateBatcher?.addCandidate(candidate)
                     },
                     onSdpCreated = { sdp ->
                         FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
@@ -1195,15 +1045,9 @@ class ChildForegroundService : Service() {
                 FirebaseRepository.removeCameraFacingListener(oldSessionId, it)
             }
         }
-        candidateHandler.removeCallbacksAndMessages(null)
-        val remaining = synchronized(candidateBuffer) {
-            val list = candidateBuffer.toList()
-            candidateBuffer.clear()
-            list
-        }
-        if (remaining.isNotEmpty() && !oldSessionId.isNullOrEmpty()) {
-            FirebaseRepository.sendIceCandidatesBatch(oldSessionId, remaining, isParent = false)
-        }
+        candidateBatcher?.flush()
+        candidateBatcher?.clear()
+        candidateBatcher = null
 
         sdpAnswerListener = null
         parentCandidateListener = null
