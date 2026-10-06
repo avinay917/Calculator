@@ -45,6 +45,13 @@ async function sendFcmSafe(uid, token, message) {
   }
 }
 
+function hasChanged(before, after, fields) {
+  if (!before.exists()) return true;
+  const previous = before.val() || {};
+  const current = after.val() || {};
+  return fields.some((field) => previous[field] !== current[field]);
+}
+
 /**
  * Realtime Database Trigger: onStreamRequested
  * Triggers on /streams/{targetUid}/status on the correct database instance
@@ -62,6 +69,10 @@ exports.onStreamRequested = functions.database
       return null;
     }
 
+    if (!hasChanged(change.before, change.after, ["status", "streamType", "type", "sessionId"])) {
+      return null;
+    }
+
     const status = statusData.status || "";
 
     // If stream was stopped by parent, notify child to STOP
@@ -72,7 +83,7 @@ exports.onStreamRequested = functions.database
         if (userData && userData.fcmToken) {
           const stopMsg = {
             token: userData.fcmToken,
-            android: { priority: "high", ttl: 0 },
+            android: { priority: "high", ttl: "0s" },
             data: { action: "STOP_STREAM", timestamp: String(Date.now()) }
           };
           await sendFcmSafe(targetUid, userData.fcmToken, stopMsg);
@@ -107,7 +118,7 @@ exports.onStreamRequested = functions.database
         token: userData.fcmToken,
         android: {
           priority: "high",
-          ttl: 0
+          ttl: "0s"
         },
         data: {
           action: "START_STREAM",
@@ -140,6 +151,7 @@ exports.onSnapshotRequested = functions.database
     const targetUid = context.params.targetUid;
     const data = change.after.val();
     if (!data || data.status !== "REQUESTED") return null;
+    if (!hasChanged(change.before, change.after, ["status", "cameraFacing", "requestId"])) return null;
 
     try {
       const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
@@ -147,7 +159,7 @@ exports.onSnapshotRequested = functions.database
       if (userData && userData.fcmToken) {
         const message = {
           token: userData.fcmToken,
-          android: { priority: "high", ttl: 0 },
+          android: { priority: "high", ttl: "0s" },
           data: {
             action: "WAKEUP",
             type: "SNAPSHOT",
@@ -175,9 +187,9 @@ exports.onCommandSent = functions.database
     const targetUid = context.params.targetUid;
     const command = context.params.command;
     const data = change.after.val();
-    // Only trigger on new writes, not deletes
+    // Ignore deletes and rewrites that do not change the command payload.
     if (!data) return null;
-    if (!change.before.val() && !data) return null;
+    if (!hasChanged(change.before, change.after, ["timestamp", "status", "command", "requestId"])) return null;
 
     try {
       const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
@@ -185,7 +197,7 @@ exports.onCommandSent = functions.database
       if (userData && userData.fcmToken) {
         const message = {
           token: userData.fcmToken,
-          android: { priority: "high", ttl: 0 },
+          android: { priority: "high", ttl: "0s" },
           data: {
             action: "WAKEUP",
             type: "COMMAND",

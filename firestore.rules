@@ -11,14 +11,20 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isLinkedParent(childId) {
+      return isAuthenticated()
+        && get(/databases/$(database)/documents/users/$(childId)).data.parentId == request.auth.uid
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
+    }
+
     function isParentOfChild(childId) {
-      return isAuthenticated() && (request.auth.uid == childId || get(/databases/$(database)/documents/users/$(childId)).data.parentId == request.auth.uid);
+      return isOwner(childId) || isLinkedParent(childId);
     }
 
     // User profile documents
     match /users/{userId} {
       allow read: if isOwner(userId) || isParentOfChild(userId) || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId);
-      allow write: if isOwner(userId) || isParentOfChild(userId);
+      allow write: if isOwner(userId) || isLinkedParent(userId);
     }
 
     // Child historical subcollections

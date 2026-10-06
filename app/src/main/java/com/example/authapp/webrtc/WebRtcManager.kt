@@ -528,7 +528,7 @@ class WebRtcManager(
         }, offerDesc)
     }
 
-    fun addRemoteCandidate(sdpMid: String, sdpMLineIndex: Int, sdp: String) {
+    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
         if (isStopped) return
         val candidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
         synchronized(pendingCandidates) {
@@ -664,62 +664,6 @@ class WebRtcManager(
             } catch (_: Throwable) {}
         }
         return null
-    }
-
-    fun setRemoteAnswer(sdp: String) {
-        setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
-    }
-
-    fun addRemoteCandidate(sdpMid: String?, sdpMLineIndex: Int, sdp: String) {
-        addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
-    }
-
-    fun switchCamera() {
-        try {
-            (videoCapturer as? CameraVideoCapturer)?.switchCamera(null)
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
-    }
-
-    fun startAudioLevelMonitoring(onLevel: (Float) -> Unit) {
-        // WebRTC's native AudioTrack does not expose a portable level meter.
-        // Keep the callback API for UI compatibility; report silence until a
-        // dedicated audio meter is introduced.
-        onLevel(0f)
-    }
-
-    fun setRemoteOfferAndCreateAnswer(sdp: String, onAnswer: (SessionDescription) -> Unit) {
-        if (isStopped) return
-        val offer = SessionDescription(SessionDescription.Type.OFFER, sdp)
-        try {
-            peerConnection?.setRemoteDescription(object : SdpObserver {
-                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
-                override fun onSetSuccess() {
-                    isRemoteDescriptionSet = true
-                    pendingCandidates.forEach { peerConnection?.addIceCandidate(it) }
-                    pendingCandidates.clear()
-                    peerConnection?.createAnswer(object : SdpObserver {
-                        override fun onCreateSuccess(answer: SessionDescription?) {
-                            if (answer == null || isStopped) return
-                            peerConnection?.setLocalDescription(object : SdpObserver {
-                                override fun onCreateSuccess(sdp: SessionDescription?) = Unit
-                                override fun onSetSuccess() { onAnswer(answer) }
-                                override fun onCreateFailure(error: String?) { }
-                                override fun onSetFailure(error: String?) { }
-                            }, answer)
-                        }
-                        override fun onSetSuccess() = Unit
-                        override fun onCreateFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC CreateAnswer] $error") }
-                        override fun onSetFailure(error: String?) { }
-                    }, MediaConstraints())
-                }
-                override fun onCreateFailure(error: String?) { }
-                override fun onSetFailure(error: String?) { FirebaseCrashlytics.getInstance().log("[WebRTC RemoteOffer] $error") }
-            }, offer)
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-        }
     }
 
     companion object {
@@ -859,8 +803,6 @@ class WebRtcManager(
             }
         }
 
-        fun optimizeOpusSdp(sdpDescription: String): String = preferOpusHighQuality(sdpDescription)
-
         /**
          * CRITICAL FIX: Strip all video codecs except VP8 from SDP.
          *
@@ -959,19 +901,6 @@ class WebRtcManager(
             return result.joinToString("\r\n")
         }
 
-        fun calculateSafeAudioGain(sensitivityPercent: Float): Double {
-            val clamped = sensitivityPercent.coerceIn(0f, 100f)
-            return 0.5 + (clamped / 100.0) * 1.5
-        }
-
-        /**
-         * Ultra-high sensitivity boost curve for distant whisper & low ambient monitoring.
-         * Scales smoothly up to 8.0x digital gain (+18dB boost) without clipping distortion.
-         */
-        fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
-            val clamped = sensitivityPercent.coerceIn(0f, 100f)
-            return 0.5 + (clamped / 100.0) * 3.0
-        }
     }
 
     fun switchCamera(onSwitched: ((Boolean) -> Unit)? = null) {

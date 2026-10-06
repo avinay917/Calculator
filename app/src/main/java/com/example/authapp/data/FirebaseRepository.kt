@@ -1566,7 +1566,7 @@ object FirebaseRepository {
         val codeRef = database.reference.child("pairing_codes").child(trimmedCode)
         codeRef.runTransaction(object : Transaction.Handler {
             override fun doTransaction(currentData: com.google.firebase.database.MutableData): Transaction.Result {
-                if (!currentData.exists()) return Transaction.abort()
+                if (currentData.value == null) return Transaction.abort()
 
                 val isUsed = currentData.child("isUsed").getValue(Boolean::class.java) ?: false
                 val createdAt = currentData.child("createdAt").getValue(Long::class.java) ?: 0L
@@ -1820,7 +1820,6 @@ object FirebaseRepository {
         }
     }
 }
-
 
 
 

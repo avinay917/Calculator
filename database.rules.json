@@ -24,7 +24,7 @@
     "recordings": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
@@ -39,40 +39,40 @@
     "device_health": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && auth.uid == $childUid"
       }
     },
     "feature_diagnostics": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && auth.uid == $childUid"
       }
     },
     "alerts": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "call_logs": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "whatsapp_logs": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "notifications": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
@@ -85,14 +85,14 @@
     "snapshots": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "app_usage": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && auth.uid == $childUid"
       }
     },
     "parent_controls": {
@@ -104,7 +104,7 @@
     "sms_logs": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
@@ -117,7 +117,7 @@
     "location_history": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
@@ -130,92 +130,91 @@
     "media_items": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "web_history": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "network_history": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["connectedAt"]
       }
     },
     "sim_info": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && auth.uid == $childUid"
       }
     },
     "package_events": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "pairing_codes": {
       "$code": {
         ".read": "auth != null && $code.matches(/^[0-9]{6}$/) && data.child('isUsed').val() != true && data.child('createdAt').isNumber() && now - data.child('createdAt').val() <= 600000",
-        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (!data.child('isUsed').val() && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true && newData.child('parentUid').val() == data.child('parentUid').val() && newData.child('createdAt').val() == data.child('createdAt').val())) : newData.child('parentUid').val() == auth.uid)",
+        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (data.child('isUsed').val() != true && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true && newData.child('parentUid').val() == data.child('parentUid').val() && newData.child('createdAt').val() == data.child('createdAt').val())) : newData.child('parentUid').val() == auth.uid)",
         ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').isNumber() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean()) && (!newData.child('linkedChildUid').exists() || newData.child('linkedChildUid').isString())"
       }
     },
     "youtube_history": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "media_gallery": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["dateAdded"]
       }
     },
     "file_explorer": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && auth.uid == $childUid"
       }
     },
     "keylogs": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "wifi_logs": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "bluetooth_audit": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     },
     "social_media_usage": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
         ".indexOn": ["timestamp"]
       }
     }
   }
 }
-
