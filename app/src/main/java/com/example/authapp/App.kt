@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.google.firebase.database.FirebaseDatabase
 import com.example.authapp.utils.Logger
-import com.example.authapp.config.Constants
+import com.example.authapp.config.AppConfigConstants
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -31,7 +31,7 @@ class App : Application() {
 
                 Logger.logFatalCrash(thread, throwable)
             } catch (t: Throwable) {
-                Logger.e(Constants.Logging.TAG_APP, "Error in uncaught exception handler", t)
+                Logger.e(AppConfigConstants.Logging.TAG_APP, "Error in uncaught exception handler", t)
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable)
             }
@@ -43,9 +43,9 @@ class App : Application() {
             rtdb.setPersistenceEnabled(true)
             rtdb.reference.child("app_update").keepSynced(true)
             com.example.authapp.config.RemoteConfigManager.init(this)
-            Logger.i(Constants.Logging.TAG_APP, "Firebase initialized with persistence enabled and RemoteConfig initialized")
+            Logger.i(AppConfigConstants.Logging.TAG_APP, "Firebase initialized with persistence enabled and RemoteConfig initialized")
         } catch (e: Exception) {
-            Logger.e(Constants.Logging.TAG_APP, "Firebase initialization error", e)
+            Logger.e(AppConfigConstants.Logging.TAG_APP, "Firebase initialization error", e)
         }
     }
 }

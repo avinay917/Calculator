@@ -40,6 +40,7 @@ import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
+import com.example.authapp.data.FirebaseControlRepository
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.recorder.StreamAudioRecorder
 import android.media.AudioAttributes
@@ -125,6 +126,12 @@ fun ParentScreen(
         )
     }
 
+    LaunchedEffect(uiState.selectedChildForControls?.uid) {
+        uiState.selectedChildForControls?.uid
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(viewModel::attachChildActivityListeners)
+    }
+
     LaunchedEffect(uiState.userFeedbackMessage) {
         uiState.userFeedbackMessage?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -136,11 +143,11 @@ fun ParentScreen(
         val childId = uiState.activeChildId ?: return
         if (uiState.isRecording) {
             viewModel.onRecordingStopped()
-            FirebaseRepository.requestRemoteRecording(childId, false, streamType.lowercase())
+            FirebaseControlRepository.requestRemoteRecording(childId, false, streamType.lowercase())
             Toast.makeText(context, "Recording stopped. Syncing to Cloud History...", Toast.LENGTH_SHORT).show()
         } else {
             viewModel.onRecordingStarted()
-            FirebaseRepository.requestRemoteRecording(childId, true, streamType.lowercase())
+            FirebaseControlRepository.requestRemoteRecording(childId, true, streamType.lowercase())
             Toast.makeText(context, "High-quality master recording started on child device...", Toast.LENGTH_SHORT).show()
         }
     }
@@ -798,5 +805,4 @@ fun ParentScreen(
 }
 }
 }
-
 

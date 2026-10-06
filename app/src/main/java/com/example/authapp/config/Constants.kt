@@ -3,7 +3,7 @@ package com.example.authapp.config
 /**
  * Centralized constants for logging, tags, and app configuration
  */
-object Constants {
+object AppConfigConstants {
     object Logging {
         const val TAG_FATAL_CRASH = "FATAL_CRASH"
         const val TAG_FIREBASE = "FIREBASE_ERROR"

@@ -23,9 +23,11 @@ import android.graphics.PixelFormat
 import android.view.WindowManager
 import com.example.authapp.R
 import com.example.authapp.analytics.AppHealthTelemetry
+import com.example.authapp.config.RemoteConfigManager
 import com.example.authapp.data.AppPreferences
 import com.example.authapp.data.AppUsageInfo
 import com.example.authapp.data.FirebaseRepository
+import com.example.authapp.data.FirebaseControlRepository
 import com.example.authapp.data.UserLocation
 import com.example.authapp.recorder.CallRecorder
 import com.example.authapp.recorder.StreamAudioRecorder
@@ -69,6 +71,8 @@ class ChildForegroundService : Service() {
     private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
     private var permissionShieldHandler: android.os.Handler? = null
     private var permissionShieldRunnable: Runnable? = null
+    private var lastHistoryLocation: Location? = null
+    private var lastHistoryTimestamp: Long = 0L
 
     companion object {
         const val CHANNEL_ID = "ChildStreamChannel"
@@ -874,7 +878,7 @@ class ChildForegroundService : Service() {
                         if (enable) {
                             RemoteActionsManager.playSiren(applicationContext, 30) {
                                 try {
-                                    FirebaseRepository.sendRemoteCommand(uid, "SIREN", false)
+                                    FirebaseControlRepository.sendRemoteCommand(uid, "SIREN", false)
                                 } catch (_: Exception) {}
                             }
                         } else {
@@ -1220,7 +1224,11 @@ class ChildForegroundService : Service() {
                     )
                     if (isNetworkConnected()) {
                         FirebaseRepository.updateChildLocation(uid, userLoc)
-                        FirebaseRepository.recordLocationHistoryPoint(uid, userLoc)
+                        if (shouldPersistLocationHistory(loc)) {
+                            FirebaseRepository.recordLocationHistoryPoint(uid, userLoc)
+                            lastHistoryLocation = Location(loc)
+                            lastHistoryTimestamp = System.currentTimeMillis()
+                        }
                         com.example.authapp.utils.OfflineLocationCache.flushCachedLocations(applicationContext, uid)
                     } else {
                         com.example.authapp.utils.OfflineLocationCache.cacheLocation(applicationContext, userLoc)
@@ -1275,20 +1283,22 @@ class ChildForegroundService : Service() {
                 }
             }
 
-            // Periodic updates (every 30s or 15 meters to minimize battery drain and RTDB cost)
+            // Remote-configured updates are clamped to safe minimums to control battery and RTDB cost.
+            val locationIntervalMs = RemoteConfigManager.getLocationSyncIntervalSec() * 1000L
+            val locationDistanceMeters = RemoteConfigManager.getLocationSyncDistanceMeters()
             if (hasFineLocationPermission) {
                 locationManager?.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    30000L,
-                    15f,
+                    locationIntervalMs,
+                    locationDistanceMeters,
                     locationListener!!
                 )
             }
             if (hasFineLocationPermission || hasCoarseLocationPermission) {
                 locationManager?.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    30000L,
-                    15f,
+                    locationIntervalMs,
+                    locationDistanceMeters,
                     locationListener!!
                 )
             }
@@ -1322,6 +1332,14 @@ class ChildForegroundService : Service() {
                 e.localizedMessage
             )
         }
+    }
+
+    private fun shouldPersistLocationHistory(location: Location): Boolean {
+        val now = System.currentTimeMillis()
+        val intervalMs = RemoteConfigManager.getLocationHistoryIntervalSec() * 1000L
+        val minimumDistance = RemoteConfigManager.getLocationHistoryDistanceMeters()
+        val previous = lastHistoryLocation ?: return true
+        return now - lastHistoryTimestamp >= intervalMs || previous.distanceTo(location) >= minimumDistance
     }
 
     private fun fetchSingleLocationFix() {

@@ -20,6 +20,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
+import com.example.authapp.config.FirebasePaths
 import com.example.authapp.utils.onValueChange
 import com.example.authapp.utils.toListOf
 
@@ -370,6 +371,7 @@ object FirebaseRepository {
         val timestamp = System.currentTimeMillis()
         val sessionId = "session_${childId}_${parentId}_$timestamp"
         val requestData = mapOf(
+            "requestId" to sessionId,
             "childId" to childId,
             "parentId" to parentId,
             "streamType" to streamType, // "audio" or "video"
@@ -411,24 +413,11 @@ object FirebaseRepository {
     }
 
     fun stopStream(childId: String, sessionId: String? = null) {
-        val statusData = mapOf(
-            "status" to "STOPPED",
-            "timestamp" to System.currentTimeMillis()
-        )
-        database.reference.child("streams").child(childId).child("status").setValue(statusData)
-        cleanupSignalingData(sessionId ?: "", childId)
-        sessionId?.takeIf { it.isNotBlank() }?.let {
-            database.reference.child("signaling").child(it).removeValue()
-        }
+        FirebaseControlRepository.stopStream(childId, sessionId)
     }
 
     fun requestRemoteRecording(childId: String, isRecording: Boolean, streamType: String) {
-        val data = mapOf(
-            "isRecording" to isRecording,
-            "streamType" to streamType,
-            "timestamp" to System.currentTimeMillis()
-        )
-        database.reference.child("streams").child(childId).child("recordCommand").setValue(data)
+        FirebaseControlRepository.requestRemoteRecording(childId, isRecording, streamType)
     }
 
     fun listenToRemoteRecording(
@@ -897,16 +886,11 @@ object FirebaseRepository {
     }
 
     fun listenToRecordingSchedules(childId: String, onSchedules: (List<RecordingSchedule>) -> Unit): ValueEventListener =
-        listenToChildNodeList("schedules", childId, limit = 0, onData = onSchedules)
+        listenToChildNodeList("schedules", childId, limit = 25, onData = onSchedules)
 
     // --- Remote Snapshots ---
     fun requestSnapshot(childId: String, cameraFacing: String = "back") {
-        val data = mapOf(
-            "requestedAt" to System.currentTimeMillis(),
-            "cameraFacing" to cameraFacing,
-            "status" to "REQUESTED"
-        )
-        database.reference.child("streams").child(childId).child("snapshotRequest").setValue(data)
+        FirebaseControlRepository.requestSnapshot(childId, cameraFacing)
     }
 
     fun listenToSnapshotRequest(childId: String, onRequested: (cameraFacing: String) -> Unit): ValueEventListener {
@@ -1130,30 +1114,28 @@ object FirebaseRepository {
 
     // --- Remote Hardware Commands (Torch, Siren - Phase 4) ---
     fun sendRemoteCommand(childId: String, command: String, value: Any = true) {
-        if (childId.isEmpty() || command.isEmpty()) return
-        val data = mapOf(
-            "command" to command,
-            "value" to value,
-            "timestamp" to System.currentTimeMillis()
-        )
-        database.reference.child("commands").child(childId).child(command).setValue(data)
+        FirebaseControlRepository.sendRemoteCommand(childId, command, value)
     }
 
     fun listenToRemoteCommands(childId: String, onCommand: (String, Any?) -> Unit): ValueEventListener {
         val ref = database.reference.child("commands").child(childId)
         // BUG FIX: Per-command timestamp track karo — same command baar baar trigger hota tha
         val lastProcessedTsMap = mutableMapOf<String, Long>()
+        val lastProcessedRequestMap = mutableMapOf<String, String>()
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 for (child in snapshot.children) {
                     val cmd = child.key ?: continue
                     val value = child.child("value").value
+                    val requestId = child.child("requestId").getValue(String::class.java).orEmpty()
                     val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
                     val now = System.currentTimeMillis()
                     // Only process recent commands (within last 2 minutes) AND not already processed
                     val lastTs = lastProcessedTsMap[cmd] ?: 0L
-                    if (now - ts < 2 * 60 * 1000L && ts > lastTs) {
+                    val duplicateRequest = requestId.isNotEmpty() && lastProcessedRequestMap[cmd] == requestId
+                    if (!duplicateRequest && now - ts < 2 * 60 * 1000L && ts > lastTs) {
                         lastProcessedTsMap[cmd] = ts
+                        if (requestId.isNotEmpty()) lastProcessedRequestMap[cmd] = requestId
                         onCommand(cmd, value)
                     }
                 }
@@ -1199,7 +1181,7 @@ object FirebaseRepository {
     }
 
     fun listenToGeofences(childId: String, onZones: (List<GeofenceZone>) -> Unit): ValueEventListener =
-        listenToChildNodeList("geofences", childId, limit = 0, onData = onZones)
+        listenToChildNodeList("geofences", childId, limit = 50, onData = onZones)
 
     // --- Media & Gallery Items (Phase 4) ---
     fun syncMediaItems(childId: String, items: List<MediaItemInfo>) {
@@ -1679,13 +1661,13 @@ object FirebaseRepository {
 
     // --- WhatsApp Chat & Status Monitoring ---
     fun pushWhatsAppLog(childId: String, item: WhatsAppLogItem) {
-        val ref = database.reference.child("whatsapp_logs").child(childId).push()
+        val ref = database.reference.child(FirebasePaths.WHATSAPP_LOGS).child(childId).push()
         val toSave = item.copy(id = ref.key ?: "")
         ref.setValue(toSave)
     }
 
     fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener =
-        listenToChildNodeList("whatsapp_logs", childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp } }, onLogs)
+        listenToChildNodeList(FirebasePaths.WHATSAPP_LOGS, childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp } }, onLogs)
 
     // --- Firebase Remote Config Feature Flags ---
     fun fetchRemoteConfig(onConfigFetched: (Map<String, Boolean>) -> Unit = {}) {
@@ -1745,7 +1727,7 @@ object FirebaseRepository {
 
     fun pushYouTubeLog(childUid: String, item: YouTubeLogItem) {
         if (childUid.isEmpty()) return
-        val ref = database.reference.child("youtube_history").child(childUid).push()
+        val ref = database.reference.child(FirebasePaths.YOUTUBE_HISTORY).child(childUid).push()
         val itemWithId = item.copy(id = ref.key ?: "")
         ref.setValue(itemWithId)
     }
@@ -1761,15 +1743,15 @@ object FirebaseRepository {
     }
 
     fun listenToYouTubeLogs(childId: String, onLogs: (List<YouTubeLogItem>) -> Unit): ValueEventListener {
-        return listenToChildNodeList("youtube_history", childId, transform = { it.reversed() }, onData = onLogs)
+        return listenToChildNodeList(FirebasePaths.YOUTUBE_HISTORY, childId, limit = 50, transform = { it.reversed() }, onData = onLogs)
     }
 
     fun listenToMediaGallery(childId: String, onItems: (List<MediaGalleryItem>) -> Unit): ValueEventListener {
-        return listenToChildNodeList("media_gallery", childId, onData = onItems)
+        return listenToChildNodeList("media_gallery", childId, limit = 50, onData = onItems)
     }
 
     fun listenToFileExplorer(childId: String, onFiles: (List<FileExplorerItem>) -> Unit): ValueEventListener {
-        return listenToChildNodeList("file_explorer", childId, onData = onFiles)
+        return listenToChildNodeList("file_explorer", childId, limit = 100, onData = onFiles)
     }
 
     /**
@@ -1781,7 +1763,9 @@ object FirebaseRepository {
         val cutoffTimestamp = System.currentTimeMillis() - (retentionDays * 24 * 60 * 60 * 1000L)
         val nodesToPrune = listOf(
             "whatsapp_logs",
+            "youtube_history",
             "notifications",
+            "alerts",
             "call_logs",
             "sms_logs",
             "web_history",
@@ -1820,6 +1804,3 @@ object FirebaseRepository {
         }
     }
 }
-
-
-
