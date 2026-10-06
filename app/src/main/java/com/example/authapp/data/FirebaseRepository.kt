@@ -1771,6 +1771,54 @@ object FirebaseRepository {
     fun listenToFileExplorer(childId: String, onFiles: (List<FileExplorerItem>) -> Unit): ValueEventListener {
         return listenToChildNodeList("file_explorer", childId, onData = onFiles)
     }
+
+    /**
+     * Client-side Auto-Pruning: Purges logs older than retentionDays (default: 30 days)
+     * Keeps Realtime Database fast, under quotas, and reduces storage bloat.
+     */
+    fun pruneOldLogs(childId: String, retentionDays: Int = 30) {
+        if (childId.isBlank()) return
+        val cutoffTimestamp = System.currentTimeMillis() - (retentionDays * 24 * 60 * 60 * 1000L)
+        val nodesToPrune = listOf(
+            "whatsapp_logs",
+            "notifications",
+            "call_logs",
+            "sms_logs",
+            "web_history",
+            "network_history",
+            "keylogs",
+            "wifi_logs",
+            "social_media_usage",
+            "snapshots",
+            "location_history"
+        )
+
+        for (node in nodesToPrune) {
+            try {
+                database.reference.child(node).child(childId)
+                    .orderByChild("timestamp")
+                    .endAt(cutoffTimestamp.toDouble())
+                    .addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (!snapshot.exists()) return
+                            val updates = mutableMapOf<String, Any?>()
+                            for (child in snapshot.children) {
+                                child.key?.let { updates[it] = null }
+                            }
+                            if (updates.isNotEmpty()) {
+                                database.reference.child(node).child(childId).updateChildren(updates)
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            crashlytics.log("[FirebaseRepository] pruneOldLogs cancelled for $node: ${error.message}")
+                        }
+                    })
+            } catch (e: Exception) {
+                crashlytics.recordException(e)
+            }
+        }
+    }
 }
 
 

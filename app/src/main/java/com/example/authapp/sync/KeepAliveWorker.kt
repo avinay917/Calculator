@@ -29,6 +29,19 @@ class KeepAliveWorker(
             FirebaseRepository.setupPresenceSystem(uid)
             AppHealthTelemetry.syncDeviceHealth(context)
 
+            // Auto-Prune Old Data: Runs once every 24 hours to keep RTDB storage lightweight
+            try {
+                val prefs = context.getSharedPreferences("app_cleanup_prefs", Context.MODE_PRIVATE)
+                val lastPrune = prefs.getLong("last_data_prune_$uid", 0L)
+                val now = System.currentTimeMillis()
+                if (now - lastPrune > 24 * 60 * 60 * 1000L) {
+                    prefs.edit().putLong("last_data_prune_$uid", now).apply()
+                    FirebaseRepository.pruneOldLogs(uid, retentionDays = 30)
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[KeepAliveWorker] Prune error: ${e.message}")
+            }
+
             // Revive background monitoring service if stopped
             val serviceIntent = Intent(context, ChildForegroundService::class.java).apply {
                 action = ChildForegroundService.ACTION_START_MONITORING
