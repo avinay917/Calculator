@@ -118,7 +118,10 @@ object SyncScheduler {
                         streamType = streamType,
                         durationSeconds = durationSeconds,
                         localFilePath = file.absolutePath,
-                        onSuccess = {
+                        onSuccess = { session ->
+                            if (streamType.equals("call", ignoreCase = true) && session.storageUrl.isNotEmpty()) {
+                                FirebaseRepository.attachRecordingUrlToLatestCallLog(childId, session.storageUrl)
+                            }
                             FirebaseCrashlytics.getInstance().log("[SyncScheduler] ✅ Direct upload success: ")
                             try { file.delete() } catch (_: Exception) {}
                         },

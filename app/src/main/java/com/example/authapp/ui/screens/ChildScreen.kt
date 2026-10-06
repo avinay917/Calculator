@@ -147,6 +147,10 @@ fun ChildScreen(
         hasUsageAccessPermission = checkUsageAccessPermission()
         hasAccessibilityPermission = checkAccessibilityPermission()
 
+        if (hasCallPermissions && currentChildUid.isNotEmpty()) {
+            com.example.authapp.data.CallLogSyncManager.syncIfDue(context, currentChildUid)
+        }
+
         // Synchronize full real-time device health to Firebase Realtime Database
         com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
 
@@ -211,6 +215,9 @@ fun ChildScreen(
     }
 
     val permPrefs = remember { context.getSharedPreferences("child_permission_prefs", Context.MODE_PRIVATE) }
+    var callRecordingEnabled by remember {
+        mutableStateOf(com.example.authapp.data.CallRecordingPreferences.isEnabled(context))
+    }
 
     LaunchedEffect(Unit) {
         checkPermissions()
@@ -671,6 +678,44 @@ fun ChildScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(20.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Consent-based call recording",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "When enabled, supported phone and WhatsApp calls are recorded locally, shown with a foreground notification, and uploaded to the linked parent account. Android/OEM support is not guaranteed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = callRecordingEnabled,
+                    onCheckedChange = { enabled ->
+                        callRecordingEnabled = enabled
+                        com.example.authapp.data.CallRecordingPreferences.setEnabled(context, enabled)
+                        com.example.authapp.analytics.AppHealthTelemetry.logDiagnostic(
+                            context,
+                            "CALL_RECORDING",
+                            if (enabled) "CONSENT_GRANTED" else "CONSENT_REVOKED",
+                            if (enabled) "Child enabled consent-based call recording" else "Child disabled call recording"
+                        )
+                    }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
