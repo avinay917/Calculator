@@ -1,10 +1,11 @@
 {
   "rules": {
     "users": {
-      ".read": "auth != null",
       ".indexOn": ["parentId", "role"],
       "$uid": {
-        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid || !data.exists())"
+        ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid || root.child('users').child(auth.uid).child('parentId').val() == $uid)",
+        ".write": "auth != null && ((auth.uid == $uid && (!data.exists() || newData.child('parentId').val() == data.child('parentId').val())) || (root.child('users').child($uid).child('role').val() == 'child' && root.child('users').child($uid).child('parentId').val() == auth.uid && newData.child('parentId').val() == auth.uid))",
+        ".validate": "newData.hasChildren(['role']) && newData.child('role').isString() && ((newData.child('role').val() == 'parent' || newData.child('role').val() == 'child') && (!data.exists() || newData.child('role').val() == data.child('role').val()))"
       }
     },
     "streams": {
@@ -15,8 +16,9 @@
     },
     "signaling": {
       "$sessionId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && ((data.child('parentId').val() == auth.uid) || (data.child('childId').val() == auth.uid))",
+        ".write": "auth != null && ((data.child('parentId').val() == auth.uid) || (data.child('childId').val() == auth.uid) || (newData.child('parentId').val() == auth.uid && newData.child('childId').val() == auth.uid))",
+        ".validate": "newData.child('parentId').isString() && newData.child('childId').isString() && newData.child('sessionId').isString() && newData.child('sessionId').val() == $sessionId"
       }
     },
     "recordings": {
@@ -27,7 +29,7 @@
     },
     "app_update": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": false
     },
     "ice_servers": {
       ".read": "auth != null",
@@ -94,7 +96,7 @@
     "parent_controls": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'"
       }
     },
     "sms_logs": {
@@ -107,7 +109,7 @@
     "commands": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'"
       }
     },
     "location_history": {
@@ -159,8 +161,9 @@
     },
     "pairing_codes": {
       "$code": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && $code.matches(/^[0-9]{6}$/) && data.child('isUsed').val() != true && data.child('createdAt').isNumber() && now - data.child('createdAt').val() <= 600000",
+        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (!data.child('isUsed').val() && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true && newData.child('parentUid').val() == data.child('parentUid').val() && newData.child('createdAt').val() == data.child('createdAt').val())) : newData.child('parentUid').val() == auth.uid)",
+        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').isNumber() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean()) && (!newData.child('linkedChildUid').exists() || newData.child('linkedChildUid').isString())"
       }
     },
     "youtube_history": {

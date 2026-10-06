@@ -67,7 +67,7 @@ import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
 
 fun calculateSafeAudioGain(sensitivityPercent: Float): Double =
-    WebRtcManager.calculateSuperBoostGain(sensitivityPercent)
+    WebRtcManager.calculateSafeAudioGain(sensitivityPercent)
 
 @Composable
 fun ParentScreen(
@@ -108,7 +108,7 @@ fun ParentScreen(
         // Auto-publish latest App Update info to Firebase RTDB for child devices
         // NOTE: versionCode dynamically read kiya — CI/CD se jo bhi version build hua wo push hoga
         val liveVersionCode = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+            com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context)
         } catch (_: Exception) {
             context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
         }
@@ -375,26 +375,6 @@ fun ParentScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Manual App Update Trigger Button
-                    val curVersionCode = remember { com.example.authapp.updater.UpdateManager.getCurrentVersionCode(context) }
-                    Button(
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            viewModel.checkForUpdatesManually(context)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    ) {
-                        Icon(Icons.Default.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Check for App Updates (v$curVersionCode)")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     OutlinedButton(
                         onClick = {
                             scope.launch { drawerState.close() }

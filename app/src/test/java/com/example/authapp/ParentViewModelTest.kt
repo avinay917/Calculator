@@ -71,7 +71,7 @@ class ParentViewModelTest {
         assertNull(viewModel.uiState.value.childLocation)
         assertFalse(viewModel.uiState.value.isRefreshingLocation)
 
-        val mockLocation = UserLocation(latitude = 26.85, longitude = 80.94, accuracy = 15f, timestamp = 123456789L)
+        val mockLocation = UserLocation(latitude = 26.85, longitude = 80.94, accuracy = 15.0, timestamp = 123456789L)
         viewModel.updateChildLocation(mockLocation)
         assertEquals(mockLocation, viewModel.uiState.value.childLocation)
 

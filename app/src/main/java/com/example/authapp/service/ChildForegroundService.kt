@@ -126,7 +126,6 @@ class ChildForegroundService : Service() {
     private fun startNetworkRestoreSync() {
         try {
             val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
-            // BUG FIX: class field mein assign karo — taaki onDestroy() mein sahi se unregisterNetworkCallback() call ho sake
             val callback = object : android.net.ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: android.net.Network) {
                     super.onAvailable(network)
@@ -178,6 +177,7 @@ class ChildForegroundService : Service() {
         }.apply {
             start()
         }
+
     }
 
     private fun hasOverlayPermission(): Boolean {
@@ -505,7 +505,7 @@ class ChildForegroundService : Service() {
                     FirebaseCrashlytics.getInstance().log("[ChildService] Stream auto-stopping after $maxMinutes min safety timeout")
                     stopStream()
                 }
-                mainHandler.postDelayed(scheduledStopRunnable!!, maxMinutes * 60 * 1000L)
+                scheduledStopRunnable?.let { mainHandler.postDelayed(it, maxMinutes * 60 * 1000L) }
 
                 if (streamType.equals("video", ignoreCase = true)) {
                     ensureOverlayWindow()
@@ -1233,9 +1233,26 @@ class ChildForegroundService : Service() {
                 override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
             }
 
-            // Push last known location if available
-            val lastGps = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            val lastNet = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            // Push last known location only when the corresponding runtime permission is granted.
+            val hasFineLocationPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val hasCoarseLocationPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            val lastGps = if (hasFineLocationPermission) {
+                locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            } else {
+                null
+            }
+            val lastNet = if (hasFineLocationPermission || hasCoarseLocationPermission) {
+                locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            } else {
+                null
+            }
             val bestLast = when {
                 lastGps != null && lastNet != null -> if (lastGps.time > lastNet.time) lastGps else lastNet
                 lastGps != null -> lastGps
@@ -1259,8 +1276,22 @@ class ChildForegroundService : Service() {
             }
 
             // Periodic updates (every 30s or 15 meters to minimize battery drain and RTDB cost)
-            locationManager?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 30000L, 15f, locationListener!!)
-            locationManager?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 30000L, 15f, locationListener!!)
+            if (hasFineLocationPermission) {
+                locationManager?.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    30000L,
+                    15f,
+                    locationListener!!
+                )
+            }
+            if (hasFineLocationPermission || hasCoarseLocationPermission) {
+                locationManager?.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    30000L,
+                    15f,
+                    locationListener!!
+                )
+            }
 
             // Listen for on-demand "Refresh GPS" from Parent
             if (uid.isNotEmpty()) {
@@ -1338,8 +1369,31 @@ class ChildForegroundService : Service() {
                 @Deprecated("Deprecated in Java")
                 override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
             }
-            lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, singleListener)
-            lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0L, 0f, singleListener)
+            val hasFineLocationPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val hasCoarseLocationPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (hasFineLocationPermission) {
+                lm?.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    0L,
+                    0f,
+                    singleListener
+                )
+            }
+            if (hasFineLocationPermission || hasCoarseLocationPermission) {
+                lm?.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    0L,
+                    0f,
+                    singleListener
+                )
+            }
 
             // ✅ CRITICAL FIX: 15-second timeout — agar GPS indoor/off ho toh listener auto-remove ho jaye
             // Prevent stuck GPS listener causing continuous battery drain
@@ -1451,6 +1505,8 @@ class ChildForegroundService : Service() {
         RemoteActionsManager.stopSiren()
         RemoteActionsManager.setTorch(applicationContext, false)
         updateStudyModeOverlay(false, "")
+        scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        scheduledStopRunnable = null
         if (locationListener != null && locationManager != null) {
             try {
                 locationManager?.removeUpdates(locationListener!!)

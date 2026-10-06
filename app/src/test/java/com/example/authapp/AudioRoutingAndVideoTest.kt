@@ -11,7 +11,7 @@ class AudioRoutingAndVideoTest {
     @Test
     fun audioOutputRoute_enumContainsAllRequiredOutputs() {
         val routes = AudioOutputRoute.values()
-        assertEquals(3, routes.size)
+        assertEquals(4, routes.size)
         assertTrue(routes.contains(AudioOutputRoute.SPEAKER))
         assertTrue(routes.contains(AudioOutputRoute.EARPIECE))
         assertTrue(routes.contains(AudioOutputRoute.BLUETOOTH))
@@ -28,12 +28,16 @@ class AudioRoutingAndVideoTest {
                 AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                 AudioOutputRoute.EARPIECE -> AudioOutputRoute.BLUETOOTH
                 AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
             }
         } else {
             when (current) {
                 AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                 AudioOutputRoute.EARPIECE -> AudioOutputRoute.SPEAKER
                 AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
             }
         }
         assertEquals(AudioOutputRoute.EARPIECE, current)
@@ -44,12 +48,16 @@ class AudioRoutingAndVideoTest {
                 AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                 AudioOutputRoute.EARPIECE -> AudioOutputRoute.BLUETOOTH
                 AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
             }
         } else {
             when (current) {
                 AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                 AudioOutputRoute.EARPIECE -> AudioOutputRoute.SPEAKER
                 AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
             }
         }
         assertEquals(AudioOutputRoute.SPEAKER, current)
@@ -65,6 +73,8 @@ class AudioRoutingAndVideoTest {
                 AudioOutputRoute.SPEAKER -> AudioOutputRoute.EARPIECE
                 AudioOutputRoute.EARPIECE -> AudioOutputRoute.BLUETOOTH
                 AudioOutputRoute.BLUETOOTH -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
+                AudioOutputRoute.HEADSET -> AudioOutputRoute.SPEAKER
             }
         }
 

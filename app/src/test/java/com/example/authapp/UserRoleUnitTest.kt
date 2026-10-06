@@ -2,7 +2,6 @@ package com.example.authapp
 
 import com.example.authapp.data.User
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UserRoleUnitTest {
@@ -32,6 +31,6 @@ class UserRoleUnitTest {
     fun userOnlineStatus_defaultState() {
         val user = User()
         assertEquals(false, user.isOnline)
-        assertTrue(user.lastSeen > 0)
+        assertEquals(0L, user.lastSeen)
     }
 }

@@ -29,7 +29,16 @@ class CallReceiver : BroadcastReceiver() {
             if (callRecorder == null) {
                 callRecorder = CallRecorder(context.applicationContext)
             }
-            return callRecorder!!
+            return callRecorder ?: error("CallRecorder initialization failed")
+        }
+
+        @JvmStatic
+        fun resetStateForTesting() {
+            callRecorder = null
+            lastState = TelephonyManager.EXTRA_STATE_IDLE
+            incomingNumber = ""
+            isIncoming = false
+            callStartTime = 0L
         }
     }
 

@@ -72,7 +72,7 @@ class CallDetectionAndLocationTest {
         val loc = UserLocation(
             latitude = 26.8467,
             longitude = 80.9462,
-            accuracy = 18.5f,
+            accuracy = 18.5,
             timestamp = 1710000000000L
         )
 

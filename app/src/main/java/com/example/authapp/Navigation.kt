@@ -23,8 +23,9 @@ fun MainNavigation() {
     val currentUser = FirebaseRepository.currentUser
     val cachedRole = remember(context) { com.example.authapp.data.AppPreferences.getUserRole(context) }
     val initialNavKey: NavKey = remember {
-        if (currentUser != null && !currentUser.email.isNullOrEmpty()) {
-            if (cachedRole == "parent") ParentNavKey(email = currentUser.email!!) else ChildNavKey(email = currentUser.email!!)
+        val email = currentUser?.email
+        if (currentUser != null && !email.isNullOrEmpty()) {
+            if (cachedRole == "parent") ParentNavKey(email = email) else ChildNavKey(email = email)
         } else {
             SignInNavKey
         }
@@ -50,9 +51,10 @@ fun MainNavigation() {
 
     LaunchedEffect(Unit) {
         val user = FirebaseRepository.currentUser
-        if (user != null && !user.email.isNullOrEmpty()) {
+        val email = user?.email
+        if (user != null && !email.isNullOrEmpty()) {
             FirebaseRepository.setupPresenceSystem(user.uid)
-            navigateBasedOnRole(user.email!!)
+            navigateBasedOnRole(email)
         }
     }
 
