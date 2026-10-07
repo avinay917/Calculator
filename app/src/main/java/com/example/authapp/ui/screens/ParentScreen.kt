@@ -43,6 +43,7 @@ import com.example.authapp.audio.AudioRouteManager
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.FirebaseControlRepository
 import com.example.authapp.data.RecordingSession
+import com.example.authapp.data.User
 import com.example.authapp.recorder.StreamAudioRecorder
 import android.media.AudioAttributes
 import android.media.MediaPlayer
