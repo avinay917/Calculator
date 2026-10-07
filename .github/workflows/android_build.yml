@@ -67,8 +67,8 @@ jobs:
       # Step 8: Firebase deployment is intentionally separate from APK OTA publishing.
       # Debug APKs are never published as installable production updates.
 
-      # Step 9: Deploy Firebase Database Rules & Cloud Functions
-      - name: 9. Deploy Firebase Database Rules & Cloud Functions
+      # Step 9: Deploy Firebase Database Rules, Functions & Web App Hosting
+      - name: 9. Deploy Firebase Database Rules, Functions & Web App Hosting
         if: github.ref == 'refs/heads/main' && success()
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -76,4 +76,8 @@ jobs:
           cd functions
           npm ci
           cd ..
-          npx firebase-tools@latest deploy --only database,firestore,storage,functions --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko
+          cd web
+          npm ci
+          npm run build
+          cd ..
+          npx firebase-tools@latest deploy --only database,firestore,storage,functions,hosting --token "$FIREBASE_TOKEN" --non-interactive --project apnasatthilko

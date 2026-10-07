@@ -1,0 +1,18 @@
+{
+  "name": "Calculator Parent Portal",
+  "short_name": "Parent Portal",
+  "description": "Parental live monitoring and safety dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121216",
+  "theme_color": "#1E1E24",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
+
