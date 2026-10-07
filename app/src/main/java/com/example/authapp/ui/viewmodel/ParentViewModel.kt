@@ -532,6 +532,22 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
+    fun unpairChild(childUid: String, onComplete: (Boolean, String?) -> Unit) {
+        FirebaseRepository.unpairChild(childUid) { success, error ->
+            if (success) {
+                _uiState.update { state ->
+                    val remaining = state.childUsers.filter { it.uid != childUid }
+                    val nextSelected = if (state.selectedChildForControls?.uid == childUid) remaining.firstOrNull() else state.selectedChildForControls
+                    state.copy(
+                        childUsers = remaining,
+                        selectedChildForControls = nextSelected
+                    )
+                }
+            }
+            onComplete(success, error)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()

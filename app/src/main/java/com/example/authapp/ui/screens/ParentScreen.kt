@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.SupervisorAccount
@@ -94,6 +95,8 @@ fun ParentScreen(
     }
 
     var showPairingDialog by remember { mutableStateOf(false) }
+    var childToUnpair by remember { mutableStateOf<User?>(null) }
+    var isUnpairing by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -348,6 +351,18 @@ fun ParentScreen(
                                         }
                                         if (isSelected) {
                                             Text("Active", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        }
+                                        IconButton(
+                                            onClick = { childToUnpair = child },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Unpair Child",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -798,6 +813,45 @@ fun ParentScreen(
                 PairingCodeDialog(
                     parentEmail = email,
                     onDismiss = { showPairingDialog = false }
+                )
+            }
+
+            childToUnpair?.let { targetChild ->
+                AlertDialog(
+                    onDismissRequest = { if (!isUnpairing) childToUnpair = null },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    title = { Text("Unpair Child Device?") },
+                    text = {
+                        Text("Are you sure you want to unpair \"${targetChild.name.ifEmpty { "Child Device" }}\"? This will disconnect monitoring, remote controls, and real-time streaming.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                isUnpairing = true
+                                viewModel.unpairChild(targetChild.uid) { success, error ->
+                                    isUnpairing = false
+                                    childToUnpair = null
+                                    if (success) {
+                                        Toast.makeText(context, "Child device successfully unpaired", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Unpair failed: $error", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            enabled = !isUnpairing
+                        ) {
+                            Text(if (isUnpairing) "Unpairing..." else "Unpair")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { childToUnpair = null },
+                            enabled = !isUnpairing
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
                 )
             }
         }

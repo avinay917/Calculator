@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -64,6 +65,8 @@ fun ChildScreen(
     var currentSecretPin by remember { mutableStateOf(com.example.authapp.data.AppPreferences.getSecretPin(context)) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var newPinInput by remember { mutableStateOf("") }
+    var showUnpairDialog by remember { mutableStateOf(false) }
+    var isUnpairing by remember { mutableStateOf(false) }
 
     DisposableEffect(currentChildUid) {
         if (currentChildUid.isEmpty()) return@DisposableEffect onDispose {}
@@ -332,11 +335,31 @@ fun ChildScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    TextButton(
-                        onClick = { showChangePairingForm = true },
-                        contentPadding = PaddingValues(0.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Change or Re-Link Parent Code", style = MaterialTheme.typography.labelMedium)
+                        OutlinedButton(
+                            onClick = { showChangePairingForm = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Re-Link Code", style = MaterialTheme.typography.labelMedium)
+                        }
+                        Button(
+                            onClick = { showUnpairDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Unpair", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 } else {
                     Text(
@@ -1009,6 +1032,44 @@ fun ChildScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showChangePinDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showUnpairDialog) {
+            AlertDialog(
+                onDismissRequest = { if (!isUnpairing) showUnpairDialog = false },
+                icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("Unpair from Parent Account?") },
+                text = { Text("Are you sure you want to disconnect this device from your parent? Background telemetry, activity sync, and remote streaming requests will be stopped.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            isUnpairing = true
+                            com.example.authapp.data.FirebaseRepository.unpairChild(currentChildUid) { success, error ->
+                                isUnpairing = false
+                                showUnpairDialog = false
+                                if (success) {
+                                    linkedParentId = ""
+                                    android.widget.Toast.makeText(context, "Device successfully unpaired", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "Unpair failed: $error", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        enabled = !isUnpairing
+                    ) {
+                        Text(if (isUnpairing) "Unpairing..." else "Confirm Unpair")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showUnpairDialog = false },
+                        enabled = !isUnpairing
+                    ) {
                         Text("Cancel")
                     }
                 }

@@ -7,8 +7,9 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from "firebase/auth";
-import { ref, onValue, set, push, off } from "firebase/database";
-import { auth, rtdb } from "@/lib/firebase";
+import { ref, onValue, set, push, off, update } from "firebase/database";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, rtdb, firestore } from "@/lib/firebase";
 import { WebRtcReceiver } from "@/lib/webrtc";
 import {
   Video,
@@ -29,6 +30,7 @@ import {
   Plus,
   Battery,
   Wifi,
+  Trash2,
 } from "lucide-react";
 
 interface ChildUser {
@@ -286,9 +288,41 @@ export default function ParentApp() {
     setGeneratedPairingCode(code);
     await set(ref(rtdb, `pairing_codes/${code}`), {
       parentUid: user.uid,
-      parentEmail: user.email,
-      timestamp: Date.now(),
+      parentEmail: user.email || "",
+      createdAt: Date.now(),
+      status: "active",
     });
+  };
+
+  // 9. Unpair Child Device
+  const handleUnpairChild = async (childUid: string) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to unpair this child device? Real-time telemetry, remote controls, and streaming access will be disconnected."
+      )
+    ) {
+      return;
+    }
+    try {
+      const updates: Record<string, any> = {};
+      updates[`users/${childUid}/parentId`] = null;
+      updates[`streams/${childUid}`] = null;
+      await update(ref(rtdb), updates);
+
+      try {
+        await setDoc(doc(firestore, "users", childUid), { parentId: "" }, { merge: true });
+      } catch (e) {
+        console.warn("Firestore unpair sync error:", e);
+      }
+
+      setChildren((prev) => prev.filter((c) => c.uid !== childUid));
+      if (activeChildId === childUid) {
+        setActiveChildId("");
+      }
+      alert("Child device unpaired successfully.");
+    } catch (err: any) {
+      alert("Failed to unpair child: " + (err.message || err));
+    }
   };
 
   const activeChild = children.find((c) => c.uid === activeChildId);
@@ -477,7 +511,17 @@ export default function ParentApp() {
             )}
           </div>
 
-          <span className="truncate max-w-[140px] text-gray-500">UID: {activeChild.uid.slice(0, 8)}...</span>
+          <div className="flex items-center gap-2">
+            <span className="truncate max-w-[140px] text-gray-500 hidden sm:inline">UID: {activeChild.uid.slice(0, 8)}...</span>
+            <button
+              onClick={() => handleUnpairChild(activeChild.uid)}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/40 rounded-lg transition"
+              title="Unpair Device"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Unpair</span>
+            </button>
+          </div>
         </div>
       )}
 

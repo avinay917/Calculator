@@ -1645,18 +1645,21 @@ object FirebaseRepository {
     }
 
     fun unpairChild(childUid: String, onComplete: (Boolean, String?) -> Unit) {
-        database.reference.child("users").child(childUid).child("parentId").removeValue()
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    try {
-                        firestore.collection("users").document(childUid)
-                            .update("parentId", "")
-                    } catch (_: Exception) {}
-                    onComplete(true, null)
-                } else {
-                    onComplete(false, task.exception?.localizedMessage ?: "Failed to unpair child")
-                }
+        val updates = mapOf<String, Any?>(
+            "users/$childUid/parentId" to null,
+            "streams/$childUid" to null
+        )
+        database.reference.updateChildren(updates).addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                try {
+                    firestore.collection("users").document(childUid)
+                        .set(mapOf("parentId" to ""), SetOptions.merge())
+                } catch (_: Exception) {}
+                onComplete(true, null)
+            } else {
+                onComplete(false, task.exception?.localizedMessage ?: "Failed to unpair child")
             }
+        }
     }
 
     // --- WhatsApp Chat & Status Monitoring ---
