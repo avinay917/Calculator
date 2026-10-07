@@ -759,8 +759,8 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
                 PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
 
-                // CRITICAL TURN SERVERS FOR HOTSPOT/STRICT FIREWALL (Symmetric NAT)
-                // 1. Metered OpenRelay (UDP/TCP/TLS)
+                // CRITICAL TURN SERVERS FOR STRICT SYMMETRIC NAT & CELLULAR CARRIERS (Jio / Airtel)
+                // 1. Metered OpenRelay (UDP, TCP, and TLS Port 443)
                 PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
                     .setUsername("openrelayproject")
                     .setPassword("openrelayproject")
@@ -773,13 +773,25 @@ class WebRtcManager(
                     .setUsername("openrelayproject")
                     .setPassword("openrelayproject")
                     .createIceServer(),
-                
-                // 2. FreeSTUN Fallback TURN Servers
+                PeerConnection.IceServer.builder("turns:openrelay.metered.ca:443?transport=tcp")
+                    .setUsername("openrelayproject")
+                    .setPassword("openrelayproject")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turns:openrelay.metered.ca:5349?transport=tcp")
+                    .setUsername("openrelayproject")
+                    .setPassword("openrelayproject")
+                    .createIceServer(),
+
+                // 2. FreeSTUN Fallback TURN Servers (UDP & TCP)
                 PeerConnection.IceServer.builder("turn:freestun.net:3478")
                     .setUsername("free")
                     .setPassword("free")
                     .createIceServer(),
                 PeerConnection.IceServer.builder("turn:freestun.net:3478?transport=tcp")
+                    .setUsername("free")
+                    .setPassword("free")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:freestun.net:443?transport=tcp")
                     .setUsername("free")
                     .setPassword("free")
                     .createIceServer()

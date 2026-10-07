@@ -13,4 +13,7 @@ data object SignUpNavKey : NavKey
 data class ChildNavKey(val email: String) : NavKey
 
 @Serializable
+data class CalculatorNavKey(val email: String = "") : NavKey
+
+@Serializable
 data class ParentNavKey(val email: String) : NavKey

@@ -25,7 +25,15 @@ fun MainNavigation() {
     val initialNavKey: NavKey = remember {
         val email = currentUser?.email
         if (currentUser != null && !email.isNullOrEmpty()) {
-            if (cachedRole == "parent") ParentNavKey(email = email) else ChildNavKey(email = email)
+            if (cachedRole == "parent") {
+                ParentNavKey(email = email)
+            } else {
+                if (com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) {
+                    CalculatorNavKey(email = email)
+                } else {
+                    ChildNavKey(email = email)
+                }
+            }
         } else {
             SignInNavKey
         }
@@ -43,7 +51,11 @@ fun MainNavigation() {
             if (role == "parent") {
                 backStack.add(ParentNavKey(email = email))
             } else {
-                backStack.add(ChildNavKey(email = email))
+                if (com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) {
+                    backStack.add(CalculatorNavKey(email = email))
+                } else {
+                    backStack.add(ChildNavKey(email = email))
+                }
             }
             isConfiguringSession = false
         }
@@ -92,9 +104,21 @@ fun MainNavigation() {
                     modifier = Modifier.safeDrawingPadding()
                 )
             }
+            entry<CalculatorNavKey> { key ->
+                com.example.authapp.ui.screens.CalculatorScreen(
+                    email = key.email,
+                    onSecretUnlocked = {
+                        backStack.add(ChildNavKey(email = key.email))
+                    },
+                    modifier = Modifier.safeDrawingPadding()
+                )
+            }
             entry<ChildNavKey> { key ->
                 ChildScreen(
                     email = key.email,
+                    onLockToCalculator = {
+                        backStack.removeLastOrNull()
+                    },
                     onSignOut = {
                         try {
                             val stopServiceIntent = android.content.Intent(context, com.example.authapp.service.ChildForegroundService::class.java).apply {

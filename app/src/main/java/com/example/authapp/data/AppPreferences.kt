@@ -19,6 +19,8 @@ object AppPreferences {
     private const val KEY_USER_ROLE = "pref_user_role"
     private const val KEY_FCM_TOKEN = "pref_fcm_token"
     private const val KEY_LINKED_PARENT_ID = "pref_linked_parent_id"
+    private const val KEY_SECRET_PIN = "pref_secret_pin"
+    private const val KEY_STEALTH_MODE = "pref_stealth_mode"
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "CalculatorSecurityKey_v1"
@@ -163,6 +165,23 @@ object AppPreferences {
         val value = decrypt(getPrefs(context).getString(KEY_LINKED_PARENT_ID, "") ?: "")
         if (value.isNotEmpty()) memLinkedParentId = value
         return value
+    }
+
+    fun getSecretPin(context: Context): String {
+        val pin = decrypt(getPrefs(context).getString(KEY_SECRET_PIN, "") ?: "")
+        return if (pin.isNotEmpty()) pin else "1234"
+    }
+
+    fun saveSecretPin(context: Context, pin: String) {
+        getPrefs(context).edit().putString(KEY_SECRET_PIN, encrypt(pin)).apply()
+    }
+
+    fun isStealthModeEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_STEALTH_MODE, true)
+    }
+
+    fun setStealthModeEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STEALTH_MODE, enabled).apply()
     }
 
     fun clearSession(context: Context) {

