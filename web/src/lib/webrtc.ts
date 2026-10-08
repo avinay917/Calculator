@@ -38,6 +38,8 @@ export class WebRtcReceiver {
   private sessionId: string = "";
   private childUid: string = "";
   private listeners: Array<() => void> = [];
+  private pendingCandidates: RTCIceCandidateInit[] = [];
+  private isRemoteDescriptionSet = false;
 
   constructor(
     private onRemoteStream: (stream: MediaStream) => void,
@@ -49,6 +51,8 @@ export class WebRtcReceiver {
     this.stop();
     this.childUid = childUid;
     this.sessionId = "session_" + Date.now();
+    this.pendingCandidates = [];
+    this.isRemoteDescriptionSet = false;
 
     try {
       this.peerConnection = new RTCPeerConnection({
@@ -91,9 +95,19 @@ export class WebRtcReceiver {
       const sdpOfferRef = ref(rtdb, `signaling/${this.sessionId}/sdpOffer`);
       const unsubscribeOffer = onValue(sdpOfferRef, async (snapshot) => {
         const sdp = snapshot.val();
-        if (sdp && this.peerConnection && this.peerConnection.signalingState === "stable") {
+        if (sdp && this.peerConnection && !this.isRemoteDescriptionSet && this.peerConnection.signalingState === "stable") {
           try {
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
+            this.isRemoteDescriptionSet = true;
+
+            // Drain queued ICE candidates
+            for (const pending of this.pendingCandidates) {
+              try {
+                await this.peerConnection.addIceCandidate(new RTCIceCandidate(pending));
+              } catch (_) {}
+            }
+            this.pendingCandidates = [];
+
             const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
 
@@ -110,12 +124,16 @@ export class WebRtcReceiver {
       const childCandidatesRef = ref(rtdb, `signaling/${this.sessionId}/candidates/child`);
       const unsubscribeCandidates = onValue(childCandidatesRef, (snapshot) => {
         const candidatesObj = snapshot.val();
-        if (candidatesObj && this.peerConnection) {
+        if (candidatesObj) {
           Object.values(candidatesObj).forEach(async (cand: any) => {
             if (cand && cand.candidate) {
-              try {
-                await this.peerConnection?.addIceCandidate(new RTCIceCandidate(cand));
-              } catch (_) {}
+              if (!this.isRemoteDescriptionSet || !this.peerConnection) {
+                this.pendingCandidates.push(cand);
+              } else {
+                try {
+                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+                } catch (_) {}
+              }
             }
           });
         }
@@ -137,6 +155,8 @@ export class WebRtcReceiver {
   public stop() {
     this.listeners.forEach((unsub) => unsub());
     this.listeners = [];
+    this.pendingCandidates = [];
+    this.isRemoteDescriptionSet = false;
 
     if (this.childUid) {
       set(ref(rtdb, `streams/${this.childUid}/status`), {
@@ -144,6 +164,10 @@ export class WebRtcReceiver {
         streamType: "video",
         sessionId: "",
       }).catch(() => {});
+    }
+
+    if (this.sessionId) {
+      set(ref(rtdb, `signaling/${this.sessionId}`), null).catch(() => {});
     }
 
     if (this.peerConnection) {

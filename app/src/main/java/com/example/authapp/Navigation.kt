@@ -117,7 +117,8 @@ fun MainNavigation() {
                 ChildScreen(
                     email = key.email,
                     onLockToCalculator = {
-                        backStack.removeLastOrNull()
+                        backStack.clear()
+                        backStack.add(CalculatorNavKey(email = key.email))
                     },
                     onSignOut = {
                         try {

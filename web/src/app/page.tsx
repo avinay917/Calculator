@@ -269,16 +269,30 @@ export default function ParentApp() {
     }
   };
 
-  // 7. Remote Command Triggers
-  const sendCommand = async (commandType: string) => {
+  // 7. Remote Command Triggers (Matches Android /commands/{childId}/{cmd})
+  const sendCommand = async (command: string, value: any = true) => {
     if (!activeChildId) return;
-    const cmdRef = push(ref(rtdb, `commands/${activeChildId}`));
-    await set(cmdRef, {
-      type: commandType,
+    const requestId = "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    await set(ref(rtdb, `commands/${activeChildId}/${command}`), {
+      requestId: requestId,
+      command: command,
+      value: value,
       timestamp: Date.now(),
-      status: "PENDING",
     });
-    alert(`Command '${commandType}' sent to device.`);
+    alert(`Command '${command}' (${value ? "ON" : "OFF"}) sent to device.`);
+  };
+
+  // Snapshot Trigger (Matches Android /streams/{childId}/snapshotRequest)
+  const handleRequestSnapshot = async (facing: "front" | "back" = "back") => {
+    if (!activeChildId) return;
+    const reqRef = ref(rtdb, `streams/${activeChildId}/snapshotRequest`);
+    await set(reqRef, {
+      requestId: "snap_" + Date.now(),
+      requestedAt: Date.now(),
+      cameraFacing: facing,
+      status: "REQUESTED",
+    });
+    alert(`Snapshot requested from ${facing} camera.`);
   };
 
   // 8. Generate 6-Digit Pairing Code
@@ -757,7 +771,7 @@ export default function ParentApp() {
         {activeTab === "controls" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
-              onClick={() => sendCommand("SIREN")}
+              onClick={() => sendCommand("SIREN", true)}
               className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-red-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
             >
               <div className="p-3 bg-red-600/20 text-red-400 rounded-xl group-hover:scale-105 transition">
@@ -770,7 +784,20 @@ export default function ParentApp() {
             </button>
 
             <button
-              onClick={() => sendCommand("TORCH_ON")}
+              onClick={() => sendCommand("SIREN", false)}
+              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-gray-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
+            >
+              <div className="p-3 bg-gray-600/20 text-gray-300 rounded-xl group-hover:scale-105 transition">
+                <Volume2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white">Stop Siren</h3>
+                <p className="text-[10px] text-gray-400">Silences active emergency alarm</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => sendCommand("TORCH", true)}
               className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-yellow-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
             >
               <div className="p-3 bg-yellow-600/20 text-yellow-400 rounded-xl group-hover:scale-105 transition">
@@ -783,7 +810,7 @@ export default function ParentApp() {
             </button>
 
             <button
-              onClick={() => sendCommand("TORCH_OFF")}
+              onClick={() => sendCommand("TORCH", false)}
               className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-gray-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
             >
               <div className="p-3 bg-gray-600/20 text-gray-300 rounded-xl group-hover:scale-105 transition">
@@ -796,15 +823,28 @@ export default function ParentApp() {
             </button>
 
             <button
-              onClick={() => sendCommand("TAKE_SNAPSHOT")}
+              onClick={() => handleRequestSnapshot("back")}
               className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-blue-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
             >
               <div className="p-3 bg-blue-600/20 text-blue-400 rounded-xl group-hover:scale-105 transition">
                 <Camera className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-xs font-bold text-white">Capture Silent Photo</h3>
-                <p className="text-[10px] text-gray-400">Takes snapshot from camera and uploads</p>
+                <h3 className="text-xs font-bold text-white">Capture Rear Photo</h3>
+                <p className="text-[10px] text-gray-400">Takes silent snapshot from back camera</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleRequestSnapshot("front")}
+              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-purple-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
+            >
+              <div className="p-3 bg-purple-600/20 text-purple-400 rounded-xl group-hover:scale-105 transition">
+                <Camera className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white">Capture Front Photo</h3>
+                <p className="text-[10px] text-gray-400">Takes silent selfie snapshot from front camera</p>
               </div>
             </button>
           </div>
