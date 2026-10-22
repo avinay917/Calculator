@@ -23,9 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.example.authapp.analytics.AppAnalytics
 import com.example.authapp.data.DeviceHealth
 import com.example.authapp.data.User
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.authapp.utils.formatTime
 
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Call
@@ -126,10 +124,7 @@ fun ChildUserCard(
             }
 
             if (!user.isOnline && user.lastSeen > 0L) {
-                val lastSeenText = remember(user.lastSeen) {
-                    val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-                    sdf.format(Date(user.lastSeen))
-                }
+                val lastSeenText = remember(user.lastSeen) { user.lastSeen.formatTime() }
                 Text(
                     text = "Last seen: $lastSeenText",
                     style = MaterialTheme.typography.labelSmall,

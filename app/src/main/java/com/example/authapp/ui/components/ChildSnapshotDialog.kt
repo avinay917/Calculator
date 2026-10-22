@@ -29,11 +29,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.data.SnapshotInfo
 import com.example.authapp.data.User
+import com.example.authapp.utils.formatTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
 fun RemoteImage(
@@ -322,10 +321,7 @@ fun ChildSnapshotDialog(
                             contentPadding = PaddingValues(bottom = 24.dp)
                         ) {
                             items(snapshots) { snap ->
-                                val timeStr = remember(snap.timestamp) {
-                                    val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-                                    sdf.format(Date(snap.timestamp))
-                                }
+                                val timeStr = remember(snap.timestamp) { snap.timestamp.formatTime() }
                                 Card(
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),

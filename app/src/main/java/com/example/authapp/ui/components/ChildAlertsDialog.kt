@@ -19,8 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.authapp.data.SecurityAlert
 import com.example.authapp.data.User
-import java.text.SimpleDateFormat
-import java.util.*
+import com.example.authapp.utils.formatTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,10 +131,7 @@ fun SecurityAlertItem(alert: SecurityAlert) {
         else -> Pair(Icons.Default.NotificationsActive, Color(0xFFD32F2F))
     }
 
-    val timeStr = remember(alert.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(alert.timestamp))
-    }
+    val timeStr = remember(alert.timestamp) { alert.timestamp.formatTime() }
 
     Surface(
         shape = RoundedCornerShape(12.dp),

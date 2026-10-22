@@ -22,16 +22,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.authapp.data.*
-import java.text.SimpleDateFormat
+import com.example.authapp.utils.formatTime
+import com.example.authapp.utils.formatSecs
 import java.util.*
-
-private fun Long.formatTime(): String = if (this == 0L) "" else SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(this))
-private fun Long.formatSecs(): String {
-    if (this <= 0L) return "0s"
-    val mins = this / 60
-    val secs = this % 60
-    return if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -752,10 +745,7 @@ fun SmsListItem(sms: SmsItem) {
     val icon = if (isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade
     val tint = if (isIncoming) Color(0xFF388E3C) else Color(0xFF1976D2)
 
-    val timeStr = remember(sms.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(sms.timestamp))
-    }
+    val timeStr = remember(sms.timestamp) { sms.timestamp.formatTime() }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -813,10 +803,7 @@ fun SmsListItem(sms: SmsItem) {
 
 @Composable
 fun WebHistoryListItem(item: WebHistoryItem) {
-    val timeStr = remember(item.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(item.timestamp))
-    }
+    val timeStr = remember(item.timestamp) { item.timestamp.formatTime() }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = if (item.isBlocked) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -859,15 +846,9 @@ fun WebHistoryListItem(item: WebHistoryItem) {
 
 @Composable
 fun NetworkHistoryListItem(item: NetworkHistoryItem) {
-    val connectTimeStr = remember(item.connectedAt) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(item.connectedAt))
-    }
+    val connectTimeStr = remember(item.connectedAt) { item.connectedAt.formatTime() }
     val disconnectTimeStr = remember(item.disconnectedAt) {
-        if (item.disconnectedAt > 0L) {
-            val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
-            sdf.format(Date(item.disconnectedAt))
-        } else "Active now"
+        if (item.disconnectedAt > 0L) com.example.authapp.utils.DateTimeUtils.formatTimeOnly(item.disconnectedAt) else "Active now"
     }
 
     Surface(
@@ -912,10 +893,7 @@ fun AppInstallEventItem(event: AppInstallEvent) {
     val icon = if (isInstalled) Icons.Default.AddCircle else Icons.Default.Delete
     val tint = if (isInstalled) Color(0xFF388E3C) else Color(0xFFD32F2F)
 
-    val timeStr = remember(event.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        sdf.format(Date(event.timestamp))
-    }
+    val timeStr = remember(event.timestamp) { event.timestamp.formatTime() }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -995,9 +973,7 @@ fun UnifiedSimAndNetworkView(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     if (simInfo != null) {
-                        val lastCheckedStr = if (simInfo.lastUpdated > 0L) {
-                            SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(simInfo.lastUpdated))
-                        } else "Recent"
+                        val lastCheckedStr = if (simInfo.lastUpdated > 0L) simInfo.lastUpdated.formatTime() else "Recent"
 
                         InfoRow("Operator / Carrier", simInfo.operatorName.ifEmpty { "Detected" })
                         InfoRow("Country ISO", simInfo.countryIso.ifEmpty { "IN" }.uppercase())
@@ -1056,7 +1032,7 @@ fun UnifiedSimAndNetworkView(
                     if (activeNetwork != null) {
                         InfoRow("Network Type", activeNetwork.networkType)
                         InfoRow("Wi-Fi Name (SSID)", activeNetwork.ssid.ifEmpty { "Connected Network" })
-                        val connectStr = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(activeNetwork.connectedAt))
+                        val connectStr = activeNetwork.connectedAt.formatTime()
                         InfoRow("Connected Since", connectStr)
                     } else {
                         Text(

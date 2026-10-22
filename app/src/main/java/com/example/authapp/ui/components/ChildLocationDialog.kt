@@ -30,8 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.example.authapp.data.User
 import com.example.authapp.data.UserLocation
 import com.example.authapp.utils.LocationUtils
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.example.authapp.utils.formatTime
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -149,9 +148,7 @@ fun ChildLocationDialog(
                                     }
                                     Spacer(modifier = Modifier.weight(1f))
                                     val timeStr = remember(childLocation.timestamp) {
-                                        if (childLocation.timestamp > 0L) {
-                                            SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(childLocation.timestamp))
-                                        } else "Just now"
+                                        if (childLocation.timestamp > 0L) childLocation.timestamp.formatTime() else "Just now"
                                     }
                                     Text(
                                         text = "Updated: $timeStr",

@@ -19,9 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.authapp.data.DeviceHealth
 import com.example.authapp.data.User
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.authapp.utils.DateTimeUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,8 +136,7 @@ fun ChildHealthDialog(
                                     )
                                     InfoRow(label = "Current State", value = s.currentServiceState)
                                     if (s.lastHeartbeat > 0L) {
-                                        val sdf = SimpleDateFormat("dd MMM, hh:mm:ss a", Locale.getDefault())
-                                        InfoRow(label = "Last Heartbeat", value = sdf.format(Date(s.lastHeartbeat)))
+                                        InfoRow(label = "Last Heartbeat", value = DateTimeUtils.formatDetailedDateTime(s.lastHeartbeat))
                                     }
                                 }
                             }

@@ -27,9 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.authapp.data.RecordingSession
 import com.example.authapp.data.User
+import com.example.authapp.utils.formatTime
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 @Composable
@@ -210,11 +209,7 @@ fun CloudRecordingsView(
                     val childName = childNameMap[rec.childId] ?: "Child (${rec.childId.take(5)})"
 
                     val formattedDate = remember(rec.startTime) {
-                        if (rec.startTime > 0L) {
-                            SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(rec.startTime))
-                        } else {
-                            "Unknown Date"
-                        }
+                        if (rec.startTime > 0L) rec.startTime.formatTime() else "Unknown Date"
                     }
 
                     val durationStr = remember(rec.durationSeconds) {

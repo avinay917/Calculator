@@ -123,6 +123,7 @@ object Constants {
         const val TAG_FIREBASE = "Firebase"
         const val TAG_WEBRTC = "WebRTC"
         const val TAG_SERVICE = "ChildForegroundService"
+        const val TAG_APP = "AuthApp"
     }
 
     // Firebase Database URL - Should be loaded from google-services.json in production
