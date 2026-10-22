@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,7 +60,7 @@ fun ChildAlertsDialog(
                         },
                         navigationIcon = {
                             IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -124,8 +125,13 @@ fun ChildAlertsDialog(
 @Composable
 fun SecurityAlertItem(alert: SecurityAlert) {
     val (icon, tint) = when (alert.type.uppercase()) {
-        "LOW_BATTERY" -> Pair(Icons.Default.BatteryAlert, Color(0xFFC62828))
+        "LOW_BATTERY", "BATTERY_LOW" -> Pair(Icons.Default.BatteryAlert, Color(0xFFC62828))
+        "CHARGER_CONNECTED" -> Pair(Icons.Default.BatteryChargingFull, Color(0xFF1976D2))
         "SIM_CHANGED" -> Pair(Icons.Default.SimCardAlert, Color(0xFFD32F2F))
+        "GEOFENCE_EXIT" -> Pair(Icons.Default.LocationOff, Color(0xFFE65100))
+        "GEOFENCE_ENTER" -> Pair(Icons.Default.LocationOn, Color(0xFF2E7D32))
+        "APP_INSTALLED" -> Pair(Icons.Default.AddCircle, Color(0xFF2E7D32))
+        "APP_UNINSTALLED" -> Pair(Icons.Default.Delete, Color(0xFFD32F2F))
         "KEYWORD_DETECTED" -> Pair(Icons.Default.Warning, Color(0xFFE65100))
         "TAMPER" -> Pair(Icons.Default.ReportProblem, Color(0xFFC2185B))
         else -> Pair(Icons.Default.NotificationsActive, Color(0xFFD32F2F))
