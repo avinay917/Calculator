@@ -1,18 +1,37 @@
 {
   "name": "Calculator Parent Portal",
   "short_name": "Parent Portal",
-  "description": "Parental live monitoring and safety dashboard",
+  "description": "Parental live monitoring, activity tracking, and remote control safety portal",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#121216",
-  "theme_color": "#1E1E24",
-  "orientation": "portrait-primary",
+  "theme_color": "#6366F1",
+  "orientation": "portrait",
+  "scope": "/",
+  "id": "/parent-portal",
+  "categories": ["utilities", "productivity"],
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }
-

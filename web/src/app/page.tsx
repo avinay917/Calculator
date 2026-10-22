@@ -31,6 +31,10 @@ import {
   Battery,
   Wifi,
   Trash2,
+  X,
+  Share2,
+  MoreVertical,
+  CheckCircle,
 } from "lucide-react";
 
 interface ChildUser {
@@ -85,21 +89,45 @@ export default function ParentApp() {
   // PWA Install Prompt
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstallPwa, setCanInstallPwa] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
-  // 1. Listen to Auth State
+  // 1. Listen to Auth State and PWA install events
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
     });
 
-    window.addEventListener("beforeinstallprompt", (e: any) => {
+    // Check if already opened as installed standalone PWA
+    const isStandalone =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true);
+
+    if (!isStandalone) {
+      setCanInstallPwa(true);
+    }
+
+    const handleBeforeInstall = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setCanInstallPwa(true);
-    });
+    };
 
-    return () => unsub();
+    const handleAppInstalled = () => {
+      setCanInstallPwa(false);
+      setDeferredPrompt(null);
+      setShowInstallGuide(false);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      unsub();
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
   }, []);
 
   // 2. Fetch Children Linked to this Parent
@@ -189,11 +217,19 @@ export default function ParentApp() {
 
   // 4. Handle PWA Installation
   const handleInstallPwa = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setCanInstallPwa(false);
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === "accepted") {
+          setCanInstallPwa(false);
+          setDeferredPrompt(null);
+        }
+      } catch (e) {
+        setShowInstallGuide(true);
+      }
+    } else {
+      setShowInstallGuide(true);
     }
   };
 
@@ -411,15 +447,74 @@ export default function ParentApp() {
           {canInstallPwa && (
             <div className="mt-6 pt-4 border-t border-[#2B2B36] text-center">
               <button
+                type="button"
                 onClick={handleInstallPwa}
-                className="inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 font-medium"
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 hover:from-blue-600/30 hover:to-purple-600/30 border border-blue-500/30 rounded-xl text-blue-300 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-md"
               >
-                <Download className="w-3.5 h-3.5" />
-                Install Parent App on Phone
+                <Download className="w-4 h-4 text-blue-400" />
+                <span>📲 Install Parent App on Phone (PWA)</span>
               </button>
+              <p className="text-[10px] text-gray-400 mt-1.5">Direct home screen install • No APK updates needed</p>
             </div>
           )}
         </div>
+
+        {/* PWA Install Guide Modal (Login View) */}
+        {showInstallGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="w-full max-w-sm p-6 bg-[#1B1B24] border border-[#2E2E3C] rounded-2xl shadow-2xl relative">
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl">
+                  <Download className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Install Parent App</h3>
+                  <p className="text-[11px] text-gray-400">Phone Home Screen par Install karein</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs text-gray-300">
+                <div className="p-3 bg-[#14141B] border border-[#2B2B38] rounded-xl">
+                  <p className="font-semibold text-white flex items-center gap-1.5 mb-1.5">
+                    <Smartphone className="w-4 h-4 text-emerald-400" />
+                    Android Phone (Chrome)
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-300">
+                    <li>Browser me upar 3 dots (<MoreVertical className="w-3 h-3 inline text-gray-400" />) tap karein.</li>
+                    <li><span className="text-white font-medium">"Install app"</span> ya <span className="text-white font-medium">"Add to Home screen"</span> chunein.</li>
+                    <li>Phone ke app drawer me app save ho jayega.</li>
+                  </ol>
+                </div>
+
+                <div className="p-3 bg-[#14141B] border border-[#2B2B38] rounded-xl">
+                  <p className="font-semibold text-white flex items-center gap-1.5 mb-1.5">
+                    <Share2 className="w-4 h-4 text-blue-400" />
+                    iPhone / iPad (Safari)
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-300">
+                    <li>Safari me Share button (<Share2 className="w-3 h-3 inline text-gray-400" />) par tap karein.</li>
+                    <li>Neeche scroll karke <span className="text-white font-medium">"Add to Home Screen"</span> chunein.</li>
+                    <li>Upar "Add" par tap karein.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className="mt-5 w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition"
+              >
+                Theek Hai (Close)
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -904,6 +999,63 @@ export default function ParentApp() {
           );
         })}
       </nav>
+
+      {/* PWA Install Guide Modal (Dashboard View) */}
+      {showInstallGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm p-6 bg-[#1B1B24] border border-[#2E2E3C] rounded-2xl shadow-2xl relative">
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl">
+                <Download className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Install Parent App</h3>
+                <p className="text-[11px] text-gray-400">Phone Home Screen par Install karein</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-300">
+              <div className="p-3 bg-[#14141B] border border-[#2B2B38] rounded-xl">
+                <p className="font-semibold text-white flex items-center gap-1.5 mb-1.5">
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  Android Phone (Chrome)
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-300">
+                  <li>Browser me upar 3 dots (<MoreVertical className="w-3 h-3 inline text-gray-400" />) tap karein.</li>
+                  <li><span className="text-white font-medium">"Install app"</span> ya <span className="text-white font-medium">"Add to Home screen"</span> chunein.</li>
+                  <li>Phone ke app drawer me app save ho jayega.</li>
+                </ol>
+              </div>
+
+              <div className="p-3 bg-[#14141B] border border-[#2B2B38] rounded-xl">
+                <p className="font-semibold text-white flex items-center gap-1.5 mb-1.5">
+                  <Share2 className="w-4 h-4 text-blue-400" />
+                  iPhone / iPad (Safari)
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-300">
+                  <li>Safari me Share button (<Share2 className="w-3 h-3 inline text-gray-400" />) par tap karein.</li>
+                  <li>Neeche scroll karke <span className="text-white font-medium">"Add to Home Screen"</span> chunein.</li>
+                  <li>Upar "Add" par tap karein.</li>
+                </ol>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              className="mt-5 w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition"
+            >
+              Theek Hai (Close)
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

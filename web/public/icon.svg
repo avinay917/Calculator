@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E1E28"/>
+      <stop offset="100%" stop-color="#0F0F14"/>
+    </linearGradient>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#D946EF"/>
+    </linearGradient>
+    <linearGradient id="innerGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#8B5CF6" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded app squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGradient)"/>
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+
+  <!-- Shield with Glow -->
+  <g filter="url(#shadow)">
+    <path d="M256 80 L384 136 C384 264 256 360 256 400 C256 360 128 264 128 136 Z" 
+          fill="url(#shieldGradient)"/>
+    <path d="M256 80 L384 136 C384 264 256 360 256 400 C256 360 128 264 128 136 Z" 
+          fill="url(#innerGlow)"/>
+  </g>
+
+  <!-- Center Eye / Radar Circle symbolizing Guardian / Monitoring -->
+  <circle cx="256" cy="220" r="48" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="256" cy="220" r="28" fill="#1E1E28"/>
+  <circle cx="266" cy="210" r="10" fill="#6366F1"/>
+
+  <!-- Pulse waves below shield -->
+  <circle cx="256" cy="220" r="76" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="4" stroke-dasharray="8 6"/>
+</svg>
