@@ -4,9 +4,6 @@ const admin = require("firebase-admin");
 const DB_INSTANCE = "apnasatthilko-default-rtdb";
 const DB_URL = "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-// Fix: co-locate functions in asia-southeast1 to match RTDB trigger region
-const regionalFunctions = functions.region("asia-southeast1");
-
 if (!admin.apps.length) {
   admin.initializeApp({
     databaseURL: DB_URL
@@ -60,7 +57,7 @@ function hasChanged(before, after, fields) {
  * Triggers on /streams/{targetUid}/status on the correct database instance
  * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
  */
-exports.onStreamRequested = regionalFunctions.database
+exports.onStreamRequested = functions.database
   .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/status")
   .onWrite(async (change, context) => {
@@ -147,7 +144,7 @@ exports.onStreamRequested = regionalFunctions.database
  * Realtime Database Trigger: onSnapshotRequested
  * Triggers on /streams/{targetUid}/snapshotRequest
  */
-exports.onSnapshotRequested = regionalFunctions.database
+exports.onSnapshotRequested = functions.database
   .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/snapshotRequest")
   .onWrite(async (change, context) => {
@@ -183,7 +180,7 @@ exports.onSnapshotRequested = regionalFunctions.database
  * Realtime Database Trigger: onCommandSent
  * Triggers on /commands/{targetUid}/{command}
  */
-exports.onCommandSent = regionalFunctions.database
+exports.onCommandSent = functions.database
   .instance(DB_INSTANCE)
   .ref("/commands/{targetUid}/{command}")
   .onWrite(async (change, context) => {
@@ -221,7 +218,7 @@ exports.onCommandSent = regionalFunctions.database
  * Scheduled Cloud Function: Daily auto-cleanup for logs older than 30 days
  * Keeps Realtime Database fast, optimizes quotas, and prevents memory bloat.
  */
-  exports.cleanupOldData = regionalFunctions.pubsub
+  exports.cleanupOldData = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async (context) => {
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
