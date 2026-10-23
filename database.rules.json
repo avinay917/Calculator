@@ -1,11 +1,17 @@
 {
   "rules": {
     "users": {
+      ".read": "auth != null",
       ".indexOn": ["parentId", "role"],
       "$uid": {
-        ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid || root.child('users').child(auth.uid).child('parentId').val() == $uid)",
-        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)",
-        ".validate": "newData.hasChildren(['role']) && newData.child('role').isString() && (newData.child('role').val() == 'parent' || newData.child('role').val() == 'child')"
+        ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "parent_settings": {
+      "$parentId": {
+        ".read": "auth != null && auth.uid == $parentId",
+        ".write": "auth != null && auth.uid == $parentId"
       }
     },
     "streams": {
@@ -14,16 +20,22 @@
         ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
       }
     },
+    "audio_live": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+      }
+    },
     "signaling": {
       "$sessionId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (root.child('streams').child(auth.uid).child('sessionId').val() == $sessionId || root.child('users').child(auth.uid).child('role').val() == 'parent')",
+        ".write": "auth != null && (root.child('streams').child(auth.uid).child('sessionId').val() == $sessionId || root.child('users').child(auth.uid).child('role').val() == 'parent')"
       }
     },
     "recordings": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $childUid",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
         ".indexOn": ["timestamp"]
       }
     },
@@ -68,6 +80,13 @@
         ".indexOn": ["timestamp"]
       }
     },
+    "clipboard_logs": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
+        ".indexOn": ["timestamp"]
+      }
+    },
     "notifications": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
@@ -84,7 +103,7 @@
     "snapshots": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $childUid",
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
         ".indexOn": ["timestamp"]
       }
     },
@@ -110,7 +129,7 @@
     "commands": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'"
+        ".write": "auth != null && (auth.uid == $childUid || (root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'))"
       }
     },
     "location_history": {
@@ -160,11 +179,16 @@
         ".indexOn": ["timestamp"]
       }
     },
+    "child_pairing_codes": {
+      "$childUid": {
+        ".read": "auth != null && auth.uid == $childUid",
+        ".write": "auth != null && auth.uid == $childUid"
+      }
+    },
     "pairing_codes": {
       "$code": {
-        ".read": "auth != null && $code.matches(/^[0-9]{6}$/) && data.child('isUsed').val() != true && data.child('createdAt').isNumber() && now - data.child('createdAt').val() <= 600000",
-        ".write": "auth != null && (data.exists() ? (data.child('parentUid').val() == auth.uid || (data.child('isUsed').val() != true && newData.child('linkedChildUid').val() == auth.uid && newData.child('isUsed').val() == true && newData.child('parentUid').val() == data.child('parentUid').val() && newData.child('createdAt').val() == data.child('createdAt').val())) : newData.child('parentUid').val() == auth.uid)",
-        ".validate": "newData.child('parentUid').isString() && newData.child('parentUid').val() == (data.exists() ? data.child('parentUid').val() : auth.uid) && newData.child('createdAt').isNumber() && (!newData.child('isUsed').exists() || newData.child('isUsed').isBoolean()) && (!newData.child('linkedChildUid').exists() || newData.child('linkedChildUid').isString())"
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('childUid').val() == auth.uid)"
       }
     },
     "youtube_history": {
