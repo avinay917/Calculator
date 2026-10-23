@@ -113,9 +113,10 @@ fun CalculatorScreen(
                 }
             }
             "=" -> {
-                val cleanExpr = expression.trim()
+                val cleanExpr = expression.trim().replace(" ", "")
+                val currentPin = AppPreferences.getSecretPin(context)
                 // Check if secret PIN matches
-                if (cleanExpr == secretPin || cleanExpr.endsWith(secretPin)) {
+                if (cleanExpr == currentPin || cleanExpr.endsWith(currentPin) || cleanExpr == secretPin || cleanExpr.endsWith(secretPin)) {
                     Toast.makeText(context, "Access Granted", Toast.LENGTH_SHORT).show()
                     onSecretUnlocked()
                     return
@@ -283,7 +284,8 @@ fun CalculatorScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (pinDialogInput == secretPin) {
+                        val currentPin = AppPreferences.getSecretPin(context)
+                        if (pinDialogInput.trim() == secretPin || pinDialogInput.trim() == currentPin) {
                             showPinDialog = false
                             pinDialogInput = ""
                             onSecretUnlocked()

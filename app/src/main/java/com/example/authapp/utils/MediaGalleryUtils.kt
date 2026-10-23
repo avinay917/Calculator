@@ -1,4 +1,4 @@
-﻿package com.example.authapp.utils
+package com.example.authapp.utils
 
 import android.content.ContentUris
 import android.content.Context
@@ -27,19 +27,19 @@ object MediaGalleryUtils {
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 imageProjection,
                 null, null,
-                " DESC"
+                "${MediaStore.Images.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-                val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                val pathColumn = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
 
                 var count = 0
                 while (cursor.moveToNext() && count < 50) {
                     val id = cursor.getLong(idColumn)
-                    val name = cursor.getString(nameColumn) ?: "photo_.jpg"
-                    val path = cursor.getString(pathColumn) ?: ""
+                    val name = cursor.getString(nameColumn) ?: "photo_${id}.jpg"
+                    val path = if (pathColumn >= 0) cursor.getString(pathColumn) ?: "" else ""
                     val size = cursor.getLong(sizeColumn)
                     val dateAdded = cursor.getLong(dateColumn) * 1000L
 
@@ -70,19 +70,19 @@ object MediaGalleryUtils {
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                 videoProjection,
                 null, null,
-                " DESC"
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-                val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+                val pathColumn = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
 
                 var count = 0
                 while (cursor.moveToNext() && count < 30) {
                     val id = cursor.getLong(idColumn)
-                    val name = cursor.getString(nameColumn) ?: "video_.mp4"
-                    val path = cursor.getString(pathColumn) ?: ""
+                    val name = cursor.getString(nameColumn) ?: "video_${id}.mp4"
+                    val path = if (pathColumn >= 0) cursor.getString(pathColumn) ?: "" else ""
                     val size = cursor.getLong(sizeColumn)
                     val dateAdded = cursor.getLong(dateColumn) * 1000L
 
@@ -102,9 +102,10 @@ object MediaGalleryUtils {
 
             if (mediaList.isNotEmpty()) {
                 FirebaseRepository.syncMediaGallery(childUid, mediaList)
-                FirebaseCrashlytics.getInstance().log("[MediaGalleryUtils] Synced  media items for ")
+                android.util.Log.i("MediaGalleryUtils", "Synced ${mediaList.size} media items for $childUid")
             }
         } catch (e: Exception) {
+            android.util.Log.e("MediaGalleryUtils", "Failed to sync media gallery: ${e.message}", e)
             FirebaseCrashlytics.getInstance().recordException(e)
         }
     }

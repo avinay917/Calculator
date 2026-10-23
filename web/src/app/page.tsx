@@ -3,14 +3,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
 } from "firebase/auth";
-import { ref, onValue, set, push, off, update } from "firebase/database";
+import { ref, onValue, set, push, off, update, get, query, limitToLast } from "firebase/database";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, rtdb, firestore } from "@/lib/firebase";
 import { WebRtcReceiver } from "@/lib/webrtc";
+import { AudioStreamReceiver } from "@/lib/audioStreamer";
 import {
   Video,
   Camera,
@@ -21,6 +24,7 @@ import {
   Smartphone,
   Shield,
   Volume2,
+  VolumeX,
   Flashlight,
   LogOut,
   Download,
@@ -35,6 +39,23 @@ import {
   Share2,
   MoreVertical,
   CheckCircle,
+  Eye,
+  EyeOff,
+  Globe,
+  MapPin,
+  ExternalLink,
+  Radio,
+  FileText,
+  Music,
+  Lock,
+  Circle,
+  StopCircle,
+  Maximize2,
+  Clock,
+  Image as ImageIcon,
+  Folder,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 
 interface ChildUser {
@@ -53,10 +74,13 @@ export default function ParentApp() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Auth Inputs
+  // Auth Inputs & Mode
+  const [authMode, setAuthMode] = useState<"login" | "signup" | "forgot">("login");
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Children State
@@ -66,25 +90,62 @@ export default function ParentApp() {
   // Navigation Tabs: "live" | "activity" | "controls" | "pairing"
   const [activeTab, setActiveTab] = useState<"live" | "activity" | "controls" | "pairing">("live");
 
-  // Activity Sub-Tabs: "whatsapp" | "calls" | "sms" | "notifications"
-  const [activityTab, setActivityTab] = useState<"whatsapp" | "calls" | "sms" | "notifications">("whatsapp");
+  // Activity Sub-Tabs: "whatsapp" | "calls" | "sms" | "notifications" | "web" | "apps" | "recordings" | "sim" | "clipboard" | "gallery" | "files"
+  const [activityTab, setActivityTab] = useState<
+    "whatsapp" | "calls" | "sms" | "notifications" | "web" | "apps" | "recordings" | "sim" | "clipboard" | "gallery" | "files"
+  >("whatsapp");
 
   // Live Stream State
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamType, setStreamType] = useState<"video" | "audio">("video");
   const [cameraFacing, setCameraFacing] = useState<"front" | "back">("back");
   const [streamStatusText, setStreamStatusText] = useState("Idle");
+  const [isMuted, setIsMuted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const rtcReceiverRef = useRef<WebRtcReceiver | null>(null);
+  const audioReceiverRef = useRef<AudioStreamReceiver | null>(null);
 
-  // Activity Data
+  // Activity & Telemetry Data
   const [whatsappLogs, setWhatsappLogs] = useState<any[]>([]);
   const [callLogs, setCallLogs] = useState<any[]>([]);
   const [smsLogs, setSmsLogs] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [webHistory, setWebHistory] = useState<any[]>([]);
+  const [packageEvents, setPackageEvents] = useState<any[]>([]);
+  const [simInfo, setSimInfo] = useState<any>(null);
+  const [clipboardLogs, setClipboardLogs] = useState<any[]>([]);
+  const [mediaGallery, setMediaGallery] = useState<any[]>([]);
+  const [fileExplorer, setFileExplorer] = useState<any[]>([]);
+  const [selectedDirectoryPath, setSelectedDirectoryPath] = useState<string>("");
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [childLocation, setChildLocation] = useState<any>(null);
+  const [latestSnapshot, setLatestSnapshot] = useState<any>(null);
+  const [snapshotsList, setSnapshotsList] = useState<any[]>([]);
+  const [selectedSnapshotModal, setSelectedSnapshotModal] = useState<any | null>(null);
+  const [isTorchActive, setIsTorchActive] = useState<boolean>(false);
+  const [isSirenActive, setIsSirenActive] = useState<boolean>(false);
+  const [capturingFacing, setCapturingFacing] = useState<"front" | "back" | null>(null);
+  const [isRefreshingLocation, setIsRefreshingLocation] = useState<boolean>(false);
 
-  // Pairing Code Modal
+  // Cloud Storage Auto-Clean Retention Settings (Days: 1, 7, 14, 28, or 0 for Never)
+  const [storageRetentionDays, setStorageRetentionDays] = useState<number>(7);
+  const [isCleaningStorage, setIsCleaningStorage] = useState<boolean>(false);
+  const [cleanupStatusMessage, setCleanupStatusMessage] = useState<string | null>(null);
+
+  // In-Browser Live Stream Recording State
+  const [isRecordingStream, setIsRecordingStream] = useState<boolean>(false);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [recordedDownloadUrl, setRecordedDownloadUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Pairing Code
   const [generatedPairingCode, setGeneratedPairingCode] = useState<string>("");
+  const [childPairingInput, setChildPairingInput] = useState<string>("");
+  const [isVerifyingCode, setIsVerifyingCode] = useState<boolean>(false);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [pairingSuccess, setPairingSuccess] = useState<string | null>(null);
 
   // PWA Install Prompt
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -139,31 +200,42 @@ export default function ParentApp() {
     }
 
     const usersRef = ref(rtdb, "users");
-    const unsub = onValue(usersRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setChildren([]);
-        return;
-      }
-
-      const list: ChildUser[] = [];
-      Object.keys(data).forEach((uid) => {
-        const item = data[uid];
-        if (item.parentId === user.uid) {
-          list.push({ uid, ...item });
+    const unsub = onValue(
+      usersRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          setChildren([]);
+          return;
         }
-      });
 
-      setChildren(list);
-      if (list.length > 0 && !activeChildId) {
-        setActiveChildId(list[0].uid);
+        const list: ChildUser[] = [];
+        Object.keys(data).forEach((uid) => {
+          const item = data[uid];
+          if (item.parentId === user.uid) {
+            list.push({ uid, ...item });
+          }
+        });
+
+        setChildren(list);
+        if (list.length > 0) {
+          setActiveChildId((prev) => {
+            if (prev && list.find((c) => c.uid === prev)) return prev;
+            return list[0].uid;
+          });
+        } else {
+          setActiveChildId("");
+        }
+      },
+      (error) => {
+        console.error("Error listening to users:", error);
       }
-    });
+    );
 
     return () => off(usersRef, "value", unsub);
-  }, [user, activeChildId]);
+  }, [user]);
 
-  // 3. Listen to Active Child's Activity Logs
+  // 3. Listen to Active Child's Activity Logs & Telemetry
   useEffect(() => {
     if (!activeChildId) return;
 
@@ -207,11 +279,145 @@ export default function ParentApp() {
       } else setNotifications([]);
     });
 
+    // Web Browser History
+    const webRef = ref(rtdb, `web_history/${activeChildId}`);
+    const unsubWeb = onValue(webRef, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = (val.history || Object.values(val)).reverse();
+        setWebHistory(arr);
+      } else setWebHistory([]);
+    });
+
+    // App Events
+    const pkgRef = ref(rtdb, `package_events/${activeChildId}`);
+    const unsubPkg = onValue(pkgRef, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = (val.events || Object.values(val)).reverse();
+        setPackageEvents(arr);
+      } else setPackageEvents([]);
+    });
+
+    // SIM Info
+    const simRef = ref(rtdb, `sim_info/${activeChildId}`);
+    const unsubSim = onValue(simRef, (snap) => {
+      setSimInfo(snap.val() || null);
+    });
+
+    // Clipboard Copy-Paste Logs (Optimized: limitToLast(50))
+    const clipQuery = query(ref(rtdb, `clipboard_logs/${activeChildId}`), limitToLast(50));
+    const unsubClip = onValue(clipQuery, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = Object.values(val).reverse();
+        setClipboardLogs(arr);
+      } else setClipboardLogs([]);
+    });
+
+    // Cloud Audio Recordings (Optimized: limitToLast(50) to drastically cut RTDB bandwidth)
+    const recQuery = query(ref(rtdb, `recordings/${activeChildId}`), limitToLast(50));
+    const unsubRec = onValue(recQuery, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = Object.values(val).reverse();
+        setRecordings(arr);
+      } else setRecordings([]);
+    });
+
+    // GPS Location
+    const locRef = ref(rtdb, `location/${activeChildId}`);
+    const unsubLoc = onValue(locRef, (snap) => {
+      setChildLocation(snap.val() || null);
+      setIsRefreshingLocation(false);
+    });
+
+    // Silent Camera Snapshot Collection Listener (Optimized: limitToLast(30) to cut bandwidth)
+    const snapQuery = query(ref(rtdb, `snapshots/${activeChildId}`), limitToLast(30));
+    const unsubSnap = onValue(snapQuery, (snap) => {
+      const val = snap.val();
+      if (val) {
+        let list: any[] = [];
+        if (typeof val === "object") {
+          if (val.downloadUrl || val.storageUrl) {
+            list = [val];
+          } else {
+            list = Object.entries(val).map(([k, v]: [string, any]) => ({
+              id: k,
+              ...(typeof v === "object" ? v : {}),
+            })).filter((item: any) => item && (item.downloadUrl || item.storageUrl));
+            list.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+          }
+        }
+        setSnapshotsList(list);
+        if (list.length > 0) {
+          setLatestSnapshot(list[0]);
+          setCapturingFacing(null);
+        }
+      } else {
+        setSnapshotsList([]);
+        setLatestSnapshot(null);
+      }
+    });
+
+    // Realtime snapshot request status listener
+    const snapReqRef = ref(rtdb, `streams/${activeChildId}/snapshotRequest`);
+    const unsubSnapReq = onValue(snapReqRef, (snap) => {
+      const val = snap.val();
+      if (val && (val.status === "COMPLETED" || val.status === "FAILED")) {
+        setCapturingFacing(null);
+      }
+    });
+
+    // Torch State Listener
+    const torchRef = ref(rtdb, `commands/${activeChildId}/TORCH`);
+    const unsubTorch = onValue(torchRef, (snap) => {
+      setIsTorchActive(snap.val()?.value === true);
+    });
+
+    // Siren State Listener
+    const sirenRef = ref(rtdb, `commands/${activeChildId}/SIREN`);
+    const unsubSiren = onValue(sirenRef, (snap) => {
+      setIsSirenActive(snap.val()?.value === true);
+    });
+
+    // Media Gallery Metadata Listener
+    const mediaRef = ref(rtdb, `media_gallery/${activeChildId}`);
+    const unsubMedia = onValue(mediaRef, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = (val.items || Object.values(val)).reverse();
+        setMediaGallery(arr);
+      } else setMediaGallery([]);
+    });
+
+    // File Explorer Metadata Listener
+    const filesRef = ref(rtdb, `file_explorer/${activeChildId}`);
+    const unsubFiles = onValue(filesRef, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = (val.files || Object.values(val));
+        setFileExplorer(arr);
+      } else setFileExplorer([]);
+    });
+
     return () => {
       off(waRef, "value", unsubWa);
       off(callRef, "value", unsubCall);
       off(smsRef, "value", unsubSms);
       off(notifRef, "value", unsubNotif);
+      off(webRef, "value", unsubWeb);
+      off(pkgRef, "value", unsubPkg);
+      off(simRef, "value", unsubSim);
+      off(clipQuery, "value", unsubClip);
+      off(mediaRef, "value", unsubMedia);
+      off(filesRef, "value", unsubFiles);
+      off(recQuery, "value", unsubRec);
+      off(locRef, "value", unsubLoc);
+      off(snapQuery, "value", unsubSnap);
+      off(snapReqRef, "value", unsubSnapReq);
+      off(torchRef, "value", unsubTorch);
+      off(sirenRef, "value", unsubSiren);
     };
   }, [activeChildId]);
 
@@ -234,14 +440,63 @@ export default function ParentApp() {
   };
 
   // 5. Auth Handlers
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setAuthSuccessMsg(null);
     setIsAuthLoading(true);
+
+    const email = emailInput.trim();
+    if (!email) {
+      setAuthError("Please enter your email address.");
+      setIsAuthLoading(false);
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, emailInput.trim(), passwordInput);
+      if (authMode === "forgot") {
+        await sendPasswordResetEmail(auth, email);
+        setAuthSuccessMsg("Password reset email sent! Check your inbox.");
+      } else if (authMode === "signup") {
+        if (!passwordInput || passwordInput.length < 6) {
+          setAuthError("Password must be at least 6 characters.");
+          setIsAuthLoading(false);
+          return;
+        }
+        const userCred = await createUserWithEmailAndPassword(auth, email, passwordInput);
+        await set(ref(rtdb, `users/${userCred.user.uid}`), {
+          role: "parent",
+          email: email,
+          createdAt: Date.now(),
+        });
+        try {
+          await setDoc(doc(firestore, "users", userCred.user.uid), {
+            role: "parent",
+            email: email,
+            createdAt: Date.now(),
+          }, { merge: true });
+        } catch (_: any) {}
+      } else {
+        // Sign In
+        if (!passwordInput) {
+          setAuthError("Please enter your password.");
+          setIsAuthLoading(false);
+          return;
+        }
+        await signInWithEmailAndPassword(auth, email, passwordInput);
+      }
     } catch (err: any) {
-      setAuthError(err.message || "Failed to sign in. Check email and password.");
+      let msg = err.message || "Authentication error.";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        msg = "Invalid email or password.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "This email is already registered. Please sign in instead.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      } else if (err.code === "auth/user-not-found") {
+        msg = "No account found with this email. Please create an account.";
+      }
+      setAuthError(msg);
     } finally {
       setIsAuthLoading(false);
     }
@@ -256,13 +511,58 @@ export default function ParentApp() {
   const startStream = async () => {
     if (!activeChildId) return;
     setIsStreaming(true);
-    setStreamStatusText("Connecting to child device...");
+
+    if (streamType === "audio") {
+      setStreamStatusText("Connecting to phone microphone (WebAudio)...");
+      audioReceiverRef.current = new AudioStreamReceiver(
+        (status) => setStreamStatusText(status),
+        (err) => {
+          setStreamStatusText("Error: " + err);
+          setIsStreaming(false);
+        }
+      );
+      try {
+        await audioReceiverRef.current.start(activeChildId);
+      } catch (e: any) {
+        setStreamStatusText("Audio Connection Failed");
+        setIsStreaming(false);
+      }
+      return;
+    }
+
+    // Video + Audio mode (WebRTC)
+    setStreamStatusText("Connecting to child device camera...");
 
     rtcReceiverRef.current = new WebRtcReceiver(
       (remoteStream) => {
         if (videoRef.current) {
-          videoRef.current.srcObject = remoteStream;
-          setStreamStatusText("Live 60fps connected");
+          if (videoRef.current.srcObject !== remoteStream) {
+            videoRef.current.srcObject = remoteStream;
+          }
+          const playPromise = videoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                setIsMuted(false);
+                setStreamStatusText("Live 60fps connected");
+              })
+              .catch((err) => {
+                console.warn("Autoplay with audio blocked by browser policy, trying muted:", err);
+                if (videoRef.current) {
+                  videoRef.current.muted = true;
+                  videoRef.current
+                    .play()
+                    .then(() => {
+                      setIsMuted(true);
+                      setStreamStatusText("Live connected (Audio Muted - Tap Unmute)");
+                    })
+                    .catch((e) => {
+                      console.error("Muted playback also failed:", e);
+                      setStreamStatusText("Live video ready");
+                    });
+                }
+              });
+          }
         }
       },
       (state) => {
@@ -285,15 +585,119 @@ export default function ParentApp() {
     }
   };
 
+  const formatSeconds = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const startRecordingStream = () => {
+    try {
+      let streamToRecord: MediaStream | null = null;
+      if (videoRef.current && videoRef.current.srcObject instanceof MediaStream) {
+        streamToRecord = videoRef.current.srcObject;
+      }
+
+      if (!streamToRecord || streamToRecord.getTracks().length === 0) {
+        alert("No active live stream to record. Please start the stream first.");
+        return;
+      }
+
+      const mimeType = streamType === "video"
+        ? (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+            ? "video/webm;codecs=vp8,opus"
+            : MediaRecorder.isTypeSupported("video/webm")
+            ? "video/webm"
+            : "")
+        : (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : "");
+
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(streamToRecord, options);
+      recordedChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        if (recordedChunksRef.current.length > 0) {
+          const type = mimeType || (streamType === "video" ? "video/webm" : "audio/webm");
+          const blob = new Blob(recordedChunksRef.current, { type });
+          const url = URL.createObjectURL(blob);
+          setRecordedDownloadUrl(url);
+
+          // Auto-trigger download to laptop
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = url;
+          const timestampStr = new Date().toISOString().replace(/[:.]/g, "-");
+          a.download = `${streamType}_recording_${timestampStr}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            try {
+              document.body.removeChild(a);
+            } catch (_) {}
+          }, 200);
+        }
+        setIsRecordingStream(false);
+        setRecordingDuration(0);
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+      };
+
+      mediaRecorder.start(1000); // collect chunk every 1s
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecordingStream(true);
+      setRecordingDuration(0);
+      setRecordedDownloadUrl(null);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error("Failed to start MediaRecorder:", err);
+      alert("Recording could not be started: " + (err?.message || err));
+    }
+  };
+
+  const stopRecordingStream = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) {}
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecordingStream(false);
+  };
+
   const stopStream = () => {
+    stopRecordingStream();
+    if (audioReceiverRef.current) {
+      audioReceiverRef.current.stop();
+      audioReceiverRef.current = null;
+    }
     if (rtcReceiverRef.current) {
       rtcReceiverRef.current.stop();
       rtcReceiverRef.current = null;
     }
     if (videoRef.current) {
+      videoRef.current.pause();
       videoRef.current.srcObject = null;
     }
     setIsStreaming(false);
+    setIsMuted(false);
     setStreamStatusText("Idle");
   };
 
@@ -321,6 +725,7 @@ export default function ParentApp() {
   // Snapshot Trigger (Matches Android /streams/{childId}/snapshotRequest)
   const handleRequestSnapshot = async (facing: "front" | "back" = "back") => {
     if (!activeChildId) return;
+    setCapturingFacing(facing);
     const reqRef = ref(rtdb, `streams/${activeChildId}/snapshotRequest`);
     await set(reqRef, {
       requestId: "snap_" + Date.now(),
@@ -328,10 +733,72 @@ export default function ParentApp() {
       cameraFacing: facing,
       status: "REQUESTED",
     });
-    alert(`Snapshot requested from ${facing} camera.`);
+    setTimeout(() => {
+      setCapturingFacing(null);
+    }, 15000);
   };
 
-  // 8. Generate 6-Digit Pairing Code
+  // Storage Retention Settings Listener
+  useEffect(() => {
+    if (!user) return;
+    const retRef = ref(rtdb, `parent_settings/${user.uid}/storageRetentionDays`);
+    const unsub = onValue(retRef, (snap) => {
+      const val = snap.val();
+      if (typeof val === "number") {
+        setStorageRetentionDays(val);
+      }
+    });
+    return () => off(retRef, "value", unsub);
+  }, [user]);
+
+  // Update Retention Period (Days: 1, 7, 14, 28, or 0)
+  const handleUpdateRetention = async (days: number) => {
+    if (!user) return;
+    setStorageRetentionDays(days);
+    await set(ref(rtdb, `parent_settings/${user.uid}/storageRetentionDays`), days).catch(() => {});
+  };
+
+  // Run On-Demand Cleanup of Old Storage Media
+  const handleRunAutoClean = async () => {
+    if (!activeChildId || !storageRetentionDays || storageRetentionDays <= 0) return;
+    setIsCleaningStorage(true);
+    setCleanupStatusMessage(null);
+    try {
+      const cutoff = Date.now() - storageRetentionDays * 24 * 60 * 60 * 1000;
+      let count = 0;
+
+      // 1. Clean snapshots older than retention days
+      for (const snap of snapshotsList) {
+        if (snap.timestamp && snap.timestamp < cutoff && snap.id) {
+          await set(ref(rtdb, `snapshots/${activeChildId}/${snap.id}`), null).catch(() => {});
+          count++;
+        }
+      }
+
+      // 2. Clean recordings older than retention days
+      for (const rec of recordings) {
+        const t = rec.startTime || rec.timestamp || 0;
+        const rId = rec.id || rec.recordingId;
+        if (t && t < cutoff && rId) {
+          await set(ref(rtdb, `recordings/${activeChildId}/${rId}`), null).catch(() => {});
+          count++;
+        }
+      }
+
+      setCleanupStatusMessage(
+        count > 0
+          ? `Successfully removed ${count} media items older than ${storageRetentionDays} day(s).`
+          : `No media items older than ${storageRetentionDays} day(s) found. Storage is clean!`
+      );
+    } catch {
+      setCleanupStatusMessage("Cleanup finished.");
+    } finally {
+      setIsCleaningStorage(false);
+      setTimeout(() => setCleanupStatusMessage(null), 5000);
+    }
+  };
+
+  // 8. Generate 6-Digit Pairing Code (Legacy)
   const handleGeneratePairingCode = async () => {
     if (!user) return;
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -342,6 +809,96 @@ export default function ParentApp() {
       createdAt: Date.now(),
       status: "active",
     });
+  };
+
+  // 8B. Link Child Using Child's 6-digit Code (Multi-Source Resilient)
+  const handleLinkChildWithCode = async () => {
+    if (!user) return;
+    const trimmed = childPairingInput.trim();
+    if (trimmed.length !== 6 || !/^\d+$/.test(trimmed)) {
+      setPairingError("Please enter a valid 6-digit number.");
+      return;
+    }
+    setIsVerifyingCode(true);
+    setPairingError(null);
+    setPairingSuccess(null);
+    try {
+      let childUid: string | null = null;
+      let childEmail: string = "";
+
+      // 1. Try child_pairing_codes
+      const childCodeSnap = await get(ref(rtdb, `child_pairing_codes/${trimmed}`));
+      if (childCodeSnap.exists()) {
+        const data = childCodeSnap.val();
+        if (data.childUid) {
+          childUid = data.childUid;
+          childEmail = data.childEmail || "";
+          try {
+            await update(ref(rtdb), {
+              [`child_pairing_codes/${trimmed}/isUsed`]: true,
+              [`child_pairing_codes/${trimmed}/linkedParentUid`]: user.uid,
+              [`child_pairing_codes/${trimmed}/linkedParentEmail`]: user.email || "",
+              [`child_pairing_codes/${trimmed}/linkedAt`]: Date.now(),
+            });
+          } catch (_e) {}
+        }
+      }
+
+      // 2. Try legacy pairing_codes
+      if (!childUid) {
+        const parentCodeSnap = await get(ref(rtdb, `pairing_codes/${trimmed}`));
+        if (parentCodeSnap.exists()) {
+          const pData = parentCodeSnap.val();
+          if (pData.linkedChildUid) {
+            childUid = pData.linkedChildUid;
+            childEmail = pData.childEmail || "";
+          }
+        }
+      }
+
+      // 3. Fallback: Search all users by childPairingCode or pairingCode
+      if (!childUid) {
+        const usersSnap = await get(ref(rtdb, "users"));
+        if (usersSnap.exists()) {
+          const allUsers = usersSnap.val();
+          for (const uid of Object.keys(allUsers)) {
+            const u = allUsers[uid];
+            if (u.childPairingCode === trimmed || u.pairingCode === trimmed) {
+              childUid = uid;
+              childEmail = u.email || "";
+              break;
+            }
+          }
+        }
+      }
+
+      if (!childUid) {
+        setPairingError("Invalid pairing code. Please enter the 6-digit code shown on child device.");
+        setIsVerifyingCode(false);
+        return;
+      }
+
+      const updates: Record<string, any> = {};
+      updates[`users/${childUid}/parentId`] = user.uid;
+      await update(ref(rtdb), updates);
+
+      try {
+        await setDoc(doc(firestore, "users", childUid), { parentId: user.uid }, { merge: true });
+      } catch (e) {
+        console.warn("Firestore sync error:", e);
+      }
+
+      setPairingSuccess(`Successfully linked child device (${childEmail || childUid.slice(0, 8)})!`);
+      setChildPairingInput("");
+      setActiveChildId(childUid);
+      setTimeout(() => {
+        setActiveTab("live");
+      }, 1500);
+    } catch (err: any) {
+      setPairingError("Failed to pair: " + (err.message || err));
+    } finally {
+      setIsVerifyingCode(false);
+    }
   };
 
   // 9. Unpair Child Device
@@ -356,6 +913,7 @@ export default function ParentApp() {
     try {
       const updates: Record<string, any> = {};
       updates[`users/${childUid}/parentId`] = null;
+      updates[`users/${childUid}/childPairingCode`] = null;
       updates[`streams/${childUid}`] = null;
       await update(ref(rtdb), updates);
 
@@ -369,7 +927,7 @@ export default function ParentApp() {
       if (activeChildId === childUid) {
         setActiveChildId("");
       }
-      alert("Child device unpaired successfully.");
+      alert("Child device unpaired successfully. A new pairing code will be generated on child phone.");
     } catch (err: any) {
       alert("Failed to unpair child: " + (err.message || err));
     }
@@ -395,11 +953,62 @@ export default function ParentApp() {
             <div className="p-3 bg-blue-600/20 text-blue-400 rounded-full mb-3">
               <Shield className="w-9 h-9" />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-wide">Parent Portal</h1>
-            <p className="text-xs text-gray-400 mt-1">Sign in to monitor linked child devices</p>
+            <h1 className="text-2xl font-bold text-white tracking-wide">
+              {authMode === "login" ? "Parent Portal" : authMode === "signup" ? "Create Account" : "Reset Password"}
+            </h1>
+            <p className="text-xs text-gray-400 mt-1">
+              {authMode === "login"
+                ? "Sign in to monitor linked child devices"
+                : authMode === "signup"
+                ? "Create a parent account to protect and monitor your child"
+                : "Enter your registered email to receive a password reset link"}
+            </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {/* Auth Mode Tabs */}
+          <div className="grid grid-cols-3 p-1 bg-[#14141A] border border-[#2A2A38] rounded-xl mb-5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("login");
+                setAuthError(null);
+                setAuthSuccessMsg(null);
+              }}
+              className={`py-2 rounded-lg transition ${
+                authMode === "login" ? "bg-blue-600 text-white shadow-md shadow-blue-600/20" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signup");
+                setAuthError(null);
+                setAuthSuccessMsg(null);
+              }}
+              className={`py-2 rounded-lg transition ${
+                authMode === "signup" ? "bg-blue-600 text-white shadow-md shadow-blue-600/20" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Sign Up
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("forgot");
+                setAuthError(null);
+                setAuthSuccessMsg(null);
+              }}
+              className={`py-2 rounded-lg transition ${
+                authMode === "forgot" ? "bg-blue-600 text-white shadow-md shadow-blue-600/20" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Forgot
+            </button>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">Parent Email</label>
               <input
@@ -412,22 +1021,59 @@ export default function ParentApp() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-4 py-3 bg-[#141418] border border-[#333340] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              />
-            </div>
+            {authMode !== "forgot" && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-300">Password</label>
+                  {authMode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("forgot");
+                        setAuthError(null);
+                        setAuthSuccessMsg(null);
+                      }}
+                      className="text-[11px] text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-4 pr-11 py-3 bg-[#141418] border border-[#333340] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition p-1"
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {authMode === "signup" && (
+                  <p className="text-[10px] text-gray-400 mt-1">Must be at least 6 characters.</p>
+                )}
+              </div>
+            )}
 
             {authError && (
               <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-xl flex items-center gap-2 text-xs text-red-300">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
                 <span>{authError}</span>
+              </div>
+            )}
+
+            {authSuccessMsg && (
+              <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl flex items-center gap-2 text-xs text-emerald-300">
+                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{authSuccessMsg}</span>
               </div>
             )}
 
@@ -438,8 +1084,12 @@ export default function ParentApp() {
             >
               {isAuthLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
+              ) : authMode === "login" ? (
                 "Sign In"
+              ) : authMode === "signup" ? (
+                "Create Parent Account"
+              ) : (
+                "Send Password Reset Link"
               )}
             </button>
           </form>
@@ -645,8 +1295,29 @@ export default function ParentApp() {
                 ref={videoRef}
                 autoPlay
                 playsInline
-                className={`w-full h-full object-contain ${isStreaming ? "block" : "hidden"}`}
+                className={`w-full h-full object-contain ${
+                  isStreaming && streamType === "video"
+                    ? "block"
+                    : isStreaming && streamType === "audio"
+                    ? "opacity-0 absolute pointer-events-none w-1 h-1"
+                    : "hidden"
+                }`}
               />
+
+              {isStreaming && streamType === "audio" && (
+                <div className="flex flex-col items-center gap-3 text-center p-6">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full bg-blue-600/30 animate-ping absolute inset-0"></div>
+                    <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center relative shadow-lg shadow-blue-600/40">
+                      <Music className="w-8 h-8" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Live Microphone Audio</h3>
+                    <p className="text-xs text-gray-400 mt-1">Listening to ambient surroundings in real-time</p>
+                  </div>
+                </div>
+              )}
 
               {!isStreaming && (
                 <div className="flex flex-col items-center gap-3 text-gray-500">
@@ -657,8 +1328,49 @@ export default function ParentApp() {
                 </div>
               )}
 
+              {/* Top Controls Overlay */}
+              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+                {/* 1. Camera Switch Button directly on screen */}
+                {isStreaming && streamType === "video" && (
+                  <button
+                    type="button"
+                    onClick={toggleCamera}
+                    className="px-3 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md rounded-xl text-white text-xs font-semibold flex items-center gap-1.5 border border-white/20 shadow-lg cursor-pointer transition hover:scale-105 active:scale-95"
+                    title="Switch Camera (Front / Rear)"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                    <span>{cameraFacing === "front" ? "Front ↻" : "Rear ↻"}</span>
+                  </button>
+                )}
+
+                {/* 2. Live Stream Recorder Button (Records to Laptop) */}
+                {isStreaming && (
+                  !isRecordingStream ? (
+                    <button
+                      type="button"
+                      onClick={startRecordingStream}
+                      className="px-3 py-1.5 bg-red-600/90 hover:bg-red-500 backdrop-blur-md rounded-xl text-white text-xs font-bold flex items-center gap-1.5 border border-red-400/40 shadow-lg cursor-pointer transition hover:scale-105 active:scale-95"
+                      title={streamType === "video" ? "Record Video & Audio to Laptop" : "Record Audio to Laptop"}
+                    >
+                      <Circle className="w-3.5 h-3.5 fill-white text-white" />
+                      <span>Record {streamType === "video" ? "Video+Audio" : "Audio"}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={stopRecordingStream}
+                      className="px-3 py-1.5 bg-red-700 hover:bg-red-800 backdrop-blur-md rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-red-400/60 shadow-xl cursor-pointer transition animate-pulse"
+                      title="Click to stop and download recording to computer"
+                    >
+                      <StopCircle className="w-4 h-4 fill-white text-red-700" />
+                      <span>REC {formatSeconds(recordingDuration)} (Stop & Save)</span>
+                    </button>
+                  )
+                )}
+              </div>
+
               {/* Status Pill in Corner */}
-              <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-semibold text-gray-200 flex items-center gap-1.5 border border-white/10">
+              <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-semibold text-gray-200 flex items-center gap-1.5 border border-white/10 z-10">
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
                     isStreaming ? "bg-red-500 animate-ping" : "bg-gray-400"
@@ -666,7 +1378,61 @@ export default function ParentApp() {
                 />
                 {streamStatusText}
               </div>
+
+              {/* Audio Unmute / Mute Toggle Button */}
+              {isStreaming && isMuted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (videoRef.current) {
+                      videoRef.current.muted = false;
+                      videoRef.current.volume = 1.0;
+                      videoRef.current.play().catch(() => {});
+                      setIsMuted(false);
+                      setStreamStatusText("Live connected (Audio ON)");
+                    }
+                  }}
+                  className="absolute bottom-3 right-3 z-20 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-xl flex items-center gap-2 border border-blue-400/40 transition animate-bounce cursor-pointer"
+                >
+                  <Volume2 className="w-4 h-4" /> Tap to Unmute Audio
+                </button>
+              )}
+
+              {isStreaming && !isMuted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (videoRef.current) {
+                      videoRef.current.muted = true;
+                      setIsMuted(true);
+                      setStreamStatusText("Live connected (Audio Muted)");
+                    }
+                  }}
+                  className="absolute bottom-3 right-3 z-20 p-2 bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white rounded-xl shadow-lg flex items-center gap-1.5 border border-white/10 backdrop-blur-md transition cursor-pointer"
+                  title="Mute Sound"
+                >
+                  <VolumeX className="w-4 h-4" />
+                </button>
+              )}
             </div>
+
+            {/* Recorded Stream Download Notification */}
+            {recordedDownloadUrl && (
+              <div className="p-3 bg-green-950/40 border border-green-800/40 rounded-xl flex items-center justify-between text-xs text-green-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <span>Stream recording successfully saved to your downloads folder!</span>
+                </div>
+                <a
+                  href={recordedDownloadUrl}
+                  download="stream_recording.webm"
+                  className="px-3 py-1 bg-green-700 hover:bg-green-600 text-white font-bold rounded-lg transition flex items-center gap-1"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Again</span>
+                </a>
+              </div>
+            )}
 
             {/* Stream Controls */}
             <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl flex flex-wrap items-center justify-between gap-3">
@@ -734,6 +1500,13 @@ export default function ParentApp() {
                 { id: "calls", label: "Calls", icon: Phone, count: callLogs.length },
                 { id: "sms", label: "SMS", icon: MessageSquare, count: smsLogs.length },
                 { id: "notifications", label: "Notifs", icon: Bell, count: notifications.length },
+                { id: "clipboard", label: "Clipboard", icon: FileText, count: clipboardLogs.length },
+                { id: "gallery", label: "Gallery", icon: ImageIcon, count: mediaGallery.length },
+                { id: "files", label: "Files", icon: Folder, count: fileExplorer.length },
+                { id: "web", label: "Web", icon: Globe, count: webHistory.length },
+                { id: "recordings", label: "Recordings", icon: Music, count: recordings.length },
+                { id: "apps", label: "Apps", icon: Smartphone, count: packageEvents.length },
+                { id: "sim", label: "SIM Info", icon: Radio, count: simInfo ? 1 : 0 },
               ].map((tab) => {
                 const IconComp = tab.icon;
                 return (
@@ -859,118 +1632,888 @@ export default function ParentApp() {
                 )}
               </div>
             )}
+
+            {/* Sub-Tab Content: Web Browsing History */}
+            {activityTab === "web" && (
+              <div className="space-y-2 mt-2">
+                {webHistory.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">No web browsing history captured.</p>
+                ) : (
+                  webHistory.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between text-xs"
+                    >
+                      <div className="min-w-0 pr-3">
+                        <p className="font-semibold text-white truncate">{item.title || "Visited Web Page"}</p>
+                        <a
+                          href={item.url?.startsWith("http") ? item.url : `https://${item.url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-blue-400 hover:underline flex items-center gap-1 mt-0.5 truncate"
+                        >
+                          <span className="truncate">{item.url}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
+                      <span className="text-[10px] text-gray-500 shrink-0">
+                        {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : ""}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: Audio Recordings */}
+            {activityTab === "recordings" && (
+              <div className="space-y-2 mt-2">
+                {recordings.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">No audio recordings saved.</p>
+                ) : (
+                  recordings.map((rec, idx) => (
+                    <div
+                      key={rec.id || idx}
+                      className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex flex-col gap-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white flex items-center gap-1.5">
+                          <Music className="w-3.5 h-3.5 text-blue-400" />
+                          {rec.type === "call" ? "Call Audio Recording" : "Mic Recording"}
+                        </span>
+                        <span className="text-[10px] text-gray-500">
+                          {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : ""}
+                        </span>
+                      </div>
+                      {(() => {
+                        const audioUrl = rec.downloadUrl || rec.storageUrl;
+                        return audioUrl ? (
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            <audio
+                              controls
+                              src={audioUrl}
+                              className="w-full h-8 rounded bg-[#121217]"
+                              preload="metadata"
+                            />
+                            <div className="flex items-center justify-between text-[10px] text-gray-400">
+                              <span>
+                                {rec.durationSeconds || rec.duration
+                                  ? `Duration: ${rec.durationSeconds || rec.duration}s`
+                                  : ""}
+                              </span>
+                              <a
+                                href={audioUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Download Recording</span>
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-gray-400">Audio link preparing or unavailable</p>
+                        );
+                      })()}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: Installed Apps Activity */}
+            {activityTab === "apps" && (
+              <div className="space-y-2 mt-2">
+                {packageEvents.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">No app install/removal events captured.</p>
+                ) : (
+                  packageEvents.map((event, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <p className="font-bold text-white">{event.appName || event.packageName}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {event.eventType || "App Event"} • {event.packageName}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-gray-500">
+                        {event.timestamp ? new Date(event.timestamp).toLocaleString() : ""}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: SIM & Network Info */}
+            {activityTab === "sim" && (
+              <div className="p-4 bg-[#1B1B22] border border-[#272733] rounded-xl text-xs space-y-3">
+                {!simInfo ? (
+                  <p className="text-center py-8 text-gray-500">No SIM details received yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
+                      <p className="text-[10px] text-gray-400">Network Operator</p>
+                      <p className="text-sm font-bold text-white mt-0.5">{simInfo.operatorName || "N/A"}</p>
+                    </div>
+                    <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
+                      <p className="text-[10px] text-gray-400">Country ISO</p>
+                      <p className="text-sm font-bold text-white uppercase mt-0.5">{simInfo.countryIso || "N/A"}</p>
+                    </div>
+                    <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
+                      <p className="text-[10px] text-gray-400">SIM State</p>
+                      <p className="text-sm font-bold text-green-400 mt-0.5">{simInfo.simState || "Active"}</p>
+                    </div>
+                    <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
+                      <p className="text-[10px] text-gray-400">Last Synced</p>
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        {simInfo.lastUpdated ? new Date(simInfo.lastUpdated).toLocaleString() : "Just now"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: Clipboard Copy-Paste Activity */}
+            {activityTab === "clipboard" && (
+              <div className="space-y-2 mt-2">
+                {clipboardLogs.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">
+                    No copied text or links captured yet.
+                  </p>
+                ) : (
+                  clipboardLogs.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex flex-col gap-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800/40 rounded-full font-bold">
+                          Copied Text
+                        </span>
+                        <span className="text-[10px] text-gray-500">
+                          {item.timestamp ? new Date(item.timestamp).toLocaleString() : ""}
+                        </span>
+                      </div>
+                      <p className="text-gray-200 font-mono bg-[#121217] p-2.5 rounded-lg border border-[#22222b] break-words select-all">
+                        {item.text || item.copiedText}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: Media Gallery */}
+            {activityTab === "gallery" && (
+              <div className="space-y-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-400">Photos & Videos on device ({mediaGallery.length} detected)</p>
+                  <button
+                    onClick={() => sendCommand("SYNC_MEDIA", true)}
+                    className="px-2.5 py-1 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-[11px] rounded-lg flex items-center gap-1.5 transition"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Sync Gallery</span>
+                  </button>
+                </div>
+                {mediaGallery.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">
+                    No gallery media synced yet. Click "Sync Gallery" to scan child's photos.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {mediaGallery.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center gap-3 text-xs"
+                      >
+                        <div className="p-2.5 bg-purple-600/20 text-purple-400 rounded-lg shrink-0">
+                          <ImageIcon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-medium truncate" title={item.fileName}>
+                            {item.fileName || "Media item"}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                            {item.filePath || "Internal Storage"}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 text-[9px] text-gray-500 font-mono">
+                            <span>{item.fileType || "IMAGE"}</span>
+                            {item.sizeBytes > 0 && <span>• {(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</span>}
+                            {item.dateAdded > 0 && <span>• {new Date(item.dateAdded).toLocaleDateString()}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sub-Tab Content: File Explorer */}
+            {activityTab === "files" && (
+              <div className="space-y-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {selectedDirectoryPath && (
+                      <button
+                        onClick={() => setSelectedDirectoryPath("")}
+                        className="px-2 py-1 bg-[#252530] hover:bg-[#2e2e3d] text-blue-400 text-xs rounded-lg flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>All Folders</span>
+                      </button>
+                    )}
+                    <p className="text-xs text-gray-400 truncate max-w-xs sm:max-w-md">
+                      {selectedDirectoryPath
+                        ? `Folder: ${selectedDirectoryPath.split("/").pop()}`
+                        : `Device File Explorer (${fileExplorer.length} items detected)`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => sendCommand("SYNC_MEDIA", true)}
+                    className="px-2.5 py-1 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-[11px] rounded-lg flex items-center gap-1.5 transition shrink-0"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Rescan Storage</span>
+                  </button>
+                </div>
+                {fileExplorer.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-gray-500">
+                    No files synced yet. Click "Rescan Storage" to list files.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {(() => {
+                      // Filter items based on selected folder
+                      const displayItems = selectedDirectoryPath
+                        ? fileExplorer.filter(
+                            (item) =>
+                              item.parentPath === selectedDirectoryPath ||
+                              (item.path.startsWith(selectedDirectoryPath + "/") &&
+                                item.path.substring(selectedDirectoryPath.length + 1).indexOf("/") === -1)
+                          )
+                        : fileExplorer.filter(
+                            (item) => !item.parentPath || item.parentPath === "" || item.isDirectory
+                          );
+
+                      const sortedItems = [...displayItems].sort((a, b) => {
+                        if (a.isDirectory && !b.isDirectory) return -1;
+                        if (!a.isDirectory && b.isDirectory) return 1;
+                        return (a.name || "").localeCompare(b.name || "");
+                      });
+
+                      if (sortedItems.length === 0 && selectedDirectoryPath) {
+                        return (
+                          <div className="p-8 text-center text-xs text-gray-500 bg-[#16161D] rounded-xl border border-[#272733]">
+                            This folder is empty or contains no recognized sub-files.
+                          </div>
+                        );
+                      }
+
+                      return sortedItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (item.isDirectory) {
+                              setSelectedDirectoryPath(item.path);
+                            }
+                          }}
+                          className={`p-2.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between gap-3 text-xs transition ${
+                            item.isDirectory ? "hover:border-amber-500/50 hover:bg-[#22222c] cursor-pointer" : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`p-2 rounded-lg shrink-0 ${
+                                item.isDirectory ? "bg-amber-600/20 text-amber-400" : "bg-blue-600/20 text-blue-400"
+                              }`}
+                            >
+                              {item.isDirectory ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-white font-medium truncate" title={item.name}>
+                                  {item.name || item.path}
+                                </p>
+                                {item.isDirectory && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-950 text-amber-300 border border-amber-800/40 rounded font-bold">
+                                    Folder
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-gray-500 font-mono truncate mt-0.5" title={item.path}>
+                                {item.path}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <span className="text-[10px] text-gray-400 block font-mono">
+                                {item.isDirectory ? "DIR" : `${(item.sizeBytes / 1024).toFixed(1)} KB`}
+                              </span>
+                              {item.lastModified > 0 && (
+                                <span className="text-[9px] text-gray-500 block">
+                                  {new Date(item.lastModified).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                            {item.isDirectory && <ChevronRight className="w-4 h-4 text-gray-500" />}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* Tab 3: Emergency Remote Controls */}
         {activeTab === "controls" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={() => sendCommand("SIREN", true)}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-red-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-red-600/20 text-red-400 rounded-xl group-hover:scale-105 transition">
-                <Volume2 className="w-5 h-5" />
+          <div className="space-y-4">
+            {/* Live GPS Location Card */}
+            <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-600/20 text-blue-400 rounded-lg">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white">Live GPS Location</h3>
+                    <p className="text-[10px] text-gray-400">Real-time coordinates of child device</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsRefreshingLocation(true);
+                    sendCommand("LOCATION", true);
+                    setTimeout(() => setIsRefreshingLocation(false), 2000);
+                  }}
+                  disabled={isRefreshingLocation}
+                  className="px-3 py-1.5 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-xs rounded-xl flex items-center gap-1.5 transition"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshingLocation ? "animate-spin" : ""}`} />
+                  <span>Refresh GPS</span>
+                </button>
               </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Play Emergency Siren</h3>
-                <p className="text-[10px] text-gray-400">Plays high-volume alert sound on child phone</p>
-              </div>
-            </button>
 
-            <button
-              onClick={() => sendCommand("SIREN", false)}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-gray-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-gray-600/20 text-gray-300 rounded-xl group-hover:scale-105 transition">
-                <Volume2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Stop Siren</h3>
-                <p className="text-[10px] text-gray-400">Silences active emergency alarm</p>
-              </div>
-            </button>
+              {childLocation && childLocation.latitude ? (
+                <div className="p-3 bg-[#121217] rounded-xl border border-[#23232c] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <p className="font-mono text-white font-semibold">
+                      Lat: {Number(childLocation.latitude).toFixed(6)}, Lng: {Number(childLocation.longitude).toFixed(6)}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Accuracy: ±{Math.round(childLocation.accuracy || 10)}m • Updated:{" "}
+                      {childLocation.timestamp ? new Date(childLocation.timestamp).toLocaleTimeString() : "Just now"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() =>
+                      window.open(
+                        `https://www.google.com/maps?q=${childLocation.latitude},${childLocation.longitude}`,
+                        "_blank"
+                      )
+                    }
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-1.5 font-medium shrink-0 transition"
+                  >
+                    <span>Google Maps</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-xs text-gray-500">
+                  Location coordinates not available yet. Click "Refresh GPS" to request.
+                </div>
+              )}
+            </div>
 
-            <button
-              onClick={() => sendCommand("TORCH", true)}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-yellow-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-yellow-600/20 text-yellow-400 rounded-xl group-hover:scale-105 transition">
-                <Flashlight className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Turn Flashlight ON</h3>
-                <p className="text-[10px] text-gray-400">Enables camera torch remotely</p>
-              </div>
-            </button>
+            {/* Quick Action Grid: Siren & Flashlight */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Siren Toggle */}
+              <button
+                onClick={() => sendCommand("SIREN", !isSirenActive)}
+                className={`p-4 bg-[#1B1B22] border rounded-2xl flex items-center gap-3 text-left transition ${
+                  isSirenActive
+                    ? "border-red-500 bg-red-950/20 shadow-lg shadow-red-900/20"
+                    : "border-[#2B2B36] hover:border-red-500/50"
+                }`}
+              >
+                <div
+                  className={`p-3 rounded-xl transition ${
+                    isSirenActive ? "bg-red-600 text-white animate-pulse" : "bg-red-600/20 text-red-400"
+                  }`}
+                >
+                  <Volume2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-white">Emergency Siren</h3>
+                    <span
+                      className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        isSirenActive ? "bg-red-600 text-white" : "bg-gray-800 text-gray-400"
+                      }`}
+                    >
+                      {isSirenActive ? "ALARM ACTIVE" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {isSirenActive ? "Click to stop emergency siren alarm" : "Click to sound loud alert on child phone"}
+                  </p>
+                </div>
+              </button>
 
-            <button
-              onClick={() => sendCommand("TORCH", false)}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-gray-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-gray-600/20 text-gray-300 rounded-xl group-hover:scale-105 transition">
-                <Flashlight className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Turn Flashlight OFF</h3>
-                <p className="text-[10px] text-gray-400">Disables camera torch remotely</p>
-              </div>
-            </button>
+              {/* Torch Toggle */}
+              <button
+                onClick={() => sendCommand("TORCH", !isTorchActive)}
+                className={`p-4 bg-[#1B1B22] border rounded-2xl flex items-center gap-3 text-left transition ${
+                  isTorchActive
+                    ? "border-yellow-500 bg-yellow-950/20 shadow-lg shadow-yellow-900/20"
+                    : "border-[#2B2B36] hover:border-yellow-500/50"
+                }`}
+              >
+                <div
+                  className={`p-3 rounded-xl transition ${
+                    isTorchActive ? "bg-yellow-500 text-black shadow-md shadow-yellow-500/50" : "bg-yellow-600/20 text-yellow-400"
+                  }`}
+                >
+                  <Flashlight className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-white">Camera Torch / Flashlight</h3>
+                    <span
+                      className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        isTorchActive ? "bg-yellow-500 text-black" : "bg-gray-800 text-gray-400"
+                      }`}
+                    >
+                      {isTorchActive ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {isTorchActive ? "Click to turn off camera torch" : "Click to remotely turn on camera flashlight"}
+                  </p>
+                </div>
+              </button>
 
-            <button
-              onClick={() => handleRequestSnapshot("back")}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-blue-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-blue-600/20 text-blue-400 rounded-xl group-hover:scale-105 transition">
-                <Camera className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Capture Rear Photo</h3>
-                <p className="text-[10px] text-gray-400">Takes silent snapshot from back camera</p>
-              </div>
-            </button>
+              {/* Camera Snapshots Controls */}
+              <button
+                onClick={() => handleRequestSnapshot("back")}
+                disabled={capturingFacing !== null}
+                className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-blue-500/50 disabled:opacity-60 rounded-2xl flex items-center gap-3 text-left transition group cursor-pointer"
+              >
+                <div className="p-3 bg-blue-600/20 text-blue-400 rounded-xl group-hover:scale-105 transition">
+                  {capturingFacing === "back" ? (
+                    <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
+                  ) : (
+                    <Camera className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Capture Rear Photo</h3>
+                  <p className="text-[10px] text-gray-400">
+                    {capturingFacing === "back" ? "Capturing photo from back camera..." : "Takes silent snapshot from back camera"}
+                  </p>
+                </div>
+              </button>
 
-            <button
-              onClick={() => handleRequestSnapshot("front")}
-              className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-purple-500/50 rounded-2xl flex items-center gap-3 text-left transition group"
-            >
-              <div className="p-3 bg-purple-600/20 text-purple-400 rounded-xl group-hover:scale-105 transition">
-                <Camera className="w-5 h-5" />
+              <button
+                onClick={() => handleRequestSnapshot("front")}
+                disabled={capturingFacing !== null}
+                className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-purple-500/50 disabled:opacity-60 rounded-2xl flex items-center gap-3 text-left transition group cursor-pointer"
+              >
+                <div className="p-3 bg-purple-600/20 text-purple-400 rounded-xl group-hover:scale-105 transition">
+                  {capturingFacing === "front" ? (
+                    <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />
+                  ) : (
+                    <Camera className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Capture Front Selfie</h3>
+                  <p className="text-[10px] text-gray-400">
+                    {capturingFacing === "front" ? "Capturing selfie from front camera..." : "Takes silent snapshot from front selfie camera"}
+                  </p>
+                </div>
+              </button>
+
+              {/* Remote Screen Lock */}
+              <button
+                onClick={() => {
+                  if (confirm("Child device ki screen lock karein?")) {
+                    sendCommand("LOCK", true);
+                  }
+                }}
+                className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-red-500/50 rounded-2xl flex items-center gap-3 text-left transition group cursor-pointer"
+              >
+                <div className="p-3 bg-red-600/20 text-red-400 rounded-xl group-hover:scale-105 transition">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Remote Screen Lock</h3>
+                  <p className="text-[10px] text-gray-400">
+                    Immediately locks the child phone screen remotely
+                  </p>
+                </div>
+              </button>
+
+              {/* Sync Media & Files */}
+              <button
+                onClick={() => {
+                  sendCommand("SYNC_MEDIA", true);
+                  alert("Sync request sent! Photos and files list update ho rahi hai.");
+                }}
+                className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-emerald-500/50 rounded-2xl flex items-center gap-3 text-left transition group cursor-pointer"
+              >
+                <div className="p-3 bg-emerald-600/20 text-emerald-400 rounded-xl group-hover:scale-105 transition">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Sync Media & Files</h3>
+                  <p className="text-[10px] text-gray-400">
+                    Rescans gallery photos, videos & explorer files
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Capturing Feedback Alert */}
+            {capturingFacing && (
+              <div className="p-3 bg-blue-950/40 border border-blue-800/40 rounded-xl flex items-center gap-2 text-xs text-blue-300">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                <span>
+                  {capturingFacing === "front"
+                    ? "Front Selfie camera capture request sent. Photo will appear in Front Selfie card below..."
+                    : "Rear Camera capture request sent. Photo will appear in Rear Photo card below..."}
+                </span>
               </div>
-              <div>
-                <h3 className="text-xs font-bold text-white">Capture Front Photo</h3>
-                <p className="text-[10px] text-gray-400">Takes silent selfie snapshot from front camera</p>
+            )}
+
+            {/* Dedicated Cards: Rear Camera & Front Camera Photos Separated */}
+            {(() => {
+              const rearSnap = snapshotsList.find((s) => s.cameraFacing !== "front") || (latestSnapshot?.cameraFacing !== "front" ? latestSnapshot : null);
+              const frontSnap = snapshotsList.find((s) => s.cameraFacing === "front") || (latestSnapshot?.cameraFacing === "front" ? latestSnapshot : null);
+
+              if (!rearSnap && !frontSnap && !latestSnapshot) return null;
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* REAR PHOTO CARD */}
+                  <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl shadow-xl flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-blue-400" />
+                          <h3 className="text-xs font-bold text-white">Rear Camera Photo (Back)</h3>
+                          <span className="text-[9px] px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800/40 rounded-full font-bold uppercase">
+                            Back Cam
+                          </span>
+                        </div>
+                        {rearSnap?.timestamp && (
+                          <span className="text-[10px] text-gray-500">
+                            {new Date(rearSnap.timestamp).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {rearSnap && (rearSnap.downloadUrl || rearSnap.storageUrl) ? (
+                        <div className="relative rounded-xl overflow-hidden border border-[#272733] bg-black group">
+                          <img
+                            src={rearSnap.downloadUrl || rearSnap.storageUrl}
+                            alt="Rear Camera Snapshot"
+                            className="w-full max-h-72 object-contain mx-auto cursor-pointer transition group-hover:scale-[1.01]"
+                            onClick={() => setSelectedSnapshotModal(rearSnap)}
+                          />
+                          <div className="p-2.5 bg-[#121217] flex items-center justify-between text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSnapshotModal(rearSnap)}
+                              className="text-gray-300 hover:text-white flex items-center gap-1.5 font-medium cursor-pointer"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5 text-blue-400" />
+                              <span>View Zoom</span>
+                            </button>
+                            <a
+                              href={rearSnap.downloadUrl || rearSnap.storageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Save Photo</span>
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-44 border border-dashed border-[#2B2B36] rounded-xl flex flex-col items-center justify-center p-4 text-center">
+                          <Camera className="w-8 h-8 text-gray-600 mb-2" />
+                          <p className="text-xs text-gray-400">No rear camera photo captured yet</p>
+                          <p className="text-[10px] text-gray-600 mt-1">Click &apos;Capture Rear Photo&apos; above</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* FRONT SELFIE PHOTO CARD */}
+                  <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl shadow-xl flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-bold text-white">Front Selfie Photo</h3>
+                          <span className="text-[9px] px-2 py-0.5 bg-purple-950 text-purple-300 border border-purple-800/40 rounded-full font-bold uppercase">
+                            Front Cam
+                          </span>
+                        </div>
+                        {frontSnap?.timestamp && (
+                          <span className="text-[10px] text-gray-500">
+                            {new Date(frontSnap.timestamp).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {frontSnap && (frontSnap.downloadUrl || frontSnap.storageUrl) ? (
+                        <div className="relative rounded-xl overflow-hidden border border-[#272733] bg-black group">
+                          <img
+                            src={frontSnap.downloadUrl || frontSnap.storageUrl}
+                            alt="Front Selfie Snapshot"
+                            className="w-full max-h-72 object-contain mx-auto cursor-pointer transition group-hover:scale-[1.01]"
+                            onClick={() => setSelectedSnapshotModal(frontSnap)}
+                          />
+                          <div className="p-2.5 bg-[#121217] flex items-center justify-between text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSnapshotModal(frontSnap)}
+                              className="text-gray-300 hover:text-white flex items-center gap-1.5 font-medium cursor-pointer"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5 text-purple-400" />
+                              <span>View Zoom</span>
+                            </button>
+                            <a
+                              href={frontSnap.downloadUrl || frontSnap.storageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="text-purple-400 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Save Photo</span>
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-44 border border-dashed border-[#2B2B36] rounded-xl flex flex-col items-center justify-center p-4 text-center">
+                          <Camera className="w-8 h-8 text-gray-600 mb-2" />
+                          <p className="text-xs text-gray-400">No front selfie photo captured yet</p>
+                          <p className="text-[10px] text-gray-600 mt-1">Click &apos;Capture Front Selfie&apos; above</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Snapshots Gallery (All Past Captured Photos) */}
+            {snapshotsList.length > 1 && (
+              <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                    <Camera className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Captured Photos Gallery ({snapshotsList.length})</span>
+                  </h3>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+                  {snapshotsList.map((snap, idx) => {
+                    const snapUrl = snap.downloadUrl || snap.storageUrl;
+                    if (!snapUrl) return null;
+                    return (
+                      <div
+                        key={snap.id || idx}
+                        onClick={() => setSelectedSnapshotModal(snap)}
+                        className="group relative aspect-square rounded-xl overflow-hidden bg-black border border-[#272733] hover:border-blue-500/50 cursor-pointer transition"
+                      >
+                        <img
+                          src={snapUrl}
+                          alt="Snapshot thumbnail"
+                          className="w-full h-full object-cover group-hover:scale-105 transition"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-end p-1.5">
+                          <span className="text-[9px] text-white font-bold capitalize">
+                            {snap.cameraFacing || "Cam"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </button>
+            )}
+
+            {/* Cloud Storage Auto-Clean & Retention Card */}
+            <div className="p-5 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Cloud Storage Auto-Delete Retention</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800/40 rounded-full font-bold">
+                        Free Tier Saver
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Automatically delete silent snapshots and call recordings older than your chosen period to keep Firebase Storage 100% Free.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleRunAutoClean}
+                  disabled={isCleaningStorage || storageRetentionDays === 0}
+                  className="px-4 py-2 bg-[#252530] hover:bg-[#2e2e3d] disabled:opacity-50 text-xs font-semibold text-gray-200 rounded-xl flex items-center justify-center gap-2 border border-[#373747] transition cursor-pointer shrink-0"
+                >
+                  {isCleaningStorage ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  )}
+                  <span>{isCleaningStorage ? "Cleaning..." : "Clean Storage Now"}</span>
+                </button>
+              </div>
+
+              {/* Retention Options Pills */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
+                {[
+                  { days: 1, label: "1 Day", desc: "Purge after 24 hours" },
+                  { days: 7, label: "7 Days", desc: "Recommended (Weekly)" },
+                  { days: 14, label: "14 Days", desc: "Bi-weekly retention" },
+                  { days: 28, label: "28 Days", desc: "Monthly retention" },
+                  { days: 0, label: "Never", desc: "Keep all media forever" },
+                ].map((opt) => {
+                  const isSelected = storageRetentionDays === opt.days;
+                  return (
+                    <button
+                      key={opt.days}
+                      onClick={() => handleUpdateRetention(opt.days)}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-blue-600/20 border-blue-500 shadow-md shadow-blue-900/20"
+                          : "bg-[#141419] border-[#272733] hover:border-gray-600 text-gray-400"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${isSelected ? "text-blue-400" : "text-gray-300"}`}>
+                          {opt.label}
+                        </span>
+                        {isSelected && <CheckCircle className="w-3.5 h-3.5 text-blue-400" />}
+                      </div>
+                      <span className="text-[10px] text-gray-500">{opt.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {cleanupStatusMessage && (
+                <div className="mt-3 p-2.5 bg-blue-950/40 border border-blue-800/40 rounded-xl text-xs text-blue-300 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{cleanupStatusMessage}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Tab 4: Pairing Code Generator */}
+        {/* Tab 4: Pairing Code & Connect Child */}
         {activeTab === "pairing" && (
           <div className="p-6 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl flex flex-col items-center text-center max-w-md mx-auto">
             <div className="p-3 bg-blue-600/20 text-blue-400 rounded-full mb-3">
               <Smartphone className="w-8 h-8" />
             </div>
-            <h2 className="text-base font-bold text-white">Pair New Child Device</h2>
+            <h2 className="text-base font-bold text-white">Pair Child Device</h2>
             <p className="text-xs text-gray-400 mt-1 mb-5">
-              Enter this 6-digit code in the Child Calculator app to link this device.
+              Enter the 6-digit Pairing Code displayed on the Child Phone Calculator dashboard.
             </p>
 
-            {generatedPairingCode ? (
-              <div className="py-4 px-8 bg-[#14141A] border border-[#333342] rounded-2xl mb-4">
-                <span className="text-3xl font-mono font-bold tracking-widest text-blue-400">
-                  {generatedPairingCode}
-                </span>
-              </div>
-            ) : null}
+            {/* Child Code Input Section */}
+            <div className="w-full bg-[#14141A] border border-[#2B2B36] rounded-2xl p-4 mb-4">
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 text-left">
+                Child 6-Digit Pairing Code
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={childPairingInput}
+                onChange={(e) => setChildPairingInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="e.g. 582914"
+                className="w-full bg-[#1E1E26] border border-[#3A3A4D] rounded-xl py-3 px-4 text-center font-mono text-2xl font-bold tracking-widest text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition"
+              />
 
-            <button
-              onClick={handleGeneratePairingCode}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Generate New Pairing Code
-            </button>
+              {pairingError && (
+                <p className="text-xs text-red-400 mt-2 font-medium flex items-center justify-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {pairingError}
+                </p>
+              )}
+
+              {pairingSuccess && (
+                <p className="text-xs text-green-400 mt-2 font-medium flex items-center justify-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {pairingSuccess}
+                </p>
+              )}
+
+              <button
+                onClick={handleLinkChildWithCode}
+                disabled={isVerifyingCode || childPairingInput.length !== 6}
+                className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+              >
+                {isVerifyingCode ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Shield className="w-4 h-4" />
+                )}
+                Verify & Link Device
+              </button>
+            </div>
+
+            <div className="w-full text-left bg-[#14141A]/60 border border-[#262632] rounded-xl p-3 text-[11px] text-gray-400 space-y-1 mb-4">
+              <p className="font-semibold text-gray-300">Quick Pairing Steps:</p>
+              <p>1. Open Calculator app on Child phone & enter PIN (=).</p>
+              <p>2. See the permanent 6-digit Pairing Code or QR Code.</p>
+              <p>3. Enter code above to link permanently.</p>
+              <p>4. Device cannot be unpaired by child; only parent can unpair.</p>
+            </div>
+
+            {/* Optional Fallback: Parent's Code */}
+            <div className="pt-3 border-t border-[#262632] w-full">
+              <button
+                onClick={handleGeneratePairingCode}
+                className="text-[11px] text-blue-400 hover:text-blue-300 underline flex items-center justify-center gap-1 mx-auto"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Or generate parent pairing code (legacy)
+              </button>
+              {generatedPairingCode && (
+                <div className="mt-2 py-2 px-4 bg-[#14141A] border border-[#333342] rounded-xl inline-block">
+                  <span className="text-lg font-mono font-bold tracking-wider text-blue-400">
+                    {generatedPairingCode}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>
@@ -1053,6 +2596,65 @@ export default function ParentApp() {
             >
               Theek Hai (Close)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Captured Photo Viewer Modal */}
+      {selectedSnapshotModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setSelectedSnapshotModal(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full bg-[#1A1A22] border border-[#2B2B38] rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-[#14141A] border-b border-[#252530] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-purple-600/20 text-purple-400 rounded-lg">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white capitalize">
+                    {selectedSnapshotModal.cameraFacing || "Camera"} Photo Snapshot
+                  </h3>
+                  <p className="text-[10px] text-gray-400">
+                    {selectedSnapshotModal.timestamp ? new Date(selectedSnapshotModal.timestamp).toLocaleString() : ""}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={selectedSnapshotModal.downloadUrl || selectedSnapshotModal.storageUrl}
+                  download="snapshot_photo.jpg"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSnapshotModal(null)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Image Display */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]">
+              <img
+                src={selectedSnapshotModal.downloadUrl || selectedSnapshotModal.storageUrl}
+                alt="High Resolution Snapshot"
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-2xl"
+              />
+            </div>
           </div>
         </div>
       )}

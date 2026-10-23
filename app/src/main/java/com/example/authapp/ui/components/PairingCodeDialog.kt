@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Smartphone
@@ -40,9 +41,31 @@ fun PairingCodeDialog(
     val context = LocalContext.current
     val currentUid = FirebaseRepository.currentUser?.uid ?: ""
     var pairingCode by remember { mutableStateOf<String?>(null) }
+    var selectedTab by remember { mutableStateOf(0) } // 0: Enter Child Code, 1: Show Parent Code
+    var childCodeInput by remember { mutableStateOf("") }
+    var isLinkingChild by remember { mutableStateOf(false) }
+    var linkChildError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLinkedSuccess by remember { mutableStateOf(false) }
+
+    fun linkChildDevice() {
+        val trimmed = childCodeInput.trim()
+        if (trimmed.length != 6) {
+            linkChildError = "Please enter full 6-digit code from Child screen"
+            return
+        }
+        isLinkingChild = true
+        linkChildError = null
+        FirebaseRepository.pairParentWithChildCode(currentUid, parentEmail, trimmed) { success, childUid, childEmail, err ->
+            isLinkingChild = false
+            if (success) {
+                isLinkedSuccess = true
+            } else {
+                linkChildError = err ?: "Failed to link child device"
+            }
+        }
+    }
 
     fun loadCode() {
         if (currentUid.isEmpty()) {
@@ -163,18 +186,146 @@ fun PairingCodeDialog(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = "Enter this 6-digit code on the Child Phone to connect it instantly with your account.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+                // Tab Switcher
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Enter Child Code", style = MaterialTheme.typography.labelMedium) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("My Parent Code", style = MaterialTheme.typography.labelMedium) }
+                    )
+                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                if (isLoading) {
+                if (isLinkedSuccess) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFFE8F5E9)),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Child Device Linked!",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Child phone has been successfully paired. Redirecting to dashboard...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.ui.graphics.Color(0xFF1B5E20),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else if (selectedTab == 0) {
+                    // Enter Child Code View
+                    Text(
+                        text = "Enter the 6-digit Pairing Code displayed on the Child's Calculator screen to connect immediately.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = childCodeInput,
+                        onValueChange = {
+                            if (it.length <= 6) {
+                                childCodeInput = it.filter { char -> char.isDigit() }
+                            }
+                        },
+                        label = { Text("Child 6-Digit Code") },
+                        placeholder = { Text("e.g. 583921") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        textStyle = MaterialTheme.typography.titleLarge.copy(
+                            textAlign = TextAlign.Center,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 4.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    linkChildError?.let { err ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = err,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { linkChildDevice() },
+                        enabled = !isLinkingChild && childCodeInput.length == 6,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (isLinkingChild) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Verify & Link Device")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "📱 Pairing via Child Screen:",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "1. Open Calculator app on Child phone & unlock.\n2. In Child screen, check the 6-digit code or QR code.\n3. Type that code above and click Verify.\n4. Device links permanently until you remove it.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                } else if (isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -205,38 +356,6 @@ fun PairingCodeDialog(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Retry")
                             }
-                        }
-                    }
-                } else if (isLinkedSuccess) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFFE8F5E9)),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = androidx.compose.ui.graphics.Color(0xFF2E7D32),
-                                modifier = Modifier.size(56.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Child Device Linked!",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Child phone has been successfully paired. Redirecting to dashboard...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.ui.graphics.Color(0xFF1B5E20),
-                                textAlign = TextAlign.Center
-                            )
                         }
                     }
                 } else {

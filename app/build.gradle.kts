@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.authapp"
         minSdk = 24
         targetSdk = 36
-        val buildVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 568
-        val buildVersionName = (project.findProperty("versionName") as? String) ?: "v2.568"
+        val buildVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull() ?: 605
+        val buildVersionName = (project.findProperty("versionName") as? String) ?: "v2.605"
         versionCode = buildVersionCode
         versionName = buildVersionName
     }
@@ -118,6 +118,9 @@ dependencies {
 
   // Encryption at rest
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+  // QR Code generator
+  implementation("com.google.zxing:core:3.5.3")
 
   // DataStore for secure preferences
   implementation("androidx.datastore:datastore-preferences:1.0.0")

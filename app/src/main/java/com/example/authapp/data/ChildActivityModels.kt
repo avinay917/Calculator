@@ -162,5 +162,12 @@ data class FileExplorerItem(
     val parentPath: String = ""
 )
 
+@IgnoreExtraProperties
+data class ClipboardLogItem(
+    val id: String = "",
+    val text: String = "",
+    val timestamp: Long = 0L
+)
+
 
 

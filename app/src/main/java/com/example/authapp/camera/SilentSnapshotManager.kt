@@ -16,19 +16,32 @@ import java.io.FileOutputStream
 
 class SilentSnapshotManager(private val context: Context) {
 
+    companion object {
+        @Volatile
+        var isCapturing = false
+    }
+
     @SuppressLint("MissingPermission")
     fun captureSnapshot(
         isFront: Boolean = false,
         onCaptured: (File) -> Unit,
         onError: (String) -> Unit
     ) {
+        if (isCapturing) {
+            onError("Camera hardware busy with snapshot capture")
+            return
+        }
+        isCapturing = true
+
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            isCapturing = false
             onError("Camera permission not granted")
             return
         }
 
         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
         if (cameraManager == null) {
+            isCapturing = false
             onError("CameraManager not available")
             return
         }
@@ -38,26 +51,54 @@ class SilentSnapshotManager(private val context: Context) {
             var targetCameraId: String? = null
 
             for (id in cameraManager.cameraIdList) {
-                val chars = cameraManager.getCameraCharacteristics(id)
-                val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                if (facing == targetFacing) {
-                    targetCameraId = id
-                    break
+                try {
+                    val chars = cameraManager.getCameraCharacteristics(id)
+                    val facing = chars.get(CameraCharacteristics.LENS_FACING)
+                    if (facing == targetFacing) {
+                        targetCameraId = id
+                        android.util.Log.d("SilentSnapshot", "Found matching camera id=$id for targetFacing=$targetFacing (isFront=$isFront)")
+                        break
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SilentSnapshot", "Error inspecting camera $id", e)
                 }
             }
 
             if (targetCameraId == null) {
-                targetCameraId = cameraManager.cameraIdList.firstOrNull()
+                targetCameraId = if (isFront) {
+                    cameraManager.cameraIdList.firstOrNull { it == "1" }
+                        ?: cameraManager.cameraIdList.firstOrNull { id ->
+                            try {
+                                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                            } catch (_: Exception) { false }
+                        }
+                } else {
+                    cameraManager.cameraIdList.firstOrNull { it == "0" }
+                        ?: cameraManager.cameraIdList.firstOrNull { id ->
+                            try {
+                                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+                            } catch (_: Exception) { false }
+                        }
+                } ?: cameraManager.cameraIdList.firstOrNull()
+                android.util.Log.w("SilentSnapshot", "Using fallback targetCameraId=$targetCameraId for isFront=$isFront")
             }
 
             if (targetCameraId == null) {
+                isCapturing = false
                 onError("No available camera found")
                 return
             }
 
+            val chars = cameraManager.getCameraCharacteristics(targetCameraId)
+            val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val jpegSizes = map?.getOutputSizes(ImageFormat.JPEG)
+            // Select best supported resolution <= 1920x1080 to prevent onConfigureFailed on Samsung sensors
+            val selectedSize = jpegSizes?.filter { it.width <= 1920 && it.height <= 1080 }?.maxByOrNull { it.width * it.height }
+                ?: jpegSizes?.firstOrNull() ?: android.util.Size(1280, 720)
+
             val handlerThread = android.os.HandlerThread("SilentSnapshotThread").apply { start() }
             val bgHandler = Handler(handlerThread.looper)
-            val imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
+            val imageReader = ImageReader.newInstance(selectedSize.width, selectedSize.height, ImageFormat.JPEG, 2)
             var isHandled = false
 
             val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
@@ -66,6 +107,7 @@ class SilentSnapshotManager(private val context: Context) {
             }
 
             fun cleanup() {
+                isCapturing = false
                 try {
                     if (wakeLock?.isHeld == true) wakeLock.release()
                 } catch (_: Exception) {}
@@ -204,6 +246,7 @@ class SilentSnapshotManager(private val context: Context) {
             }, bgHandler)
 
         } catch (e: Exception) {
+            isCapturing = false
             FirebaseCrashlytics.getInstance().recordException(e)
             onError(e.localizedMessage ?: "Unknown Camera2 error")
         }

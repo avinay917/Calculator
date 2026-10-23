@@ -168,12 +168,15 @@ object AppPreferences {
     }
 
     fun getSecretPin(context: Context): String {
-        val pin = decrypt(getPrefs(context).getString(KEY_SECRET_PIN, "") ?: "")
-        return if (pin.isNotEmpty()) pin else "1234"
+        val raw = getPrefs(context).getString(KEY_SECRET_PIN, "") ?: ""
+        val pin = decrypt(raw)
+        return if (pin.isNotEmpty()) pin else if (raw.isNotEmpty() && !raw.startsWith("enc:")) raw else "1234"
     }
 
     fun saveSecretPin(context: Context, pin: String) {
-        getPrefs(context).edit().putString(KEY_SECRET_PIN, encrypt(pin)).apply()
+        val enc = encrypt(pin)
+        val valueToSave = if (enc.isNotEmpty()) enc else pin
+        getPrefs(context).edit().putString(KEY_SECRET_PIN, valueToSave).commit()
     }
 
     fun isStealthModeEnabled(context: Context): Boolean {

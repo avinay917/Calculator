@@ -12,5 +12,6 @@ data class RecordingSession(
     val durationSeconds: Long = 0,
     val status: String = "SAVED",
     val storageUrl: String = "",
+    val downloadUrl: String = "",
     val localFilePath: String = ""
 )

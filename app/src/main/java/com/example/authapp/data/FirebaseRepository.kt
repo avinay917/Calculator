@@ -633,7 +633,10 @@ object FirebaseRepository {
         val extension = if (streamType.equals("video", ignoreCase = true)) "mp4" else "m4a"
         val ref = storage.reference.child("recordings/$childId/$recId.$extension")
 
-        ref.putFile(fileUri)
+        val mimeType = if (streamType.equals("video", ignoreCase = true)) "video/mp4" else "audio/mp4"
+        val metadata = com.google.firebase.storage.StorageMetadata.Builder().setContentType(mimeType).build()
+
+        ref.putFile(fileUri, metadata)
             .addOnSuccessListener {
                 ref.downloadUrl.addOnSuccessListener { downloadUri ->
                     val session = RecordingSession(
@@ -645,6 +648,7 @@ object FirebaseRepository {
                         durationSeconds = durationSeconds,
                         status = "SAVED",
                         storageUrl = downloadUri.toString(),
+                        downloadUrl = downloadUri.toString(),
                         localFilePath = localFilePath
                     )
                     database.reference.child("recordings").child(childId).child(recId).setValue(session)
@@ -921,7 +925,10 @@ object FirebaseRepository {
         // BUG FIX: Hardcoded ".jpg" tha — ab actual file extension fileUri se dynamically extract karo
         val ext = fileUri.path?.substringAfterLast('.')?.takeIf { it.length in 2..5 } ?: "jpg"
         val storageRef = storage.reference.child("snapshots/$childId/$timestamp.$ext")
-        storageRef.putFile(fileUri)
+        val mimeType = if (ext.equals("webp", ignoreCase = true)) "image/webp" else "image/jpeg"
+        val metadata = com.google.firebase.storage.StorageMetadata.Builder().setContentType(mimeType).build()
+
+        storageRef.putFile(fileUri, metadata)
             .addOnSuccessListener {
                 storageRef.downloadUrl.addOnSuccessListener { downloadUrl ->
                     val snapshotRef = database.reference.child("snapshots").child(childId).push()
@@ -932,7 +939,14 @@ object FirebaseRepository {
                         cameraFacing = cameraFacing
                     )
                     snapshotRef.setValue(info).addOnSuccessListener {
-                        database.reference.child("streams").child(childId).child("snapshotRequest").removeValue()
+                        database.reference.child("streams").child(childId).child("snapshotRequest").setValue(
+                            mapOf(
+                                "status" to "COMPLETED",
+                                "downloadUrl" to downloadUrl.toString(),
+                                "timestamp" to timestamp,
+                                "cameraFacing" to cameraFacing
+                            )
+                        )
                         onSuccess(info)
                     }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "DB Error") }
                 }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "URL Error") }
@@ -1644,9 +1658,139 @@ object FirebaseRepository {
         return listener
     }
 
+    fun getOrGenerateChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        if (childUid.isBlank()) {
+            onComplete(null, "Child UID is empty")
+            return
+        }
+        val userRef = database.reference.child("users").child(childUid)
+        userRef.child("childPairingCode").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val existingCode = snapshot.getValue(String::class.java)
+                if (!existingCode.isNullOrBlank()) {
+                    database.reference.child("child_pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(codeSnap: DataSnapshot) {
+                            val isUsed = codeSnap.child("isUsed").getValue(Boolean::class.java) ?: false
+                            if (codeSnap.exists() && !isUsed) {
+                                onComplete(existingCode, null)
+                            } else {
+                                createNewChildPairingCode(childUid, childEmail, onComplete)
+                            }
+                        }
+                        override fun onCancelled(err: DatabaseError) {
+                            createNewChildPairingCode(childUid, childEmail, onComplete)
+                        }
+                    })
+                } else {
+                    createNewChildPairingCode(childUid, childEmail, onComplete)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                createNewChildPairingCode(childUid, childEmail, onComplete)
+            }
+        })
+    }
+
+    fun generateNewChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        createNewChildPairingCode(childUid, childEmail, onComplete)
+    }
+
+    private fun createNewChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+        val random6Digit = (100000..999999).random().toString()
+        val codeData = mapOf<String, Any>(
+            "childUid" to childUid,
+            "childEmail" to childEmail,
+            "createdAt" to ServerValue.TIMESTAMP,
+            "isUsed" to false
+        )
+        database.reference.child("child_pairing_codes").child(random6Digit).setValue(codeData)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    database.reference.child("users").child(childUid).child("childPairingCode").setValue(random6Digit)
+                    onComplete(random6Digit, null)
+                } else {
+                    onComplete(null, task.exception?.localizedMessage ?: "Failed to generate child pairing code")
+                }
+            }
+    }
+
+    fun pairParentWithChildCode(
+        parentUid: String,
+        parentEmail: String,
+        code: String,
+        onResult: (success: Boolean, childUid: String?, childEmail: String?, errorMsg: String?) -> Unit
+    ) {
+        val trimmedCode = code.trim()
+        if (parentUid.isBlank()) {
+            onResult(false, null, null, "Parent UID is missing")
+            return
+        }
+        if (trimmedCode.length != 6 || !trimmedCode.all(Char::isDigit)) {
+            onResult(false, null, null, "Please enter a valid 6-digit code")
+            return
+        }
+
+        val codeRef = database.reference.child("child_pairing_codes").child(trimmedCode)
+        codeRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(currentData: com.google.firebase.database.MutableData): Transaction.Result {
+                if (currentData.value == null) return Transaction.abort()
+
+                val isUsed = currentData.child("isUsed").getValue(Boolean::class.java) ?: false
+                val childUid = currentData.child("childUid").getValue(String::class.java)
+                if (isUsed || childUid.isNullOrBlank()) {
+                    return Transaction.abort()
+                }
+
+                currentData.child("linkedParentUid").value = parentUid
+                currentData.child("linkedParentEmail").value = parentEmail
+                currentData.child("isUsed").value = true
+                currentData.child("linkedAt").value = ServerValue.TIMESTAMP
+                return Transaction.success(currentData)
+            }
+
+            override fun onComplete(
+                error: DatabaseError?,
+                committed: Boolean,
+                currentData: DataSnapshot?
+            ) {
+                if (error != null) {
+                    onResult(false, null, null, error.message)
+                    return
+                }
+                if (!committed || currentData == null) {
+                    onResult(false, null, null, "Pairing code is invalid, already used, or expired.")
+                    return
+                }
+
+                val childUid = currentData.child("childUid").getValue(String::class.java)
+                val childEmail = currentData.child("childEmail").getValue(String::class.java) ?: "Child Device"
+                if (childUid.isNullOrBlank()) {
+                    onResult(false, null, null, "Child pairing data corrupted")
+                    return
+                }
+
+                // Link child to parent
+                database.reference.child("users").child(childUid).child("parentId").setValue(parentUid)
+                    .addOnCompleteListener { updateTask ->
+                        if (updateTask.isSuccessful) {
+                            try {
+                                firestore.collection("users").document(childUid)
+                                    .set(mapOf("parentId" to parentUid), SetOptions.merge())
+                            } catch (_: Exception) {}
+                            onResult(true, childUid, childEmail, null)
+                        } else {
+                            onResult(false, null, null, updateTask.exception?.localizedMessage ?: "Failed to link device")
+                        }
+                    }
+            }
+        })
+    }
+
     fun unpairChild(childUid: String, onComplete: (Boolean, String?) -> Unit) {
         val updates = mapOf<String, Any?>(
             "users/$childUid/parentId" to null,
+            "users/$childUid/childPairingCode" to null,
             "streams/$childUid" to null
         )
         database.reference.updateChildren(updates).addOnCompleteListener { task ->
@@ -1671,6 +1815,22 @@ object FirebaseRepository {
 
     fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener =
         listenToChildNodeList(FirebasePaths.WHATSAPP_LOGS, childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp } }, onLogs)
+
+    // --- Clipboard Copy-Paste Monitoring ---
+    fun pushClipboardLog(childId: String, text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val ref = database.reference.child(FirebasePaths.CLIPBOARD_LOGS).child(childId).push()
+        val item = ClipboardLogItem(
+            id = ref.key ?: "",
+            text = trimmed,
+            timestamp = System.currentTimeMillis()
+        )
+        ref.setValue(item)
+    }
+
+    fun listenToClipboardLogs(childId: String, onLogs: (List<ClipboardLogItem>) -> Unit): ValueEventListener =
+        listenToChildNodeList(FirebasePaths.CLIPBOARD_LOGS, childId, limit = 100, transform = { it.sortedByDescending { c -> c.timestamp } }, onLogs)
 
     // --- Firebase Remote Config Feature Flags ---
     fun fetchRemoteConfig(onConfigFetched: (Map<String, Boolean>) -> Unit = {}) {

@@ -104,11 +104,8 @@ class WebRtcManager(
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule()
             } else {
-                val micSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    MediaRecorder.AudioSource.UNPROCESSED // Raw 100% full sensitivity without hardware noise gate clipping quiet voices
-                } else {
-                    MediaRecorder.AudioSource.MIC
-                }
+                // Use standard high-compatibility MIC source to prevent Samsung silent capture failures
+                val micSource = MediaRecorder.AudioSource.MIC
                 JavaAudioDeviceModule.builder(appContext)
                     .setUseHardwareAcousticEchoCanceler(false) // One-way surveillance: disable hardware AEC so mic gain is not suppressed
                     .setUseHardwareNoiseSuppressor(false)      // Disable aggressive hardware gating so quiet whispers are captured
@@ -750,7 +747,18 @@ class WebRtcManager(
 
         fun getDefaultIceServers(): List<PeerConnection.IceServer> {
             return listOf(
-                // Google STUN Servers (Low Latency)
+                // 1. PRIMARY: User Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Mumbai, India)
+                PeerConnection.IceServer.builder("stun:8.231.104.217:3478").createIceServer(),
+                PeerConnection.IceServer.builder("turn:8.231.104.217:3478")
+                    .setUsername("apnasatthi")
+                    .setPassword("ApnaPass@2026")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:8.231.104.217:3478?transport=tcp")
+                    .setUsername("apnasatthi")
+                    .setPassword("ApnaPass@2026")
+                    .createIceServer(),
+
+                // 2. Google STUN Servers (Direct P2P Fallback)
                 PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
@@ -759,30 +767,7 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
                 PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
 
-                // CRITICAL TURN SERVERS FOR STRICT SYMMETRIC NAT & CELLULAR CARRIERS (Jio / Airtel)
-                // 1. Metered OpenRelay (UDP, TCP, and TLS Port 443)
-                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
-                    .setUsername("openrelayproject")
-                    .setPassword("openrelayproject")
-                    .createIceServer(),
-                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443")
-                    .setUsername("openrelayproject")
-                    .setPassword("openrelayproject")
-                    .createIceServer(),
-                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443?transport=tcp")
-                    .setUsername("openrelayproject")
-                    .setPassword("openrelayproject")
-                    .createIceServer(),
-                PeerConnection.IceServer.builder("turns:openrelay.metered.ca:443?transport=tcp")
-                    .setUsername("openrelayproject")
-                    .setPassword("openrelayproject")
-                    .createIceServer(),
-                PeerConnection.IceServer.builder("turns:openrelay.metered.ca:5349?transport=tcp")
-                    .setUsername("openrelayproject")
-                    .setPassword("openrelayproject")
-                    .createIceServer(),
-
-                // 2. FreeSTUN Fallback TURN Servers (UDP & TCP)
+                // 3. Fallback TURN Servers (FreeSTUN UDP & TCP)
                 PeerConnection.IceServer.builder("turn:freestun.net:3478")
                     .setUsername("free")
                     .setPassword("free")

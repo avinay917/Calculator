@@ -2,30 +2,26 @@ import { rtdb } from "./firebase";
 import { ref, set, onValue, push, off } from "firebase/database";
 
 const ICE_SERVERS: RTCIceServer[] = [
+  // 1. PRIMARY: User Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Mumbai, India)
+  { urls: "stun:8.231.104.217:3478" },
+  {
+    urls: "turn:8.231.104.217:3478",
+    username: "apnasatthi",
+    credential: "ApnaPass@2026",
+  },
+  {
+    urls: "turn:8.231.104.217:3478?transport=tcp",
+    username: "apnasatthi",
+    credential: "ApnaPass@2026",
+  },
+
+  // 2. Google & Twilio STUN Servers (Direct P2P Fallback)
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" },
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turns:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
+
+  // 3. Fallback TURN Servers (FreeSTUN)
   {
     urls: "turn:freestun.net:3478",
     username: "free",
@@ -40,6 +36,7 @@ export class WebRtcReceiver {
   private listeners: Array<() => void> = [];
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private isRemoteDescriptionSet = false;
+  private remoteStream: MediaStream | null = null;
 
   constructor(
     private onRemoteStream: (stream: MediaStream) => void,
@@ -53,6 +50,7 @@ export class WebRtcReceiver {
     this.sessionId = "session_" + Date.now();
     this.pendingCandidates = [];
     this.isRemoteDescriptionSet = false;
+    this.remoteStream = new MediaStream();
 
     try {
       this.peerConnection = new RTCPeerConnection({
@@ -60,26 +58,52 @@ export class WebRtcReceiver {
         iceCandidatePoolSize: 2,
       });
 
+      // Explicitly request audio and video reception
+      this.peerConnection.addTransceiver("audio", { direction: "recvonly" });
+      this.peerConnection.addTransceiver("video", { direction: "recvonly" });
+
       this.peerConnection.ontrack = (event) => {
-        if (event.streams && event.streams[0]) {
-          this.onRemoteStream(event.streams[0]);
+        console.log("WebRTC ontrack received:", event.track.kind, event.track.id);
+        if (this.remoteStream) {
+          if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+            this.remoteStream.addTrack(event.track);
+          }
+          this.onRemoteStream(this.remoteStream);
         }
+        event.track.onunmute = () => {
+          console.log("WebRTC track onunmute:", event.track.kind);
+          if (this.remoteStream) {
+            this.onRemoteStream(this.remoteStream);
+          }
+        };
       };
 
       this.peerConnection.onconnectionstatechange = () => {
         if (this.peerConnection) {
-          this.onConnectionStateChange(this.peerConnection.connectionState);
+          const state = this.peerConnection.connectionState;
+          console.log("WebRTC peerConnection state:", state);
+          this.onConnectionStateChange(state);
         }
       };
 
+      this.peerConnection.oniceconnectionstatechange = () => {
+        console.log("WebRTC iceConnectionState:", this.peerConnection?.iceConnectionState);
+      };
+
       this.peerConnection.onicecandidate = (event) => {
-        if (event.candidate && this.sessionId) {
-          const candRef = push(ref(rtdb, `signaling/${this.sessionId}/candidates/parent`));
-          set(candRef, {
+        if (event.candidate && event.candidate.candidate && this.sessionId) {
+          const candPayload = {
+            sdpMid: event.candidate.sdpMid || "0",
+            sdpMLineIndex: typeof event.candidate.sdpMLineIndex === "number" ? event.candidate.sdpMLineIndex : 0,
+            sdp: event.candidate.candidate,
             candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex,
-          });
+          };
+
+          // 1. Send to child's primary listener node: parentCandidates
+          push(ref(rtdb, `signaling/${this.sessionId}/parentCandidates`), candPayload);
+
+          // 2. Also send to candidates/parent for compatibility
+          push(ref(rtdb, `signaling/${this.sessionId}/candidates/parent`), candPayload);
         }
       };
 
@@ -95,8 +119,9 @@ export class WebRtcReceiver {
       const sdpOfferRef = ref(rtdb, `signaling/${this.sessionId}/sdpOffer`);
       const unsubscribeOffer = onValue(sdpOfferRef, async (snapshot) => {
         const sdp = snapshot.val();
-        if (sdp && this.peerConnection && !this.isRemoteDescriptionSet && this.peerConnection.signalingState === "stable") {
+        if (sdp && this.peerConnection && !this.isRemoteDescriptionSet) {
           try {
+            console.log("Setting remote SDP offer from child...");
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
             this.isRemoteDescriptionSet = true;
 
@@ -104,41 +129,68 @@ export class WebRtcReceiver {
             for (const pending of this.pendingCandidates) {
               try {
                 await this.peerConnection.addIceCandidate(new RTCIceCandidate(pending));
-              } catch (_) {}
+              } catch (e) {
+                console.warn("Error adding queued ICE candidate:", e);
+              }
             }
             this.pendingCandidates = [];
 
             const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
 
+            console.log("Sending SDP answer to child...");
             // Send SDP Answer to child
             await set(ref(rtdb, `signaling/${this.sessionId}/sdpAnswer`), answer.sdp);
           } catch (e: any) {
+            console.error("SDP negotiation failed:", e);
             this.onError("SDP negotiation failed: " + (e?.message || e));
           }
         }
       });
       this.listeners.push(() => off(sdpOfferRef, "value", unsubscribeOffer));
 
-      // 3. Listen to Child ICE Candidates
-      const childCandidatesRef = ref(rtdb, `signaling/${this.sessionId}/candidates/child`);
-      const unsubscribeCandidates = onValue(childCandidatesRef, (snapshot) => {
+      // 3. Listen to Child ICE Candidates from both childCandidates and candidates/child
+      const processedCandidates = new Set<string>();
+      const handleCandidate = async (cand: any) => {
+        if (!cand) return;
+        const sdpString = cand.sdp || cand.candidate;
+        if (!sdpString || processedCandidates.has(sdpString)) return;
+        processedCandidates.add(sdpString);
+
+        const candInit: RTCIceCandidateInit = {
+          candidate: sdpString,
+          sdpMid: cand.sdpMid || "0",
+          sdpMLineIndex: typeof cand.sdpMLineIndex === "number" ? cand.sdpMLineIndex : 0,
+        };
+
+        if (!this.isRemoteDescriptionSet || !this.peerConnection) {
+          this.pendingCandidates.push(candInit);
+        } else {
+          try {
+            await this.peerConnection.addIceCandidate(new RTCIceCandidate(candInit));
+          } catch (e) {
+            console.warn("Failed to add candidate:", e);
+          }
+        }
+      };
+
+      const childCandidatesRef = ref(rtdb, `signaling/${this.sessionId}/childCandidates`);
+      const unsubCandidates = onValue(childCandidatesRef, (snapshot) => {
         const candidatesObj = snapshot.val();
         if (candidatesObj) {
-          Object.values(candidatesObj).forEach(async (cand: any) => {
-            if (cand && cand.candidate) {
-              if (!this.isRemoteDescriptionSet || !this.peerConnection) {
-                this.pendingCandidates.push(cand);
-              } else {
-                try {
-                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                } catch (_) {}
-              }
-            }
-          });
+          Object.values(candidatesObj).forEach(handleCandidate);
         }
       });
-      this.listeners.push(() => off(childCandidatesRef, "value", unsubscribeCandidates));
+      this.listeners.push(() => off(childCandidatesRef, "value", unsubCandidates));
+
+      const legacyChildCandidatesRef = ref(rtdb, `signaling/${this.sessionId}/candidates/child`);
+      const unsubLegacyCandidates = onValue(legacyChildCandidatesRef, (snapshot) => {
+        const candidatesObj = snapshot.val();
+        if (candidatesObj) {
+          Object.values(candidatesObj).forEach(handleCandidate);
+        }
+      });
+      this.listeners.push(() => off(legacyChildCandidatesRef, "value", unsubLegacyCandidates));
 
       return this.sessionId;
     } catch (err: any) {
@@ -157,6 +209,7 @@ export class WebRtcReceiver {
     this.listeners = [];
     this.pendingCandidates = [];
     this.isRemoteDescriptionSet = false;
+    this.remoteStream = null;
 
     if (this.childUid) {
       set(ref(rtdb, `streams/${this.childUid}/status`), {

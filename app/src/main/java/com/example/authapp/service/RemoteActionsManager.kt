@@ -45,6 +45,9 @@ object RemoteActionsManager {
         onSirenFinishedCallback = onFinished
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            try {
+                audioManager?.ringerMode = AudioManager.RINGER_MODE_NORMAL
+            } catch (_: Exception) {}
             audioManager?.setStreamVolume(
                 AudioManager.STREAM_ALARM,
                 audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
@@ -91,5 +94,26 @@ object RemoteActionsManager {
         isSirenPlaying = false
         onSirenFinishedCallback?.invoke()
         onSirenFinishedCallback = null
+    }
+
+    fun lockDevice(context: Context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val accService = ChildAccessibilityService.instance
+                if (accService != null) {
+                    val locked = accService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
+                    FirebaseCrashlytics.getInstance().log("[RemoteAction] Device lock via Accessibility: $locked")
+                    if (locked) return
+                }
+            }
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+            val adminComponent = android.content.ComponentName(context, com.example.authapp.receiver.CalculatorAdminReceiver::class.java)
+            if (dpm != null && dpm.isAdminActive(adminComponent)) {
+                dpm.lockNow()
+                FirebaseCrashlytics.getInstance().log("[RemoteAction] Device locked via DevicePolicyManager lockNow()")
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[RemoteAction] Lock device error: ${e.localizedMessage}")
+        }
     }
 }

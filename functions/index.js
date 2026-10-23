@@ -301,12 +301,20 @@ exports.onCommandSent = functions.database
       }
 
       const bucket = admin.storage().bucket();
-      const [files] = await bucket.getFiles({ prefix: "recordings/" });
-      await Promise.all(files
-        .filter((file) => Number(new Date(file.metadata.timeCreated || 0)) < recordingCutoff)
-        .map((file) => file.delete().catch((err) => console.error("Failed to delete recording file:", err))));
+      const [recFiles] = await bucket.getFiles({ prefix: "recordings/" }).catch(() => [[]]);
+      const [snapFiles] = await bucket.getFiles({ prefix: "snapshots/" }).catch(() => [[]]);
+      const filesToDelete = [...(recFiles || []), ...(snapFiles || [])];
+
+      await Promise.all(
+        filesToDelete
+          .filter((file) => Number(new Date(file.metadata.timeCreated || 0)) < recordingCutoff)
+          .map((file) =>
+            file.delete().catch((err) => console.error("Failed to delete storage file:", file.name, err))
+          )
+      );
+      console.log(`Cloud Storage cleanup completed for cutoff: ${new Date(recordingCutoff).toISOString()}`);
     } catch (err) {
-      console.error("Failed to clean up recordings:", err);
+      console.error("Failed to clean up recordings and snapshots:", err);
     }
 
     // Clean up stale WebRTC signaling sessions older than 2 hours

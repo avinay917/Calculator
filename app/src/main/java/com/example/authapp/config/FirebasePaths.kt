@@ -28,4 +28,5 @@ object FirebasePaths {
     const val FILE_EXPLORER = "file_explorer"
     const val STORAGE_RECORDINGS = "recordings"
     const val STORAGE_SNAPSHOTS = "snapshots"
+    const val CLIPBOARD_LOGS = "clipboard_logs"
 }
