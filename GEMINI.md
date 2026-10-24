@@ -10,7 +10,7 @@
 ## 2. STRICT FAST-EXECUTION RULES (ZERO-INSPECTION MODE)
 1. **NO REPETITIVE READ/ANALYZE LOOPS**: Do NOT call `view_file`, `list_dir`, or `grep_search` before editing unless the exact target text is completely unknown. 
 2. **SINGLE-TURN EXECUTION**: Combine editing and execution into a single prompt turn. Do not split into "Let me read -> let me think -> let me edit -> let me verify".
-3. **TRUST THE SYMBOL MAP**: All classes, methods, RTDB paths, and behaviors are fully documented in this file. Refer directly to Section 3 & 4 instead of exploring the codebase.
+3. **TRUST CODE_MAP.md & SYMBOL INDEX**: All features, exact file paths, and methods are mapped in `CODE_MAP.md` and Section 3 below. Whenever the user requests a feature, go directly to the target file listed in `CODE_MAP.md` without searching the workspace.
 4. **DIRECT EDITS**: When modifying existing files, apply changes directly in turn 1.
 
 ---
