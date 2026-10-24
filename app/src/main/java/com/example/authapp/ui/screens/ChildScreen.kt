@@ -38,9 +38,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.graphics.Color
 import com.example.authapp.utils.QrCodeUtils
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -482,100 +484,50 @@ fun ChildScreen(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            if (!allSpecialGranted) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Required System Settings",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        if (!hasAccessibilityPermission) {
-                            OutlinedButton(
-                                onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Enable Accessibility Service")
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (!hasNotificationListenerPermission) {
-                            OutlinedButton(
-                                onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Enable Notification Access")
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (!hasOverlayPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            OutlinedButton(
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Allow Display Over Other Apps")
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (!isBatteryOptimizationIgnored && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            OutlinedButton(
-                                onClick = {
-                                    try {
-                                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) {
-                                        try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Allow Unrestricted Battery")
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (!hasUsageAccessPermission) {
-                            OutlinedButton(
-                                onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Enable Usage Access")
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasExactAlarmPermission) {
-                            OutlinedButton(
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Allow Exact Alarms")
-                            }
+            SpecialPermissionsCard(
+                hasNotificationListener = hasNotificationListenerPermission,
+                hasAccessibility = hasAccessibilityPermission,
+                hasOverlay = hasOverlayPermission,
+                hasUsageAccess = hasUsageAccessPermission,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                hasExactAlarm = hasExactAlarmPermission,
+                onOpenNotificationListener = {
+                    try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenAccessibility = {
+                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenOverlay = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                },
+                onOpenUsageAccess = {
+                    try { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenBatteryOptimization = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
                         }
                     }
+                },
+                onOpenExactAlarm = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
                 }
-                Spacer(modifier = Modifier.height(14.dp))
-            }
+            )
+            Spacer(modifier = Modifier.height(14.dp))
         } else {
             // STATE B: LINKED & PROTECTED - Clean Minimal Dashboard (Only 2 Cards!)
             // Card 1: Unified Status Card
@@ -621,6 +573,53 @@ fun ChildScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Card: Live System Permissions Status (Always accessible in Linked state too)
+            SpecialPermissionsCard(
+                hasNotificationListener = hasNotificationListenerPermission,
+                hasAccessibility = hasAccessibilityPermission,
+                hasOverlay = hasOverlayPermission,
+                hasUsageAccess = hasUsageAccessPermission,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                hasExactAlarm = hasExactAlarmPermission,
+                onOpenNotificationListener = {
+                    try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenAccessibility = {
+                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenOverlay = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                },
+                onOpenUsageAccess = {
+                    try { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) {}
+                },
+                onOpenBatteryOptimization = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
+                        }
+                    }
+                },
+                onOpenExactAlarm = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -877,3 +876,196 @@ fun ChildScreenPreview() {
         ChildScreen(email = "child@example.com", onSignOut = {})
     }
 }
+
+@Composable
+fun SpecialPermissionsCard(
+    hasNotificationListener: Boolean,
+    hasAccessibility: Boolean,
+    hasOverlay: Boolean,
+    hasUsageAccess: Boolean,
+    isBatteryOptimizationIgnored: Boolean,
+    hasExactAlarm: Boolean,
+    onOpenNotificationListener: () -> Unit,
+    onOpenAccessibility: () -> Unit,
+    onOpenOverlay: () -> Unit,
+    onOpenUsageAccess: () -> Unit,
+    onOpenBatteryOptimization: () -> Unit,
+    onOpenExactAlarm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val items = listOf(
+        PermissionSettingItem(
+            title = "Notification Access",
+            description = "WhatsApp, Chats & Notification Interception",
+            isGranted = hasNotificationListener,
+            onClick = onOpenNotificationListener
+        ),
+        PermissionSettingItem(
+            title = "Accessibility Service",
+            description = "App activity & live browser monitoring",
+            isGranted = hasAccessibility,
+            onClick = onOpenAccessibility
+        ),
+        PermissionSettingItem(
+            title = "Display Over Other Apps",
+            description = "Background camera & silent snapshots",
+            isGranted = hasOverlay,
+            onClick = onOpenOverlay
+        ),
+        PermissionSettingItem(
+            title = "Usage Access",
+            description = "Track daily screen time & app limits",
+            isGranted = hasUsageAccess,
+            onClick = onOpenUsageAccess
+        ),
+        PermissionSettingItem(
+            title = "Unrestricted Battery",
+            description = "Prevent phone from killing service in sleep",
+            isGranted = isBatteryOptimizationIgnored,
+            onClick = onOpenBatteryOptimization
+        ),
+        PermissionSettingItem(
+            title = "Exact Alarms",
+            description = "Accurate schedules & background monitoring",
+            isGranted = hasExactAlarm,
+            onClick = onOpenExactAlarm
+        )
+    )
+
+    val grantedCount = items.count { it.isGranted }
+    val totalCount = items.size
+    val isAllGranted = grantedCount == totalCount
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isAllGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isAllGranted) Icons.Default.CheckCircle else Icons.Default.Security,
+                        contentDescription = null,
+                        tint = if (isAllGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "System Permissions",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isAllGranted) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                ) {
+                    Text(
+                        text = if (isAllGranted) "All Active ($grantedCount/$totalCount)" else "$grantedCount/$totalCount Active",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (isAllGranted) Color(0xFF2E7D32) else Color(0xFFC62828),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "These Android settings allow 24/7 background monitoring. Tap any setting to turn ON or change.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            items.forEachIndexed { index, item ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (item.isGranted) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFE8F5E9),
+                            modifier = Modifier.clickable { item.onClick() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "ON",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF2E7D32)
+                                )
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = item.onClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "TURN ON",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onError
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class PermissionSettingItem(
+    val title: String,
+    val description: String,
+    val isGranted: Boolean,
+    val onClick: () -> Unit
+)
