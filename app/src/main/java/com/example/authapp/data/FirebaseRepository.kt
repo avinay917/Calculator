@@ -53,6 +53,28 @@ object FirebaseRepository {
             onData(transform(snapshot.toListOf()))
         }
     }
+
+    inline fun <reified T> listenFirestoreCollection(
+        collection: String,
+        childId: String,
+        orderField: String = "timestamp",
+        limit: Long = 50,
+        crossinline onUpdate: (List<T>) -> Unit
+    ): ListenerRegistration {
+        return FirebaseFirestore.getInstance().collection(collection).document(childId)
+            .collection("items")
+            .orderBy(orderField, Query.Direction.DESCENDING)
+            .limit(limit)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    FirebaseCrashlytics.getInstance().recordException(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    onUpdate(snapshot.documents.mapNotNull { it.toObject(T::class.java) })
+                }
+            }
+    }
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
@@ -689,23 +711,8 @@ object FirebaseRepository {
         return listener
     }
 
-    fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<RecordingSession>()
-                for (child in snapshot.children) {
-                    val session = child.getValue(RecordingSession::class.java)
-                    if (session != null) list.add(session)
-                }
-                onRecordingsUpdated(list.reversed())
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase recordings cancelled] ${error.message}")
-            }
-        }
-        database.reference.child("recordings").child(childId).limitToLast(50).addValueEventListener(listener)
-        return listener
-    }
+    fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener =
+        listenToChildNodeList("recordings", childId, limit = 50, transform = { it.reversed() }, onData = onRecordingsUpdated)
 
     fun listenToAllRecordings(onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
         val listener = object : ValueEventListener {
@@ -988,21 +995,8 @@ object FirebaseRepository {
         return listener
     }
 
-    fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("snapshots").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<SnapshotInfo>()
-                for (child in snapshot.children) {
-                    child.getValue(SnapshotInfo::class.java)?.let { list.add(it) }
-                }
-                onSnapshots(list.sortedByDescending { it.timestamp })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener =
+        listenToChildNodeList("snapshots", childId, limit = 50, transform = { it.sortedByDescending { s -> s.timestamp } }, onData = onSnapshots)
 
     // --- Reactive Clean Architecture Flow Extensions (Best Practice) ---
     fun listenToChildUsersFlow(): Flow<List<User>> = callbackFlow {
@@ -1045,21 +1039,8 @@ object FirebaseRepository {
             }
     }
 
-    fun listenToAppUsage(childId: String, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ValueEventListener {
-        val ref = database.reference.child("app_usage").child(childId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<AppUsageInfo>()
-                for (item in snapshot.children) {
-                    item.getValue(AppUsageInfo::class.java)?.let { list.add(it) }
-                }
-                onUsageUpdated(list.sortedByDescending { it.totalTimeInForegroundMinutes })
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        }
-        ref.addValueEventListener(listener)
-        return listener
-    }
+    fun listenToAppUsage(childId: String, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ValueEventListener =
+        listenToChildNodeList("app_usage", childId, limit = 50, transform = { it.sortedByDescending { a -> a.totalTimeInForegroundMinutes } }, onData = onUsageUpdated)
 
     fun setAppBlocked(childId: String, packageName: String, isBlocked: Boolean) {
         if (childId.isEmpty() || packageName.isEmpty()) return
@@ -1308,22 +1289,8 @@ object FirebaseRepository {
         logSingleCallLog(childId, callLog)
     }
 
-    fun listenToChildCallLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<CallLogItem>) -> Unit): ListenerRegistration {
-        return firestore.collection("call_logs").document(childId)
-            .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(CallLogItem::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildCallLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<CallLogItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("call_logs", childId, "timestamp", limit, onUpdate)
 
     fun saveSmsLogToFirestore(childId: String, sms: SmsItem) {
         if (childId.isEmpty()) return
@@ -1337,22 +1304,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToChildSmsLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SmsItem>) -> Unit): ListenerRegistration {
-        return firestore.collection("sms_logs").document(childId)
-            .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(SmsItem::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildSmsLogsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SmsItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("sms_logs", childId, "timestamp", limit, onUpdate)
 
     fun saveWebHistoryToFirestore(childId: String, item: WebHistoryItem) {
         if (childId.isEmpty() || item.url.isEmpty()) return
@@ -1366,22 +1319,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToChildWebHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<WebHistoryItem>) -> Unit): ListenerRegistration {
-        return firestore.collection("web_history").document(childId)
-            .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(WebHistoryItem::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildWebHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<WebHistoryItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("web_history", childId, "timestamp", limit, onUpdate)
 
     fun saveNetworkHistoryToFirestore(childId: String, item: NetworkHistoryItem) {
         if (childId.isEmpty()) return
@@ -1395,22 +1334,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToChildNetworkHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<NetworkHistoryItem>) -> Unit): ListenerRegistration {
-        return firestore.collection("network_history").document(childId)
-            .collection("items")
-            .orderBy("connectedAt", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(NetworkHistoryItem::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildNetworkHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<NetworkHistoryItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("network_history", childId, "connectedAt", limit, onUpdate)
 
     fun savePackageEventToFirestore(childId: String, event: AppInstallEvent) {
         if (childId.isEmpty()) return
@@ -1424,22 +1349,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToChildPackageEventsFirestore(childId: String, limit: Long = 50, onUpdate: (List<AppInstallEvent>) -> Unit): ListenerRegistration {
-        return firestore.collection("package_events").document(childId)
-            .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(AppInstallEvent::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildPackageEventsFirestore(childId: String, limit: Long = 50, onUpdate: (List<AppInstallEvent>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("package_events", childId, "timestamp", limit, onUpdate)
 
     fun saveSecurityAlertToFirestore(childId: String, alert: SecurityAlert) {
         if (childId.isEmpty()) return
@@ -1453,22 +1364,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToChildSecurityAlertsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SecurityAlert>) -> Unit): ListenerRegistration {
-        return firestore.collection("security_alerts").document(childId)
-            .collection("items")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(SecurityAlert::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToChildSecurityAlertsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SecurityAlert>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("security_alerts", childId, "timestamp", limit, onUpdate)
 
     fun saveRecordingToFirestore(childId: String, session: RecordingSession) {
         if (childId.isEmpty()) return
@@ -1482,22 +1379,8 @@ object FirebaseRepository {
             .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
-    fun listenToRecordingsFirestore(childId: String, limit: Long = 50, onUpdate: (List<RecordingSession>) -> Unit): ListenerRegistration {
-        return firestore.collection("recordings").document(childId)
-            .collection("items")
-            .orderBy("startTime", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    crashlytics.recordException(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(RecordingSession::class.java) }
-                    onUpdate(list)
-                }
-            }
-    }
+    fun listenToRecordingsFirestore(childId: String, limit: Long = 50, onUpdate: (List<RecordingSession>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("recordings", childId, "startTime", limit, onUpdate)
 
     // --- 6-Digit In-App Pairing Code System ---
 
