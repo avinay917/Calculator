@@ -398,7 +398,8 @@ export default function ParentApp() {
     const unsubMedia = onValue(mediaRef, (snap) => {
       const val = snap.val();
       if (val) {
-        const arr = (val.items || Object.values(val)).reverse();
+        const raw = Array.isArray(val) ? val : (val.items || Object.values(val));
+        const arr = Array.isArray(raw) ? [...raw].reverse() : [];
         setMediaGallery(arr);
       } else setMediaGallery([]);
     });
@@ -408,7 +409,8 @@ export default function ParentApp() {
     const unsubFiles = onValue(filesRef, (snap) => {
       const val = snap.val();
       if (val) {
-        const arr = (val.files || Object.values(val));
+        const raw = Array.isArray(val) ? val : (val.files || Object.values(val));
+        const arr = Array.isArray(raw) ? [...raw] : [];
         setFileExplorer(arr);
       } else setFileExplorer([]);
     });
