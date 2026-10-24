@@ -54,7 +54,10 @@ class CloudSyncWorker(
             val success = uploadSingle(upload, file)
             if (success) {
                 PendingUploadQueue.remove(appContext, upload.id)
-                try { file.delete() } catch (_: Exception) {}
+                // Sirf temporary recordings delete karein, user ki device gallery photos ko kabhi delete na karein
+                if (!upload.streamType.equals("gallery_photo", ignoreCase = true)) {
+                    try { file.delete() } catch (_: Exception) {}
+                }
                 FirebaseCrashlytics.getInstance().log(
                     "[CloudSync] ✅ Uploaded & queued entry removed: ${upload.streamType} (${upload.durationSeconds}s)"
                 )

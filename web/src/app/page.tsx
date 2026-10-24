@@ -1687,6 +1687,9 @@ export default function ParentApp() {
             blockedPackages={blockedPackages}
             onToggleBlockApp={handleToggleBlockApp}
             onUninstallApp={handleUninstallApp}
+            snapshotsList={snapshotsList}
+            handleRequestSnapshot={handleRequestSnapshot}
+            capturingFacing={capturingFacing}
           />
         )}
 
