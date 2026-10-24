@@ -80,6 +80,7 @@ class ChildForegroundService : Service() {
     private var permissionShieldRunnable: Runnable? = null
     private var lastHistoryLocation: Location? = null
     private var lastHistoryTimestamp: Long = 0L
+    private var mediaContentObserver: android.database.ContentObserver? = null
 
     companion object {
         const val CHANNEL_ID = "ChildStreamChannel"
@@ -374,6 +375,51 @@ class ChildForegroundService : Service() {
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[ChildService] App Usage sync notice: ${e.localizedMessage}")
             }
+        }
+    }
+
+    private fun syncInstalledApps(uid: String) {
+        if (uid.isEmpty()) return
+        try {
+            val pm = packageManager
+            val installedApps = pm.getInstalledApplications(0)
+            val userApps = installedApps.filter {
+                (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != packageName
+            }
+            for (app in userApps.take(40)) {
+                val appName = pm.getApplicationLabel(app).toString()
+                val event = com.example.authapp.data.AppInstallEvent(
+                    packageName = app.packageName,
+                    appName = appName,
+                    eventType = "INSTALLED",
+                    timestamp = System.currentTimeMillis()
+                )
+                FirebaseRepository.recordPackageEvent(uid, event)
+            }
+            FirebaseCrashlytics.getInstance().log("[ChildService] Synced ${userApps.size} installed apps to package_events")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] syncInstalledApps notice: ${e.localizedMessage}")
+        }
+    }
+
+    private fun registerMediaObserver(uid: String) {
+        if (mediaContentObserver != null || uid.isEmpty()) return
+        try {
+            mediaContentObserver = object : android.database.ContentObserver(mainHandler) {
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    super.onChange(selfChange, uri)
+                    com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
+                    FirebaseCrashlytics.getInstance().log("[ChildService] MediaStore change detected — auto-synced gallery")
+                }
+            }
+            contentResolver.registerContentObserver(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                true,
+                mediaContentObserver!!
+            )
+            FirebaseCrashlytics.getInstance().log("[ChildService] MediaStore ContentObserver registered")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] MediaObserver register error: ${e.localizedMessage}")
         }
     }
 
@@ -960,6 +1006,12 @@ class ChildForegroundService : Service() {
 
         // Sync real-time App Usage to Firebase
         syncAppUsageStats(uid)
+
+        // Sync Installed Apps to package_events (Apps Tab)
+        syncInstalledApps(uid)
+
+        // Register Real-time MediaStore ContentObserver for auto-detecting new photos
+        registerMediaObserver(uid)
 
         // Start GPS Location tracking & Offline caching
         startLocationMonitoring()
@@ -1666,6 +1718,10 @@ class ChildForegroundService : Service() {
         batteryReceiver?.let {
             try { unregisterReceiver(it) } catch (e: Exception) {}
         }
+        mediaContentObserver?.let {
+            try { contentResolver.unregisterContentObserver(it) } catch (_: Exception) {}
+        }
+        mediaContentObserver = null
         super.onDestroy()
     }
 }

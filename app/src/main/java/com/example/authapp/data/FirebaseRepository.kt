@@ -1219,6 +1219,17 @@ object FirebaseRepository {
     fun listenToNetworkHistory(childId: String, onHistory: (List<NetworkHistoryItem>) -> Unit): ValueEventListener =
         listenToChildNodeList("network_history", childId, limit = 50, transform = { it.sortedByDescending { n -> n.connectedAt }.take(50) }, onHistory)
 
+    // --- Package Install/Uninstall Events (Feature 8) ---
+    fun recordPackageEvent(childId: String, event: AppInstallEvent) {
+        if (childId.isEmpty()) return
+        val ref = database.reference.child("package_events").child(childId).push()
+        ref.setValue(event.copy(id = ref.key ?: ""))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToPackageEvents(childId: String, onEvents: (List<AppInstallEvent>) -> Unit): ValueEventListener =
+        listenToChildNodeList("package_events", childId, limit = 50, transform = { it.sortedByDescending { e -> e.timestamp }.take(50) }, onData = onEvents)
+
     // --- SIM Card Info & Swap Alerts (Feature 7) ---
     fun saveSimCardInfo(childId: String, info: SimCardInfo) {
         if (childId.isEmpty()) return

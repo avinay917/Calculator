@@ -167,6 +167,17 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     FirebaseRepository.pushYouTubeLog(uid, ytItem)
                 }
 
+                // Browser URL / Search Interceptor Fallback (Active even without Accessibility)
+                if (packageName == "com.android.chrome" || packageName == "com.sec.android.app.sbrowser" ||
+                    packageName == "org.mozilla.firefox" || packageName == "com.brave.browser" ||
+                    packageName == "com.microsoft.emmx" || packageName == "com.opera.browser") {
+                    val pageTitle = title.ifEmpty { text }
+                    val pageUrl = if (text.startsWith("http://") || text.startsWith("https://") || text.contains(".com") || text.contains(".in")) text else "https://google.com/search?q=${android.net.Uri.encode(text)}"
+                    if (pageTitle.isNotEmpty()) {
+                        com.example.authapp.utils.WebHistoryManager.logVisitedUrl(applicationContext, pageUrl, pageTitle)
+                    }
+                }
+
                 // Keyword Safety Filter (Detects inappropriate/dangerous content in messages)
                 val sensitiveKeywords = listOf("threat", "danger", "urgent", "help", "kill", "die", "attack", "drugs", "suicide", "hate")
                 val combinedContent = "$title $text".lowercase()
