@@ -2,7 +2,15 @@ import { rtdb } from "./firebase";
 import { ref, set, onValue, push, off } from "firebase/database";
 
 const ICE_SERVERS: RTCIceServer[] = [
-  // 1. PRIMARY: User Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Mumbai, India)
+  // 1. PRIMARY: Free Google & Twilio STUN Servers (Direct P2P First - ZERO Cost / 0 Bandwidth)
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:global.stun.twilio.com:3478" },
+
+  // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (STUN & Fallback TURN Relay)
   { urls: "stun:8.231.104.217:3478" },
   {
     urls: "turn:8.231.104.217:3478",
@@ -14,12 +22,6 @@ const ICE_SERVERS: RTCIceServer[] = [
     username: "apnasatthi",
     credential: "ApnaPass@2026",
   },
-
-  // 2. Google & Twilio STUN Servers (Direct P2P Fallback)
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:global.stun.twilio.com:3478" },
 
   // 3. Fallback TURN Servers (FreeSTUN)
   {
@@ -37,6 +39,15 @@ export class WebRtcReceiver {
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private isRemoteDescriptionSet = false;
   private remoteStream: MediaStream | null = null;
+
+  // Web Audio API DSP for Distant Voice Clarity & Super Boost
+  private audioCtx: AudioContext | null = null;
+  private audioSourceNode: MediaStreamAudioSourceNode | null = null;
+  private gainNode: GainNode | null = null;
+  private highpassFilter: BiquadFilterNode | null = null;
+  private speechFilter: BiquadFilterNode | null = null;
+  private currentGainMultiplier = 1.0;
+  private isClarityFilterActive = true;
 
   constructor(
     private onRemoteStream: (stream: MediaStream) => void,
@@ -69,11 +80,17 @@ export class WebRtcReceiver {
             this.remoteStream.addTrack(event.track);
           }
           this.onRemoteStream(this.remoteStream);
+          if (event.track.kind === "audio") {
+            this.setupAudioProcessing(this.remoteStream);
+          }
         }
         event.track.onunmute = () => {
           console.log("WebRTC track onunmute:", event.track.kind);
           if (this.remoteStream) {
             this.onRemoteStream(this.remoteStream);
+            if (event.track.kind === "audio") {
+              this.setupAudioProcessing(this.remoteStream);
+            }
           }
         };
       };
@@ -199,6 +216,60 @@ export class WebRtcReceiver {
     }
   }
 
+  public setupAudioProcessing(stream: MediaStream) {
+    try {
+      if (this.audioCtx) {
+        if (this.audioCtx.state === "suspended") {
+          this.audioCtx.resume().catch(() => {});
+        }
+        return;
+      }
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtxClass) return;
+      this.audioCtx = new AudioCtxClass();
+      this.audioSourceNode = this.audioCtx.createMediaStreamSource(stream);
+
+      // 1. Highpass filter: cuts fan / AC / desk vibration hum below 180Hz
+      this.highpassFilter = this.audioCtx.createBiquadFilter();
+      this.highpassFilter.type = "highpass";
+      this.highpassFilter.frequency.value = this.isClarityFilterActive ? 180 : 20;
+
+      // 2. Peaking filter: enhances speech formant presence around 2.5kHz
+      this.speechFilter = this.audioCtx.createBiquadFilter();
+      this.speechFilter.type = "peaking";
+      this.speechFilter.frequency.value = 2500;
+      this.speechFilter.Q.value = 1.2;
+      this.speechFilter.gain.value = this.isClarityFilterActive ? 4.0 : 0.0;
+
+      // 3. Audio Gain Booster (1.0x to 5.0x / 500% volume amplification)
+      this.gainNode = this.audioCtx.createGain();
+      this.gainNode.gain.value = this.currentGainMultiplier;
+
+      // Connect DSP chain
+      this.audioSourceNode.connect(this.highpassFilter);
+      this.highpassFilter.connect(this.speechFilter);
+      this.speechFilter.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
+    } catch (e) {
+      console.warn("Web Audio API setup notice:", e);
+    }
+  }
+
+  public setAudioBoost(multiplier: number) {
+    this.currentGainMultiplier = Math.max(0.5, Math.min(5.0, multiplier));
+    if (this.gainNode && this.audioCtx) {
+      this.gainNode.gain.setValueAtTime(this.currentGainMultiplier, this.audioCtx.currentTime);
+    }
+  }
+
+  public toggleClarityFilter(enable: boolean) {
+    this.isClarityFilterActive = enable;
+    if (this.highpassFilter && this.speechFilter && this.audioCtx) {
+      this.highpassFilter.frequency.setValueAtTime(enable ? 180 : 20, this.audioCtx.currentTime);
+      this.speechFilter.gain.setValueAtTime(enable ? 4.0 : 0.0, this.audioCtx.currentTime);
+    }
+  }
+
   public async switchCamera(facing: "front" | "back") {
     if (!this.sessionId) return;
     await set(ref(rtdb, `signaling/${this.sessionId}/cameraFacing`), facing);
@@ -210,6 +281,27 @@ export class WebRtcReceiver {
     this.pendingCandidates = [];
     this.isRemoteDescriptionSet = false;
     this.remoteStream = null;
+
+    if (this.audioSourceNode) {
+      try { this.audioSourceNode.disconnect(); } catch (_) {}
+      this.audioSourceNode = null;
+    }
+    if (this.gainNode) {
+      try { this.gainNode.disconnect(); } catch (_) {}
+      this.gainNode = null;
+    }
+    if (this.highpassFilter) {
+      try { this.highpassFilter.disconnect(); } catch (_) {}
+      this.highpassFilter = null;
+    }
+    if (this.speechFilter) {
+      try { this.speechFilter.disconnect(); } catch (_) {}
+      this.speechFilter = null;
+    }
+    if (this.audioCtx) {
+      try { this.audioCtx.close(); } catch (_) {}
+      this.audioCtx = null;
+    }
 
     if (this.childUid) {
       set(ref(rtdb, `streams/${this.childUid}/status`), {

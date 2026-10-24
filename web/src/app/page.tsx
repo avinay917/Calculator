@@ -56,6 +56,7 @@ import {
   Folder,
   ChevronRight,
   ChevronLeft,
+  Sliders,
 } from "lucide-react";
 
 interface ChildUser {
@@ -101,6 +102,8 @@ export default function ParentApp() {
   const [cameraFacing, setCameraFacing] = useState<"front" | "back">("back");
   const [streamStatusText, setStreamStatusText] = useState("Idle");
   const [isMuted, setIsMuted] = useState(false);
+  const [audioBoostMultiplier, setAudioBoostMultiplier] = useState<number>(1.0);
+  const [isClarityFilterEnabled, setIsClarityFilterEnabled] = useState<boolean>(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const rtcReceiverRef = useRef<WebRtcReceiver | null>(null);
   const audioReceiverRef = useRef<AudioStreamReceiver | null>(null);
@@ -579,6 +582,8 @@ export default function ParentApp() {
 
     try {
       await rtcReceiverRef.current.startReceiver(activeChildId, streamType);
+      rtcReceiverRef.current.setAudioBoost(audioBoostMultiplier);
+      rtcReceiverRef.current.toggleClarityFilter(isClarityFilterEnabled);
     } catch (e: any) {
       setStreamStatusText("Connection Failed");
       setIsStreaming(false);
@@ -1433,6 +1438,113 @@ export default function ParentApp() {
                 </a>
               </div>
             )}
+
+            {/* Ultra-Clear Audio & Far-Voice Boost Card (दूर की आवाज़ साफ़ करें) */}
+            <div className="p-4 bg-gradient-to-r from-[#17202E] to-[#131B26] border border-blue-900/40 rounded-2xl flex flex-col gap-3 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400 border border-emerald-500/20">
+                    <Sliders className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-100 flex items-center gap-2">
+                      <span>Far-Voice Whisper Boost (दूर की आवाज़ साफ़ करें)</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {audioBoostMultiplier.toFixed(1)}x
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400">
+                      अगर कोई दूर से धीमी आवाज़ या फुसफुसाहट में बात कर रहा है, तो स्लाइडर को 3x से 5x बढ़ाएं।
+                    </p>
+                  </div>
+                </div>
+
+                {/* Noise Filter Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !isClarityFilterEnabled;
+                    setIsClarityFilterEnabled(nextVal);
+                    if (rtcReceiverRef.current) {
+                      rtcReceiverRef.current.toggleClarityFilter(nextVal);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer self-start sm:self-auto ${
+                    isClarityFilterEnabled
+                      ? "bg-emerald-600/30 text-emerald-300 border-emerald-500/40 hover:bg-emerald-600/40"
+                      : "bg-[#252530] text-gray-400 border-gray-700 hover:text-gray-200"
+                  }`}
+                  title="हवा और पंखे का बैकग्राउंड शोर हटाकर केवल इंसान की आवाज़ साफ़ करता है"
+                >
+                  <span className={`w-2 h-2 rounded-full ${isClarityFilterEnabled ? "bg-emerald-400 animate-pulse" : "bg-gray-500"}`} />
+                  <span>Fan / Hum Noise Filter: {isClarityFilterEnabled ? "ON" : "OFF"}</span>
+                </button>
+              </div>
+
+              {/* Slider & Presets */}
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5.0"
+                  step="0.1"
+                  value={audioBoostMultiplier}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setAudioBoostMultiplier(val);
+                    if (rtcReceiverRef.current) {
+                      rtcReceiverRef.current.setAudioBoost(val);
+                    }
+                  }}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioBoostMultiplier(1.0);
+                      rtcReceiverRef.current?.setAudioBoost(1.0);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                      audioBoostMultiplier === 1.0
+                        ? "bg-emerald-500 text-black border-emerald-400 font-bold"
+                        : "bg-[#252530] text-gray-300 border-gray-700 hover:border-gray-500"
+                    }`}
+                  >
+                    1.0x Normal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioBoostMultiplier(3.0);
+                      rtcReceiverRef.current?.setAudioBoost(3.0);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                      audioBoostMultiplier === 3.0
+                        ? "bg-emerald-500 text-black border-emerald-400 font-bold"
+                        : "bg-[#252530] text-gray-300 border-gray-700 hover:border-gray-500"
+                    }`}
+                  >
+                    3.0x Far Speech
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioBoostMultiplier(5.0);
+                      rtcReceiverRef.current?.setAudioBoost(5.0);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                      audioBoostMultiplier === 5.0
+                        ? "bg-emerald-500 text-black border-emerald-400 font-bold"
+                        : "bg-[#252530] text-gray-300 border-gray-700 hover:border-gray-500"
+                    }`}
+                  >
+                    5.0x Whisper
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* Stream Controls */}
             <div className="p-4 bg-[#1B1B22] border border-[#2B2B36] rounded-2xl flex flex-wrap items-center justify-between gap-3">

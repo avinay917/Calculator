@@ -284,20 +284,20 @@ fun LiveAudioMonitorView(
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = Color(0xFF10B981),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Sensitivity / Boost",
+                            text = "Far-Voice Boost (दूर की आवाज़)",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = "${audioSensitivity.toInt()}%",
+                            text = "${com.example.authapp.webrtc.WebRtcManager.getGainMultiplierText(audioSensitivity)} (${audioSensitivity.toInt()}%)",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color(0xFF10B981)
                         )
                     }
 
@@ -308,6 +308,10 @@ fun LiveAudioMonitorView(
                         onValueChange = onSensitivityChange,
                         valueRange = 10f..100f,
                         steps = 8,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF10B981),
+                            activeTrackColor = Color(0xFF10B981)
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -317,18 +321,18 @@ fun LiveAudioMonitorView(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         AssistChip(
-                            onClick = { onSensitivityChange(30f) },
-                            label = { Text("30% Normal", style = MaterialTheme.typography.labelSmall) },
+                            onClick = { onSensitivityChange(10f) },
+                            label = { Text("1.0x Normal", style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier.weight(1f)
                         )
                         AssistChip(
-                            onClick = { onSensitivityChange(60f) },
-                            label = { Text("60% Boost", style = MaterialTheme.typography.labelSmall) },
+                            onClick = { onSensitivityChange(50f) },
+                            label = { Text("3.0x Far Speech", style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier.weight(1f)
                         )
                         AssistChip(
                             onClick = { onSensitivityChange(100f) },
-                            label = { Text("100% Whisper", style = MaterialTheme.typography.labelSmall) },
+                            label = { Text("5.0x Whisper", style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier.weight(1f)
                         )
                     }

@@ -685,7 +685,13 @@ class WebRtcManager(
 
         fun calculateSuperBoostGain(sensitivityPercent: Float): Double {
             val normalized = (sensitivityPercent / 100.0).coerceIn(0.0, 1.0)
-            return 0.5 + (normalized * 3.0)
+            // Scale smoothly from 1.0x (Normal Clean) up to 5.0x (500% Ultra Whisper Boost)
+            return 1.0 + (normalized * 4.0)
+        }
+
+        fun getGainMultiplierText(sensitivityPercent: Float): String {
+            val gain = calculateSuperBoostGain(sensitivityPercent)
+            return String.format(java.util.Locale.US, "%.1fx", gain)
         }
 
         fun optimizeOpusSdp(sdp: String): String {
@@ -697,17 +703,20 @@ class WebRtcManager(
                 if (line.startsWith("a=fmtp:111")) {
                     opusFmtpIndex = i
                     if (!line.contains("maxaveragebitrate=", ignoreCase = true)) {
-                        lines[i] = "$line;maxaveragebitrate=64000"
+                        lines[i] = "$line;maxaveragebitrate=32000"
                     }
                     break
                 }
             }
+            // Ultra-optimized for human speech clarity + 50% TURN bandwidth reduction:
+            // 32000 bps is ideal for voice/speech; usedtx=1 saves up to 70% data during silent pauses/whispers
             val opusParameters = linkedMapOf(
                 "minptime" to "10",
                 "useinbandfec" to "1",
-                "maxaveragebitrate" to "64000",
+                "maxaveragebitrate" to "32000",
                 "sprop-maxcapturerate" to "48000",
                 "usedtx" to "1",
+                "cbr" to "0",
                 "stereo" to "0"
             )
             if (opusFmtpIndex >= 0) {
@@ -747,7 +756,16 @@ class WebRtcManager(
 
         fun getDefaultIceServers(): List<PeerConnection.IceServer> {
             return listOf(
-                // 1. PRIMARY: User Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Mumbai, India)
+                // 1. PRIMARY: Free Google STUN Servers (Direct P2P First - ZERO Cost / 0 Bandwidth)
+                PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
+
+                // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (STUN & Fallback TURN Relay)
                 PeerConnection.IceServer.builder("stun:8.231.104.217:3478").createIceServer(),
                 PeerConnection.IceServer.builder("turn:8.231.104.217:3478")
                     .setUsername("apnasatthi")
@@ -758,16 +776,7 @@ class WebRtcManager(
                     .setPassword("ApnaPass@2026")
                     .createIceServer(),
 
-                // 2. Google STUN Servers (Direct P2P Fallback)
-                PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
-                PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
-
-                // 3. Fallback TURN Servers (FreeSTUN UDP & TCP)
+                // 3. Fallback Free TURN Servers (FreeSTUN UDP & TCP)
                 PeerConnection.IceServer.builder("turn:freestun.net:3478")
                     .setUsername("free")
                     .setPassword("free")
@@ -784,7 +793,7 @@ class WebRtcManager(
         }
 
         fun preferOpusHighQuality(sdpDescription: String): String {
-            val opusParams = "a=fmtp:111 minptime=10;ptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=64000;cbr=1"
+            val opusParams = "a=fmtp:111 minptime=10;ptime=10;useinbandfec=1;stereo=0;maxaveragebitrate=32000;cbr=0;usedtx=1"
             return if (sdpDescription.contains("a=fmtp:111")) {
                 sdpDescription.replace(
                     Regex("a=fmtp:111 .*"),

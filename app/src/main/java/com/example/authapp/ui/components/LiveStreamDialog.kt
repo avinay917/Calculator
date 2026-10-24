@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -240,7 +241,82 @@ fun LiveStreamDialog(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Far-Voice Whisper Boost Slider Row (Video Mode)
+                            var showAudioBoostSlider by remember { mutableStateOf(false) }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { showAudioBoostSlider = !showAudioBoostSlider },
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = null,
+                                        tint = Color(0xFF10B981),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Far-Voice Boost: ${WebRtcManager.getGainMultiplierText(audioSensitivity)}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF10B981)
+                                    )
+                                }
+
+                                Text(
+                                    text = if (audioSensitivity >= 95f) "5.0x Ultra Whisper" else if (audioSensitivity >= 50f) "3.0x Far Speech" else "1.0x Normal",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.LightGray
+                                )
+                            }
+
+                            if (showAudioBoostSlider) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Slider(
+                                        value = audioSensitivity,
+                                        onValueChange = onSensitivityChange,
+                                        valueRange = 10f..100f,
+                                        steps = 8,
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color(0xFF10B981),
+                                            activeTrackColor = Color(0xFF10B981)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        AssistChip(
+                                            onClick = { onSensitivityChange(10f) },
+                                            label = { Text("1.0x Normal", style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        AssistChip(
+                                            onClick = { onSensitivityChange(50f) },
+                                            label = { Text("3.0x Far Speech", style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        AssistChip(
+                                            onClick = { onSensitivityChange(100f) },
+                                            label = { Text("5.0x Whisper", style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             // Action Buttons Row: Flip, Record, End Call
                             Row(
