@@ -152,7 +152,9 @@ data class MediaGalleryItem(
     val filePath: String = "",
     val fileType: String = "IMAGE", // IMAGE, VIDEO
     val sizeBytes: Long = 0L,
-    val dateAdded: Long = 0L
+    val dateAdded: Long = 0L,
+    val thumbnailBase64: String = "",
+    val downloadUrl: String = ""
 )
 
 @IgnoreExtraProperties

@@ -688,7 +688,8 @@ export default function ActivityLogList({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {mediaGallery.map((item, idx) => {
                     const isVideo = item.fileType === "VIDEO" || (item.fileName && item.fileName.endsWith(".mp4"));
-                    const hasImage = Boolean(item.downloadUrl || item.storageUrl);
+                    const imgSrc = item.thumbnailBase64 || item.downloadUrl || item.storageUrl;
+                    const hasImage = Boolean(imgSrc);
 
                     return (
                       <div
@@ -700,7 +701,7 @@ export default function ActivityLogList({
                         {hasImage ? (
                           <div className="relative h-36 w-full bg-black overflow-hidden">
                             <img
-                              src={item.downloadUrl || item.storageUrl}
+                              src={imgSrc}
                               alt={item.fileName || "Media"}
                               className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                             />
@@ -854,8 +855,10 @@ export default function ActivityLogList({
                     });
 
                 const sortedItems = [...displayItems].sort((a, b) => {
-                  if (a.isDirectory && !b.isDirectory) return -1;
-                  if (!a.isDirectory && b.isDirectory) return 1;
+                  const isDirA = Boolean(a.directory ?? a.isDirectory);
+                  const isDirB = Boolean(b.directory ?? b.isDirectory);
+                  if (isDirA && !isDirB) return -1;
+                  if (!isDirA && isDirB) return 1;
                   return (a.name || "").localeCompare(b.name || "");
                 });
 
@@ -896,13 +899,14 @@ export default function ActivityLogList({
                 }
 
                 return sortedItems.map((item, idx) => {
-                  const isImg = Boolean((item.name || "").match(/\.(jpg|jpeg|png|webp|heic)$/i));
+                  const isDir = Boolean(item.directory ?? item.isDirectory);
+                  const isImg = !isDir && Boolean((item.name || "").match(/\.(jpg|jpeg|png|webp|heic)$/i));
 
                   return (
                     <div
                       key={idx}
                       onClick={() => {
-                        if (item.isDirectory) {
+                        if (isDir) {
                           setSelectedDirectoryPath(item.path);
                         } else if (isImg) {
                           setSelectedPhotoViewer({
@@ -917,25 +921,25 @@ export default function ActivityLogList({
                         }
                       }}
                       className={`p-2.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between gap-3 text-xs transition cursor-pointer ${
-                        item.isDirectory
+                        isDir
                           ? "hover:border-amber-500/60 hover:bg-[#23232C]"
                           : isImg
                           ? "hover:border-purple-500/60 hover:bg-[#221e2c]"
                           : "hover:border-blue-500/60 hover:bg-[#21212B]"
                       }`}
-                      title={item.isDirectory ? "Click to open folder" : "Click to view file"}
+                      title={isDir ? "Click to open folder" : "Click to view file"}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div
                           className={`p-2 rounded-lg shrink-0 ${
-                            item.isDirectory
+                            isDir
                               ? "bg-amber-600/20 text-amber-400"
                               : isImg
                               ? "bg-purple-600/20 text-purple-400"
                               : "bg-blue-600/20 text-blue-400"
                           }`}
                         >
-                          {item.isDirectory ? (
+                          {isDir ? (
                             <Folder className="w-4 h-4" />
                           ) : isImg ? (
                             <ImageIcon className="w-4 h-4" />
@@ -948,7 +952,7 @@ export default function ActivityLogList({
                             <p className="text-white font-medium truncate" title={item.name}>
                               {item.name || item.path}
                             </p>
-                            {item.isDirectory ? (
+                            {isDir ? (
                               <span className="text-[9px] px-1.5 py-0.2 bg-amber-950 text-amber-300 border border-amber-800/40 rounded font-bold">
                                 Folder
                               </span>
@@ -966,7 +970,7 @@ export default function ActivityLogList({
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
                           <span className="text-[10px] text-gray-400 block font-mono">
-                            {item.isDirectory ? "DIR" : `${(item.sizeBytes / 1024).toFixed(1)} KB`}
+                            {isDir ? "DIR" : `${(item.sizeBytes / 1024).toFixed(1)} KB`}
                           </span>
                           {item.lastModified > 0 && (
                             <span className="text-[9px] text-gray-500 block">
@@ -1018,7 +1022,7 @@ export default function ActivityLogList({
 
             {/* Photo Preview Container */}
             {(() => {
-              const imgUrl = selectedPhotoViewer.downloadUrl || selectedPhotoViewer.storageUrl;
+              const imgUrl = selectedPhotoViewer.downloadUrl || selectedPhotoViewer.storageUrl || selectedPhotoViewer.thumbnailBase64;
 
               return imgUrl ? (
                 <div className="space-y-3">
