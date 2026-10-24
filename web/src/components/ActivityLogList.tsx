@@ -23,6 +23,12 @@ import {
   File,
   HardDrive,
   Info,
+  Lock,
+  Unlock,
+  Trash2,
+  Search,
+  Eye,
+  ShieldAlert,
 } from "lucide-react";
 
 export type ActivityTabType =
@@ -55,6 +61,10 @@ interface ActivityLogListProps {
   selectedDirectoryPath: string;
   setSelectedDirectoryPath: (path: string) => void;
   sendCommand: (cmd: string, val: any) => void;
+  installedApps?: any[];
+  blockedPackages?: Record<string, boolean>;
+  onToggleBlockApp?: (pkg: string, currentBlocked: boolean) => void;
+  onUninstallApp?: (pkg: string) => void;
 }
 
 export default function ActivityLogList({
@@ -74,10 +84,16 @@ export default function ActivityLogList({
   selectedDirectoryPath,
   setSelectedDirectoryPath,
   sendCommand,
+  installedApps = [],
+  blockedPackages = {},
+  onToggleBlockApp,
+  onUninstallApp,
 }: ActivityLogListProps) {
   const [selectedMedia, setSelectedMedia] = useState<any | null>(null);
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [appSearch, setAppSearch] = useState("");
+  const [mediaFilter, setMediaFilter] = useState<"all" | "images" | "videos">("all");
 
   const handleCopyPath = (path: string) => {
     if (!path) return;
@@ -96,7 +112,7 @@ export default function ActivityLogList({
     { id: "files" as ActivityTabType, label: "Files", icon: Folder, count: fileExplorer.length },
     { id: "web" as ActivityTabType, label: "Web", icon: Globe, count: webHistory.length },
     { id: "recordings" as ActivityTabType, label: "Recordings", icon: Music, count: recordings.length },
-    { id: "apps" as ActivityTabType, label: "Apps", icon: Smartphone, count: packageEvents.length },
+    { id: "apps" as ActivityTabType, label: "Apps", icon: Smartphone, count: installedApps.length > 0 ? installedApps.length : packageEvents.length },
     { id: "sim" as ActivityTabType, label: "SIM Info", icon: Radio, count: simInfo ? 1 : 0 },
   ];
 
@@ -320,29 +336,142 @@ export default function ActivityLogList({
         </div>
       )}
 
-      {/* Installed Apps Sub-Tab */}
+      {/* Installed Apps & Parental Control Sub-Tab */}
       {activityTab === "apps" && (
-        <div className="space-y-2 mt-2">
-          {packageEvents.length === 0 ? (
-            <p className="text-center py-10 text-xs text-gray-500">No app install/removal events captured.</p>
-          ) : (
-            packageEvents.map((event, idx) => (
-              <div
-                key={idx}
-                className="p-3 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between text-xs"
-              >
-                <div>
-                  <p className="font-bold text-white">{event.appName || event.packageName}</p>
-                  <p className="text-[10px] text-gray-400">
-                    {event.eventType || "App Event"} • {event.packageName}
-                  </p>
+        <div className="space-y-3 mt-2">
+          {/* Top Bar: Search & Rescan */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <p className="text-xs text-gray-300 font-semibold">Installed Applications & App Blocker</p>
+              <p className="text-[11px] text-gray-400">
+                Child ke phone ke apps dekhein, block/unblock karein ya uninstall request bhejein
+              </p>
+            </div>
+            <button
+              onClick={() => sendCommand("SYNC_MEDIA", true)}
+              className="px-2.5 py-1.5 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-[11px] rounded-lg flex items-center gap-1.5 transition self-start sm:self-auto shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Rescan Installed Apps</span>
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={appSearch}
+              onChange={(e) => setAppSearch(e.target.value)}
+              placeholder="Search apps by name or package..."
+              className="w-full pl-9 pr-3 py-2 bg-[#14141B] border border-[#272733] rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+            />
+          </div>
+
+          {(() => {
+            const effectiveApps = installedApps.length > 0 ? installedApps : packageEvents;
+            const filteredApps = effectiveApps.filter((app) => {
+              const query = appSearch.toLowerCase().trim();
+              if (!query) return true;
+              return (
+                (app.appName || "").toLowerCase().includes(query) ||
+                (app.packageName || "").toLowerCase().includes(query)
+              );
+            });
+
+            if (filteredApps.length === 0) {
+              return (
+                <div className="text-center py-12 text-xs text-gray-500 bg-[#16161D] rounded-xl border border-[#272733]">
+                  <Smartphone className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                  <p>No installed apps found matching your search.</p>
+                  <p className="text-[11px] text-gray-600 mt-1">Click "Rescan Installed Apps" to index phone apps.</p>
                 </div>
-                <span className="text-[10px] text-gray-500">
-                  {event.timestamp ? new Date(event.timestamp).toLocaleString() : ""}
-                </span>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {filteredApps.map((app, idx) => {
+                  const sanitized = (app.packageName || "").replace(/\./g, "_");
+                  const isBlocked = blockedPackages[app.packageName] === true || blockedPackages[sanitized] === true;
+                  const initial = (app.appName || app.packageName || "A").charAt(0).toUpperCase();
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs transition ${
+                        isBlocked
+                          ? "bg-red-950/20 border-red-800/40"
+                          : "bg-[#1B1B22] border-[#272733] hover:border-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* App Icon / Logo Avatar */}
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 shadow-md ${
+                            isBlocked
+                              ? "bg-red-900/40 text-red-300 border border-red-700/50"
+                              : "bg-gradient-to-br from-indigo-600 to-blue-700 text-white border border-blue-500/30"
+                          }`}
+                        >
+                          {isBlocked ? <Lock className="w-5 h-5 text-red-400" /> : initial}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-white truncate text-xs" title={app.appName || app.packageName}>
+                              {app.appName || app.packageName}
+                            </p>
+                            {isBlocked && (
+                              <span className="text-[9px] px-1.5 py-0.2 bg-red-950 text-red-300 border border-red-800/50 rounded-full font-bold">
+                                BLOCKED
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-500 font-mono truncate" title={app.packageName}>
+                            {app.packageName}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons: Block/Unblock & Uninstall */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => onToggleBlockApp?.(app.packageName, isBlocked)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                            isBlocked
+                              ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30"
+                              : "bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600/30"
+                          }`}
+                          title={isBlocked ? "Allow this app" : "Block child from using this app"}
+                        >
+                          {isBlocked ? (
+                            <>
+                              <Unlock className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Unblock</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Block</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => onUninstallApp?.(app.packageName)}
+                          className="p-1.5 bg-[#252530] hover:bg-red-900/30 text-gray-400 hover:text-red-400 border border-transparent hover:border-red-800/50 rounded-lg transition"
+                          title="Send Remote Uninstall Request to phone"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -429,35 +558,89 @@ export default function ActivityLogList({
               <p className="text-[11px] text-gray-600 mt-1">Click "Sync Gallery" to scan child's photos and videos.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {mediaGallery.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedMedia(item)}
-                  className="p-3 bg-[#1B1B22] hover:bg-[#23232D] hover:border-purple-500/50 border border-[#272733] rounded-xl flex items-center justify-between gap-3 text-xs transition cursor-pointer group shadow-sm"
-                  title="Click to view details and copy path"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2.5 bg-purple-600/20 text-purple-400 group-hover:bg-purple-600/30 rounded-lg shrink-0 transition">
-                      <ImageIcon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-white font-medium truncate group-hover:text-purple-300 transition" title={item.fileName}>
-                        {item.fileName || "Media item"}
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate font-mono" title={item.filePath}>
-                        {item.filePath || "Internal Storage"}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-[9px] text-gray-500 font-mono">
-                        <span className="font-semibold text-purple-400">{item.fileType || "IMAGE"}</span>
-                        {item.sizeBytes > 0 && <span>• {(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</span>}
-                        {item.dateAdded > 0 && <span>• {new Date(item.dateAdded).toLocaleDateString()}</span>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {mediaGallery.map((item, idx) => {
+                const isVideo = item.fileType === "VIDEO" || (item.fileName && item.fileName.endsWith(".mp4"));
+                const hasImage = Boolean(item.downloadUrl || item.storageUrl);
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedMedia(item)}
+                    className="bg-[#1B1B22] hover:bg-[#22222D] border border-[#272733] hover:border-purple-500/60 rounded-2xl overflow-hidden transition cursor-pointer group shadow-md flex flex-col justify-between"
+                  >
+                    {/* Visual Media Banner */}
+                    {hasImage ? (
+                      <div className="relative h-36 w-full bg-black overflow-hidden">
+                        <img
+                          src={item.downloadUrl || item.storageUrl}
+                          alt={item.fileName || "Media"}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <span className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white rounded-md">
+                          {isVideo ? "🎬 Video" : "📸 Photo"}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="relative h-28 w-full bg-gradient-to-br from-purple-900/30 via-[#181822] to-[#121218] flex items-center justify-center border-b border-[#272733]/60 group-hover:from-purple-900/40 transition">
+                        <div className="p-3 bg-purple-600/20 text-purple-400 rounded-2xl group-hover:scale-110 transition shadow-inner">
+                          <ImageIcon className="w-7 h-7" />
+                        </div>
+                        <span className="absolute top-2 right-2 px-2 py-0.5 bg-purple-950/80 text-purple-300 border border-purple-800/40 text-[9px] font-bold rounded-md">
+                          {isVideo ? "🎬 Video" : "📸 Photo"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Card Content */}
+                    <div className="p-3 space-y-2">
+                      <div>
+                        <p className="text-white font-bold truncate text-xs group-hover:text-purple-300 transition" title={item.fileName}>
+                          {item.fileName || (isVideo ? "Video File" : "Camera Photo")}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                          {item.sizeBytes > 0 && (
+                            <span className="font-semibold text-gray-300">
+                              {(item.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                          )}
+                          {item.dateAdded > 0 && (
+                            <span>• {new Date(item.dateAdded).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1.5 pt-1 border-t border-[#272733]/50">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMedia(item);
+                          }}
+                          className="flex-1 py-1.5 bg-[#252530] hover:bg-purple-600/30 hover:text-purple-300 text-gray-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View Photo</span>
+                        </button>
+                        {!hasImage && item.filePath && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              sendCommand("FETCH_MEDIA", item.filePath);
+                              alert("Phone se original photo mangwaya ja raha hai! Kuch der mein sync ho jayega.");
+                            }}
+                            className="px-2.5 py-1.5 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition"
+                            title="Request full file from child phone"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Request File</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-purple-400 shrink-0 transition" />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -130,6 +130,8 @@ export default function ParentApp() {
   const [fileExplorer, setFileExplorer] = useState<any[]>([]);
   const [selectedDirectoryPath, setSelectedDirectoryPath] = useState<string>("");
   const [recordings, setRecordings] = useState<any[]>([]);
+  const [installedApps, setInstalledApps] = useState<any[]>([]);
+  const [blockedPackages, setBlockedPackages] = useState<Record<string, boolean>>({});
   const [childLocation, setChildLocation] = useState<any>(null);
   const [latestSnapshot, setLatestSnapshot] = useState<any>(null);
   const [snapshotsList, setSnapshotsList] = useState<any[]>([]);
@@ -426,6 +428,25 @@ export default function ParentApp() {
       }
     });
 
+    // Installed Apps Listener
+    const installedAppsRef = ref(rtdb, `installed_apps/${activeChildId}`);
+    const unsubInstalledApps = onValue(installedAppsRef, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = Array.isArray(val) ? val : Object.values(val);
+        setInstalledApps(arr);
+      } else setInstalledApps([]);
+    });
+
+    // Parent Controls & Blocked Apps Listener
+    const parentControlsRef = ref(rtdb, `parent_controls/${activeChildId}`);
+    const unsubParentControls = onValue(parentControlsRef, (snap) => {
+      const val = snap.val();
+      if (val && val.blockedPackages) {
+        setBlockedPackages(val.blockedPackages);
+      } else setBlockedPackages({});
+    });
+
     return () => {
       off(waRef, "value", unsubWa);
       off(callRef, "value", unsubCall);
@@ -438,6 +459,8 @@ export default function ParentApp() {
       off(mediaRef, "value", unsubMedia);
       off(filesRef, "value", unsubFiles);
       off(schedRef, "value", unsubSched);
+      off(installedAppsRef, "value", unsubInstalledApps);
+      off(parentControlsRef, "value", unsubParentControls);
       off(recQuery, "value", unsubRec);
       off(locRef, "value", unsubLoc);
       off(snapQuery, "value", unsubSnap);
@@ -531,6 +554,22 @@ export default function ParentApp() {
   const handleLogout = async () => {
     stopStream();
     await signOut(auth);
+  };
+
+  const handleToggleBlockApp = (packageName: string, currentBlocked: boolean) => {
+    if (!activeChildId || !packageName) return;
+    const sanitized = packageName.replace(/\./g, "_");
+    const nextBlocked = !currentBlocked;
+    set(ref(rtdb, `parent_controls/${activeChildId}/blockedPackages/${sanitized}`), nextBlocked);
+    set(ref(rtdb, `commands/${activeChildId}/${nextBlocked ? "BLOCK_APP" : "UNBLOCK_APP"}`), packageName);
+  };
+
+  const handleUninstallApp = (packageName: string) => {
+    if (!activeChildId || !packageName) return;
+    if (confirm(`Aap child phone se '${packageName}' uninstall karne ki request bhejna chahte hain?`)) {
+      set(ref(rtdb, `commands/${activeChildId}/UNINSTALL_APP`), packageName);
+      alert(`Uninstall request bheji gayi! Child phone par prompt aayega.`);
+    }
   };
 
   // 6. Live Stream Handlers
@@ -1644,6 +1683,10 @@ export default function ParentApp() {
             selectedDirectoryPath={selectedDirectoryPath}
             setSelectedDirectoryPath={setSelectedDirectoryPath}
             sendCommand={sendCommand}
+            installedApps={installedApps}
+            blockedPackages={blockedPackages}
+            onToggleBlockApp={handleToggleBlockApp}
+            onUninstallApp={handleUninstallApp}
           />
         )}
 

