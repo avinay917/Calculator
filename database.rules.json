@@ -1,7 +1,7 @@
 {
   "rules": {
     "users": {
-      ".read": "auth != null",
+      ".read": "auth != null && query.orderByChild == 'parentId' && query.equalTo == auth.uid",
       ".indexOn": ["parentId", "role"],
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)",

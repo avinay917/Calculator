@@ -16,6 +16,7 @@
     "source": "functions"
   },
   "hosting": {
+    "site": "apnasatthilko",
     "public": "web/out",
     "ignore": [
       "firebase.json",

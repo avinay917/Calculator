@@ -23,5 +23,10 @@ service firebase.storage {
       allow read: if true;
       allow write: if false;
     }
+
+    // Fallback: deny all other storage paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }
