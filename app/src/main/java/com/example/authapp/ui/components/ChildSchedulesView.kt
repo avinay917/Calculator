@@ -58,7 +58,7 @@ fun ChildSchedulesView(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Offline-Ready • Auto Ambient Capture",
+                    text = "Offline-Ready • Silent Audio & Video (No Sound/Alarm)",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF10B981)
                 )
@@ -194,20 +194,23 @@ fun ChildSchedulesView(
                                 .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val isVideo = schedule.captureType.equals("video", ignoreCase = true)
+                            val accentColor = if (isVideo) Color(0xFFA855F7) else Color(0xFF10B981)
+
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (schedule.isEnabled) Color(0xFF10B981).copy(alpha = 0.15f)
+                                        if (schedule.isEnabled) accentColor.copy(alpha = 0.15f)
                                         else MaterialTheme.colorScheme.surface
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Mic,
+                                    imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.Mic,
                                     contentDescription = null,
-                                    tint = if (schedule.isEnabled) Color(0xFF10B981) else Color.Gray,
+                                    tint = if (schedule.isEnabled) accentColor else Color.Gray,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -225,12 +228,24 @@ fun ChildSchedulesView(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFF10B981).copy(alpha = 0.15f)
+                                        color = accentColor.copy(alpha = 0.15f)
                                     ) {
                                         Text(
                                             text = "${schedule.durationMinutes} min",
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = Color(0xFF10B981),
+                                            color = accentColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = accentColor.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = if (isVideo) "🎥 Video" else "🎙️ Audio",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = accentColor,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
@@ -239,15 +254,15 @@ fun ChildSchedulesView(
                                 Spacer(modifier = Modifier.height(2.dp))
 
                                 Text(
-                                    text = if (schedule.label.isNotBlank()) schedule.label else "Ambient Audio Capture",
+                                    text = if (schedule.label.isNotBlank()) schedule.label else (if (isVideo) "Silent Video Capture" else "Silent Audio Capture"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
 
                                 Text(
-                                    text = if (schedule.repeatDaily) "Repeat Daily • Offline Active" else "One-Time Alarm",
+                                    text = if (schedule.repeatDaily) "Repeat Daily • Silent Offline Capture" else "Scheduled Once • Silent Sync",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                    color = if (schedule.isEnabled) Color(0xFF10B981) else MaterialTheme.colorScheme.outline
+                                    color = if (schedule.isEnabled) accentColor else MaterialTheme.colorScheme.outline
                                 )
                             }
 

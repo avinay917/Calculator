@@ -3,6 +3,7 @@ package com.example.authapp.ui.components
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -199,9 +200,36 @@ fun ChildActivityDialog(
         else snapshots.filter { it.cameraFacing.contains(searchQuery, ignoreCase = true) }
     }
 
-    val filteredMediaItems = remember(mediaItems, searchQuery) {
-        if (searchQuery.isBlank()) mediaItems
-        else mediaItems.filter { it.displayName.contains(searchQuery, ignoreCase = true) || it.folderName.contains(searchQuery, ignoreCase = true) || it.mimeType.contains(searchQuery, ignoreCase = true) }
+    var selectedGalleryItemForDetails by remember { mutableStateOf<MediaGalleryItem?>(null) }
+    var selectedFileItemForDetails by remember { mutableStateOf<FileExplorerItem?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val effectiveGallery = remember(mediaGallery, mediaItems) {
+        if (mediaGallery.isNotEmpty()) mediaGallery
+        else mediaItems.map {
+            MediaGalleryItem(
+                id = it.id,
+                fileName = it.displayName,
+                filePath = it.folderName,
+                fileType = if (it.mimeType.contains("video", ignoreCase = true)) "VIDEO" else "IMAGE",
+                sizeBytes = it.sizeBytes,
+                dateAdded = it.timestamp
+            )
+        }
+    }
+
+    val filteredGallery = remember(effectiveGallery, searchQuery) {
+        if (searchQuery.isBlank()) effectiveGallery
+        else effectiveGallery.filter {
+            it.fileName.contains(searchQuery, ignoreCase = true) || it.filePath.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    val filteredFileExplorer = remember(fileExplorer, searchQuery) {
+        if (searchQuery.isBlank()) fileExplorer
+        else fileExplorer.filter {
+            it.name.contains(searchQuery, ignoreCase = true) || it.path.contains(searchQuery, ignoreCase = true)
+        }
     }
 
     androidx.compose.ui.window.Dialog(
@@ -330,8 +358,14 @@ fun ChildActivityDialog(
                         Tab(
                             selected = selectedTab == 8,
                             onClick = { selectedTab = 8 },
-                            text = { Text("Gallery (${filteredMediaItems.size})", fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text("Gallery (${filteredGallery.size})", fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal) },
                             icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 9,
+                            onClick = { selectedTab = 9 },
+                            text = { Text("Files (${filteredFileExplorer.size})", fontWeight = if (selectedTab == 9) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                     }
 
@@ -518,7 +552,7 @@ fun ChildActivityDialog(
                                 }
                             }
                             8 -> {
-                                if (filteredMediaItems.isEmpty()) {
+                                if (filteredGallery.isEmpty()) {
                                     EmptyStateBox(Icons.Default.PhotoLibrary, if (searchQuery.isNotEmpty()) "No matching gallery media" else "No local gallery photos or videos synced yet")
                                 } else {
                                     LazyColumn(
@@ -526,8 +560,29 @@ fun ChildActivityDialog(
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
                                         contentPadding = PaddingValues(bottom = 24.dp)
                                     ) {
-                                        items(filteredMediaItems) { media ->
-                                            MediaVaultListItem(media)
+                                        items(filteredGallery) { media ->
+                                            MediaGalleryCardItem(
+                                                media = media,
+                                                onClick = { selectedGalleryItemForDetails = media }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            9 -> {
+                                if (filteredFileExplorer.isEmpty()) {
+                                    EmptyStateBox(Icons.Default.Folder, if (searchQuery.isNotEmpty()) "No matching files found" else "No files or storage items synced yet")
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 24.dp)
+                                    ) {
+                                        items(filteredFileExplorer) { file ->
+                                            FileExplorerCardItem(
+                                                file = file,
+                                                onClick = { selectedFileItemForDetails = file }
+                                            )
                                         }
                                     }
                                 }
@@ -535,6 +590,147 @@ fun ChildActivityDialog(
                         }
                     }
                 }
+            }
+
+            selectedGalleryItemForDetails?.let { media ->
+                AlertDialog(
+                    onDismissRequest = { selectedGalleryItemForDetails = null },
+                    icon = {
+                        val isVideo = media.fileType.equals("VIDEO", ignoreCase = true) || media.fileName.endsWith(".mp4", ignoreCase = true)
+                        Icon(
+                            if (isVideo) Icons.Default.Videocam else Icons.Default.Image,
+                            contentDescription = null,
+                            tint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = media.fileName.ifEmpty { "Gallery File" },
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            InfoRow("File Type", media.fileType.ifEmpty { "Image" })
+                            val sizeStr = if (media.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.2f MB", media.sizeBytes / (1024f * 1024f))
+                            else String.format(Locale.getDefault(), "%.1f KB", media.sizeBytes / 1024f)
+                            InfoRow("File Size", sizeStr)
+                            val dateStr = if (media.dateAdded > 0L) media.dateAdded.formatTime() else "Recent"
+                            InfoRow("Date Added", dateStr)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Child Device Path:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = media.filePath.ifEmpty { "Internal Storage" },
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("File Path", media.filePath)
+                                clipboard?.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "Path copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Path")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { selectedGalleryItemForDetails = null }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
+
+            selectedFileItemForDetails?.let { file ->
+                AlertDialog(
+                    onDismissRequest = { selectedFileItemForDetails = null },
+                    icon = {
+                        Icon(
+                            if (file.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile,
+                            contentDescription = null,
+                            tint = if (file.isDirectory) Color(0xFFFFA000) else Color(0xFF1976D2),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = file.name.ifEmpty { file.path.substringAfterLast("/") },
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            InfoRow("Item Type", if (file.isDirectory) "Directory / Folder" else "File")
+                            val sizeStr = if (!file.isDirectory && file.sizeBytes > 0) {
+                                if (file.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.2f MB", file.sizeBytes / (1024f * 1024f))
+                                else String.format(Locale.getDefault(), "%.1f KB", file.sizeBytes / 1024f)
+                            } else "Directory"
+                            InfoRow("Size", sizeStr)
+                            val modifiedStr = if (file.lastModified > 0L) file.lastModified.formatTime() else "Recent"
+                            InfoRow("Last Modified", modifiedStr)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Full Path on Phone:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = file.path.ifEmpty { "/" },
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("File Path", file.path)
+                                clipboard?.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "Path copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Path")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { selectedFileItemForDetails = null }) {
+                            Text("Close")
+                        }
+                    }
+                )
             }
         }
     }
@@ -1238,29 +1434,124 @@ fun SnapshotGridItem(snapshot: SnapshotInfo) {
 }
 
 @Composable
-fun MediaVaultListItem(media: MediaItemInfo) {
-    val isVideo = media.mimeType.contains("video", ignoreCase = true)
-    val isImage = media.mimeType.contains("image", ignoreCase = true)
-    val icon = when {
-        isVideo -> Icons.Default.Videocam
-        isImage -> Icons.Default.Image
-        else -> Icons.Default.InsertDriveFile
-    }
-    val iconTint = when {
-        isVideo -> Color(0xFFE91E63)
-        isImage -> Color(0xFF9C27B0)
-        else -> Color(0xFF607D8B)
-    }
-    val sizeMb = remember(media.sizeBytes) {
-        if (media.sizeBytes > 0) String.format(Locale.getDefault(), "%.1f MB", media.sizeBytes / (1024f * 1024f)) else ""
+fun MediaGalleryCardItem(
+    media: MediaGalleryItem,
+    onClick: () -> Unit
+) {
+    val isVideo = media.fileType.equals("VIDEO", ignoreCase = true) || media.fileName.endsWith(".mp4", ignoreCase = true)
+    val icon = if (isVideo) Icons.Default.Videocam else Icons.Default.Image
+    val iconTint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0)
+    val sizeStr = remember(media.sizeBytes) {
+        if (media.sizeBytes > 0) {
+            if (media.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.1f MB", media.sizeBytes / (1024f * 1024f))
+            else String.format(Locale.getDefault(), "%.0f KB", media.sizeBytes / 1024f)
+        } else ""
     }
 
-    ActivityLogCard(
-        icon = icon,
-        iconTint = iconTint,
-        title = media.displayName.ifEmpty { "Gallery Media Item" },
-        subtitle = "${media.folderName.ifEmpty { "Gallery" }} ${if (sizeMb.isNotEmpty()) "• $sizeMb" else ""}",
-        timestampStr = remember(media.timestamp) { media.timestamp.formatTime() }
-    )
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = media.fileName.ifEmpty { "Gallery Item" },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${media.filePath.ifEmpty { "Gallery" }} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun FileExplorerCardItem(
+    file: FileExplorerItem,
+    onClick: () -> Unit
+) {
+    val isDir = file.isDirectory
+    val icon = if (isDir) Icons.Default.Folder else Icons.Default.InsertDriveFile
+    val iconTint = if (isDir) Color(0xFFFFA000) else Color(0xFF1976D2)
+    val sizeStr = remember(file.sizeBytes) {
+        if (!isDir && file.sizeBytes > 0) {
+            if (file.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.1f MB", file.sizeBytes / (1024f * 1024f))
+            else String.format(Locale.getDefault(), "%.0f KB", file.sizeBytes / 1024f)
+        } else if (isDir) "Folder" else ""
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = file.name.ifEmpty { file.path.substringAfterLast("/") },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${file.path} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
 }
 

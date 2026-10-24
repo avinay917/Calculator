@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.authapp.data.RecordingSchedule
 import com.example.authapp.data.User
 
@@ -34,6 +35,7 @@ fun ChildScheduleDialog(
     var hourInput by remember { mutableIntStateOf(14) }
     var minuteInput by remember { mutableIntStateOf(0) }
     var durationMinutes by remember { mutableIntStateOf(5) }
+    var captureType by remember { mutableStateOf("audio") }
     var labelInput by remember { mutableStateOf("Study Time") }
 
     androidx.compose.ui.window.Dialog(
@@ -59,7 +61,7 @@ fun ChildScheduleDialog(
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Silent Scheduled Ambient Audio Recordings",
+                                    text = "Silent Scheduled Audio & Video Recordings (No Sound)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -101,19 +103,55 @@ fun ChildScheduleDialog(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    text = "Create Recording Schedule",
+                                    text = "Create Silent Recording Schedule",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = "Koi sound ya ghanti nahi bajegi — child phone par silently capture hoga.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 OutlinedTextField(
                                     value = labelInput,
                                     onValueChange = { labelInput = it },
-                                    label = { Text("Label (e.g. Night Sleep, Coaching)") },
+                                    label = { Text("Label (e.g. Night Sleep, Tuition, Study)") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
                                 )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Capture Type Selector (Audio vs Video)
+                                Text(
+                                    text = "Recording Type:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = captureType == "audio",
+                                        onClick = { captureType = "audio" },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        label = { Text("🎙️ Silent Audio", fontWeight = FontWeight.Bold) }
+                                    )
+                                    FilterChip(
+                                        selected = captureType == "video",
+                                        onClick = { captureType = "video" },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        label = { Text("🎥 Silent Video", fontWeight = FontWeight.Bold) }
+                                    )
+                                }
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -148,7 +186,7 @@ fun ChildScheduleDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Recording Duration:",
+                                        text = "Duration:",
                                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
@@ -182,7 +220,8 @@ fun ChildScheduleDialog(
                                                 durationMinutes = durationMinutes,
                                                 isEnabled = true,
                                                 repeatDaily = true,
-                                                label = labelInput.ifEmpty { "Auto-Record" }
+                                                captureType = captureType,
+                                                label = labelInput.ifEmpty { if (captureType == "video") "Auto-Video" else "Auto-Audio" }
                                             )
                                             onSaveSchedule(newSched)
                                             showAddForm = false
@@ -276,17 +315,21 @@ fun ScheduleListItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(12.dp)
         ) {
+            val isVideo = schedule.captureType.equals("video", ignoreCase = true)
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(
+                        if (isVideo) MaterialTheme.colorScheme.tertiaryContainer
+                        else MaterialTheme.colorScheme.primaryContainer
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.Alarm,
+                    if (isVideo) Icons.Default.Videocam else Icons.Default.Mic,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = if (isVideo) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -294,12 +337,26 @@ fun ScheduleListItem(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = schedule.label.ifEmpty { if (isVideo) "Auto-Video" else "Auto-Audio" },
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = (if (isVideo) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary).copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = if (isVideo) "🎥 Video" else "🎙️ Audio",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = if (isVideo) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
                 Text(
-                    text = schedule.label.ifEmpty { "Auto-Recording" },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "$timeFormatted • ${schedule.durationMinutes} mins • Daily",
+                    text = "$timeFormatted • ${schedule.durationMinutes} mins • ${if (schedule.repeatDaily) "Daily Silent" else "One-Time Silent"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

