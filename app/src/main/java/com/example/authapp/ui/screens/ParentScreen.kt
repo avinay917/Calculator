@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Schedule
 import com.example.authapp.ui.components.PairingCodeDialog
 import com.example.authapp.ui.components.ChildControlsView
 import com.example.authapp.ui.components.ChildLocationDialog
@@ -59,6 +60,7 @@ import com.example.authapp.ui.components.ChildSnapshotDialog
 import com.example.authapp.ui.components.ChildActivityDialog
 import com.example.authapp.ui.components.ChildAlertsDialog
 import com.example.authapp.ui.components.ChildScheduleDialog
+import com.example.authapp.ui.components.ChildSchedulesView
 import com.example.authapp.ui.components.CloudRecordingsView
 import com.example.authapp.ui.components.LiveStreamDialog
 import com.example.authapp.ui.viewmodel.ParentViewModel
@@ -424,7 +426,7 @@ fun ParentScreen(
                             selected = uiState.selectedTab == 0,
                             onClick = { viewModel.selectTab(0) },
                             icon = { Icon(Icons.Default.Sensors, contentDescription = "Live Monitor") },
-                            label = { Text("Live Monitor") }
+                            label = { Text("Live") }
                         )
                         NavigationBarItem(
                             selected = uiState.selectedTab == 1,
@@ -436,7 +438,13 @@ fun ParentScreen(
                             selected = uiState.selectedTab == 2,
                             onClick = { viewModel.selectTab(2) },
                             icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
-                            label = { Text("Cloud History") }
+                            label = { Text("History") }
+                        )
+                        NavigationBarItem(
+                            selected = uiState.selectedTab == 3,
+                            onClick = { viewModel.selectTab(3) },
+                            icon = { Icon(Icons.Default.Schedule, contentDescription = "Schedule") },
+                            label = { Text("Schedule") }
                         )
                     }
                 }
@@ -724,7 +732,7 @@ fun ParentScreen(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
-            } else {
+            } else if (uiState.selectedTab == 2) {
                 CloudRecordingsView(
                     recordings = uiState.allRecordings,
                     childUsers = uiState.childUsers,
@@ -734,6 +742,20 @@ fun ParentScreen(
                     currentlyPlayingRecId = uiState.currentlyPlayingRecId,
                     onPlayRecording = { rec -> playRecording(rec) },
                     onStopPlayback = { stopPlayback() },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                ChildSchedulesView(
+                    childUsers = uiState.childUsers,
+                    schedulesMap = uiState.schedulesMap,
+                    onSaveSchedule = { childId, schedule ->
+                        viewModel.saveRecordingSchedule(childId, schedule)
+                        Toast.makeText(context, "Schedule saved! Offline active.", Toast.LENGTH_SHORT).show()
+                    },
+                    onDeleteSchedule = { childId, scheduleId ->
+                        viewModel.deleteRecordingSchedule(childId, scheduleId)
+                        Toast.makeText(context, "Schedule deleted", Toast.LENGTH_SHORT).show()
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
