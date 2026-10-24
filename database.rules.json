@@ -50,13 +50,15 @@
     "device_health": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $childUid"
+        ".write": "auth != null && auth.uid == $childUid",
+        ".indexOn": ["timestamp", "batteryLevel", "isOnline"]
       }
     },
     "feature_diagnostics": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $childUid"
+        ".write": "auth != null && auth.uid == $childUid",
+        ".indexOn": ["timestamp"]
       }
     },
     "alerts": {
@@ -97,7 +99,8 @@
     "schedules": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)"
+        ".write": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".indexOn": ["timestamp", "isEnabled", "hour", "targetDate"]
       }
     },
     "snapshots": {
@@ -110,7 +113,8 @@
     "app_usage": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $childUid"
+        ".write": "auth != null && auth.uid == $childUid",
+        ".indexOn": ["timestamp", "packageName"]
       }
     },
     "parent_controls": {
@@ -129,7 +133,8 @@
     "commands": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && (auth.uid == $childUid || (root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'))"
+        ".write": "auth != null && (auth.uid == $childUid || (root.child('users').child($childUid).child('parentId').val() == auth.uid && root.child('users').child(auth.uid).child('role').val() == 'parent'))",
+        ".indexOn": ["timestamp", "status"]
       }
     },
     "location_history": {

@@ -42,7 +42,10 @@ data class RecordingSchedule(
     val durationMinutes: Int = 5,
     val isEnabled: Boolean = true,
     val repeatDaily: Boolean = true,
-    val label: String = ""
+    val label: String = "",
+    val targetDate: String = "", // e.g. "2026-10-25" for specific date schedules (empty for daily repeat)
+    val captureType: String = "audio", // "audio", "snapshot", "video"
+    val timestamp: Long = 0L
 )
 
 @IgnoreExtraProperties

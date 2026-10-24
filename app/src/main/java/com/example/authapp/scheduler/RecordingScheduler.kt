@@ -15,6 +15,9 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
         if (context == null) return
         val durationMinutes = intent?.getIntExtra("duration_minutes", 5) ?: 5
         val scheduleId = intent?.getStringExtra("schedule_id") ?: ""
+        val repeatDaily = intent?.getBooleanExtra("repeat_daily", true) ?: true
+        val targetDate = intent?.getStringExtra("target_date") ?: ""
+        val captureType = intent?.getStringExtra("capture_type") ?: "audio"
 
         // Start the recording service — uses local mic (CallRecorder), NOT WebRTC
         // WebRTC requires a live parent receiver. Scheduled recordings are standalone local captures.
@@ -22,6 +25,7 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
             action = ChildForegroundService.ACTION_SCHEDULED_RECORDING
             putExtra("duration_minutes", durationMinutes)
             putExtra("schedule_id", scheduleId)
+            putExtra("capture_type", captureType)
         }
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -29,18 +33,20 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
             } else {
                 context.startService(serviceIntent)
             }
-            FirebaseCrashlytics.getInstance().log("[ScheduleAlarm] Triggered schedule=$scheduleId, duration=$durationMinutes min")
+            FirebaseCrashlytics.getInstance().log("[ScheduleAlarm] Triggered schedule=$scheduleId, duration=$durationMinutes min, type=$captureType")
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
         }
 
-        // ✅ FIX: Re-schedule for next day automatically (daily repeat)
-        if (scheduleId.isNotEmpty()) {
+        // Re-schedule for next day ONLY if repeatDaily is true and targetDate is empty
+        if (scheduleId.isNotEmpty() && repeatDaily && targetDate.isBlank()) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
                 val nextIntent = Intent(context, ScheduleAlarmReceiver::class.java).apply {
                     putExtra("duration_minutes", durationMinutes)
                     putExtra("schedule_id", scheduleId)
+                    putExtra("repeat_daily", true)
+                    putExtra("capture_type", captureType)
                 }
                 val nextPendingIntent = PendingIntent.getBroadcast(
                     context,
@@ -65,7 +71,7 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
 object RecordingScheduler {
 
     fun setSchedule(context: Context, schedule: RecordingSchedule) {
-        // ✅ FIX: If schedule is disabled, cancel any existing alarm for it
+        // If schedule is disabled, cancel any existing alarm for it
         if (!schedule.isEnabled) {
             cancelSchedule(context, schedule.id)
             return
@@ -75,6 +81,9 @@ object RecordingScheduler {
         val intent = Intent(context, ScheduleAlarmReceiver::class.java).apply {
             putExtra("duration_minutes", schedule.durationMinutes)
             putExtra("schedule_id", schedule.id)
+            putExtra("repeat_daily", schedule.repeatDaily)
+            putExtra("target_date", schedule.targetDate)
+            putExtra("capture_type", schedule.captureType)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -84,12 +93,23 @@ object RecordingScheduler {
         )
 
         val calendar = Calendar.getInstance().apply {
+            if (schedule.targetDate.isNotBlank()) {
+                val parts = schedule.targetDate.split("-")
+                if (parts.size == 3) {
+                    val year = parts[0].toIntOrNull() ?: get(Calendar.YEAR)
+                    val month = (parts[1].toIntOrNull() ?: (get(Calendar.MONTH) + 1)) - 1
+                    val day = parts[2].toIntOrNull() ?: get(Calendar.DAY_OF_MONTH)
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, day)
+                }
+            }
             set(Calendar.HOUR_OF_DAY, schedule.hour)
             set(Calendar.MINUTE, schedule.minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            // If this time already passed today, schedule for tomorrow
-            if (timeInMillis <= System.currentTimeMillis()) {
+            // If it's a daily recurring schedule without a specific targetDate and time has passed today, schedule for tomorrow
+            if (schedule.targetDate.isBlank() && timeInMillis <= System.currentTimeMillis()) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }

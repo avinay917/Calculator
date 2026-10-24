@@ -1311,7 +1311,7 @@ export default function ParentApp() {
       )}
 
       {/* Main Content Body */}
-      <main className="flex-1 p-4">
+      <main className="flex-1 p-4 pb-24">
         {/* Tab 1: Live Stream Player */}
         {activeTab === "live" && (
           <div className="flex flex-col gap-4">
@@ -1668,21 +1668,23 @@ export default function ParentApp() {
         )}
 
         {/* Tab 4: Schedules & Auto-Record Routines */}
-        <ScheduleManager
-          activeTab={activeTab}
-          activeChildId={activeChildId}
-          schedulesList={schedulesList}
-          showAddScheduleModal={showAddScheduleModal}
-          setShowAddScheduleModal={setShowAddScheduleModal}
-          schedLabel={schedLabel}
-          setSchedLabel={setSchedLabel}
-          schedHour={schedHour}
-          setSchedHour={setSchedHour}
-          schedMinute={schedMinute}
-          setSchedMinute={setSchedMinute}
-          schedDuration={schedDuration}
-          setSchedDuration={setSchedDuration}
-        />
+        {activeTab === "schedules" && (
+          <ScheduleManager
+            activeTab={activeTab}
+            activeChildId={activeChildId}
+            schedulesList={schedulesList}
+            showAddScheduleModal={showAddScheduleModal}
+            setShowAddScheduleModal={setShowAddScheduleModal}
+            schedLabel={schedLabel}
+            setSchedLabel={setSchedLabel}
+            schedHour={schedHour}
+            setSchedHour={setSchedHour}
+            schedMinute={schedMinute}
+            setSchedMinute={setSchedMinute}
+            schedDuration={schedDuration}
+            setSchedDuration={setSchedDuration}
+          />
+        )}
 
         {/* Tab 5: Pairing Code & Connect Child */}
         {activeTab === "pairing" && (
