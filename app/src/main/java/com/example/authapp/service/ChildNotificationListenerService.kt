@@ -47,6 +47,26 @@ class ChildNotificationListenerService : NotificationListenerService() {
                 recentNotificationCache.put(notifKey, now)
             }
 
+            // Filter out system progress, backup updates, and noisy background check notifications
+            val lowerTitle = title.lowercase()
+            val lowerText = text.lowercase()
+            val isIgnoredProgress = lowerTitle.contains("backup in progress") ||
+                    lowerTitle.contains("couldn't complete backup") ||
+                    lowerTitle.contains("checking for new messages") ||
+                    lowerText.contains("preparing backup") ||
+                    lowerText.contains("uploading:") ||
+                    lowerText.contains("sending file to") ||
+                    lowerText == "sending…" ||
+                    lowerText == "sending..." ||
+                    lowerText.contains("checking for new messages") ||
+                    lowerText.contains("tap for more info") ||
+                    lowerText.matches(Regex(".*\\(\\d+%.*")) || // e.g. (3%), (85%)
+                    lowerText.matches(Regex(".*\\d+(\\.\\d+)?\\s*(gb|mb)\\s*of\\s*\\d+(\\.\\d+)?\\s*(gb|mb).*")) // e.g. 1.2 GB of 2.3 GB
+
+            if (isIgnoredProgress) {
+                return
+            }
+
             val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
             if (uid.isNotEmpty()) {
                 val item = NotificationItem(

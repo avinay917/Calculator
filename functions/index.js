@@ -75,15 +75,19 @@ exports.onStreamRequested = functions.database
 
     const status = statusData.status || "";
 
-    // If stream was stopped by parent, notify child to STOP
+    // If stream was stopped by parent, notify child to STOP and cleanup signaling session
     if (status === "STOPPED" || status === "DISCONNECTED") {
+      const sessionId = statusData.sessionId;
+      if (sessionId) {
+        admin.database().ref(`/signaling/${sessionId}`).remove().catch((e) => console.error("Error removing signaling session:", e));
+      }
       try {
         const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
         const userData = userSnapshot.val();
         if (userData && userData.fcmToken) {
           const stopMsg = {
             token: userData.fcmToken,
-            android: { priority: "high", ttl: "0s" },
+            android: { priority: "high", ttl: 0 },
             data: { action: "STOP_STREAM", timestamp: String(Date.now()) }
           };
           await sendFcmSafe(targetUid, userData.fcmToken, stopMsg);
@@ -118,7 +122,7 @@ exports.onStreamRequested = functions.database
         token: userData.fcmToken,
         android: {
           priority: "high",
-          ttl: "0s"
+          ttl: 0
         },
         data: {
           action: "START_STREAM",
@@ -159,7 +163,7 @@ exports.onSnapshotRequested = functions.database
       if (userData && userData.fcmToken) {
         const message = {
           token: userData.fcmToken,
-          android: { priority: "high", ttl: "0s" },
+          android: { priority: "high", ttl: 0 },
           data: {
             action: "WAKEUP",
             type: "SNAPSHOT",
@@ -197,7 +201,7 @@ exports.onCommandSent = functions.database
       if (userData && userData.fcmToken) {
         const message = {
           token: userData.fcmToken,
-          android: { priority: "high", ttl: "0s" },
+          android: { priority: "high", ttl: 0 },
           data: {
             action: "WAKEUP",
             type: "COMMAND",

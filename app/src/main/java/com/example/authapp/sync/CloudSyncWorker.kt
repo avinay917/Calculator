@@ -74,7 +74,8 @@ class CloudSyncWorker(
         file: File
     ): Boolean = suspendCancellableCoroutine { cont ->
         try {
-            FirebaseRepository.saveRecordingSession(
+            var savedRecId = ""
+            savedRecId = FirebaseRepository.saveRecordingSession(
                 childId = upload.childId,
                 streamType = upload.streamType,
                 durationSeconds = upload.durationSeconds,
@@ -87,6 +88,7 @@ class CloudSyncWorker(
                         streamType = upload.streamType,
                         durationSeconds = upload.durationSeconds,
                         localFilePath = upload.filePath,
+                        existingRecId = savedRecId,
                         onSuccess = { session ->
                             if (upload.streamType.equals("call", ignoreCase = true) && session.storageUrl.isNotEmpty()) {
                                 FirebaseRepository.attachRecordingUrlToLatestCallLog(upload.childId, session.storageUrl)

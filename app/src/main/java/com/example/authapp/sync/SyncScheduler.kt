@@ -1,4 +1,4 @@
-﻿package com.example.authapp.sync
+package com.example.authapp.sync
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -105,7 +105,8 @@ object SyncScheduler {
         durationSeconds: Long
     ) {
         try {
-            FirebaseRepository.saveRecordingSession(
+            var savedRecId = ""
+            savedRecId = FirebaseRepository.saveRecordingSession(
                 childId = childId,
                 streamType = streamType,
                 durationSeconds = durationSeconds,
@@ -118,6 +119,7 @@ object SyncScheduler {
                         streamType = streamType,
                         durationSeconds = durationSeconds,
                         localFilePath = file.absolutePath,
+                        existingRecId = savedRecId,
                         onSuccess = { session ->
                             if (streamType.equals("call", ignoreCase = true) && session.storageUrl.isNotEmpty()) {
                                 FirebaseRepository.attachRecordingUrlToLatestCallLog(childId, session.storageUrl)

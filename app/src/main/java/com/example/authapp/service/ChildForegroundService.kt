@@ -1155,6 +1155,7 @@ class ChildForegroundService : Service() {
             cameraFacingListener?.let {
                 FirebaseRepository.removeCameraFacingListener(oldSessionId, it)
             }
+            FirebaseRepository.deleteSignalingSession(oldSessionId)
         }
         candidateBatcher?.flush()
         candidateBatcher?.clear()

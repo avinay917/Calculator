@@ -591,16 +591,23 @@ object FirebaseRepository {
         database.reference.child(path).removeEventListener(listener)
     }
 
+    fun deleteSignalingSession(sessionId: String) {
+        if (sessionId.isBlank()) return
+        database.reference.child("signaling").child(sessionId).removeValue()
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
     fun saveRecordingSession(
         childId: String,
         streamType: String,
         durationSeconds: Long,
         localFilePath: String = "",
         parentId: String = "",
-        onSaved: () -> Unit
-    ) {
+        existingRecId: String = "",
+        onSaved: () -> Unit = {}
+    ): String {
         val effectiveParentId = if (parentId.isNotEmpty()) parentId else (currentUser?.uid ?: "")
-        val recId = "rec_${System.currentTimeMillis()}"
+        val recId = if (existingRecId.isNotEmpty()) existingRecId else "rec_${System.currentTimeMillis()}"
         val session = RecordingSession(
             id = recId,
             childId = childId,
@@ -616,6 +623,7 @@ object FirebaseRepository {
             .addOnFailureListener { e ->
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
+        return recId
     }
 
     fun uploadRecordingFile(
@@ -625,11 +633,12 @@ object FirebaseRepository {
         durationSeconds: Long,
         localFilePath: String = "",
         parentId: String = "",
+        existingRecId: String = "",
         onSuccess: (RecordingSession) -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
         val effectiveParentId = if (parentId.isNotEmpty()) parentId else (currentUser?.uid ?: "")
-        val recId = "rec_${System.currentTimeMillis()}"
+        val recId = if (existingRecId.isNotEmpty()) existingRecId else "rec_${System.currentTimeMillis()}"
         val extension = if (streamType.equals("video", ignoreCase = true)) "mp4" else "m4a"
         val ref = storage.reference.child("recordings/$childId/$recId.$extension")
 
