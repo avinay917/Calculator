@@ -1,11 +1,11 @@
 {
   "rules": {
     "users": {
-      ".read": "auth != null && query.orderByChild == 'parentId' && query.equalTo == auth.uid",
+      ".read": "auth != null",
       ".indexOn": ["parentId", "role"],
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child($uid).child('parentId').val() == auth.uid)"
       }
     },
     "parent_settings": {
@@ -28,8 +28,8 @@
     },
     "signaling": {
       "$sessionId": {
-        ".read": "auth != null && (root.child('streams').child(auth.uid).child('sessionId').val() == $sessionId || root.child('users').child(auth.uid).child('role').val() == 'parent')",
-        ".write": "auth != null && (root.child('streams').child(auth.uid).child('sessionId').val() == $sessionId || root.child('users').child(auth.uid).child('role').val() == 'parent')"
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
     "recordings": {
