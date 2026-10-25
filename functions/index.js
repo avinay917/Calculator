@@ -191,9 +191,27 @@ exports.onCommandSent = functions.database
     const targetUid = context.params.targetUid;
     const command = context.params.command;
     const data = change.after.val();
-    // Ignore deletes and rewrites that do not change the command payload.
+
+    // 1. Ignore deletes
     if (!data) return null;
-    if (!hasChanged(change.before, change.after, ["timestamp", "status", "command", "requestId"])) return null;
+
+    // 2. Ignore commands that are turning OFF, cleared, or reset (value is false, empty string, or null)
+    const val = typeof data === "object" ? data.value : data;
+    if (val === false || val === "" || val === null || val === undefined) {
+      console.log(`Ignoring command ${command} turn-off/reset value for ${targetUid}`);
+      return null;
+    }
+
+    // 3. Deduplication: Only trigger if the actual command value or requestId changed
+    // (Never trigger on simple timestamp updates!)
+    if (change.before.exists()) {
+      const prevData = change.before.val();
+      const prevVal = typeof prevData === "object" ? prevData.value : prevData;
+      if (prevVal === val && prevData.requestId === data.requestId) {
+        console.log(`Ignoring duplicate command ${command} with unchanged value for ${targetUid}`);
+        return null;
+      }
+    }
 
     try {
       const userSnapshot = await admin.database().ref(`/users/${targetUid}`).once("value");
