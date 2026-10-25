@@ -25,25 +25,18 @@ class ParentViewModel : ViewModel() {
     private var recordingTimerJob: Job? = null
     private val healthListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val alertsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val callLogsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val notificationsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val schedulesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val snapshotsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val snapshotStatusListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val appUsageListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val parentControlsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val smsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val geofencesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val locationHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val webHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val whatsAppListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val commandsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val youtubeListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val mediaGalleryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val fileExplorerListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
     private val firestoreAlertRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
@@ -68,6 +61,16 @@ class ParentViewModel : ViewModel() {
             listenersMap[childUid] = listenBlock(childUid) { data ->
                 onDataReceived(data)
             }
+        }
+    }
+
+    private inline fun setupFirestoreListener(
+        registrationsMap: MutableMap<String, com.google.firebase.firestore.ListenerRegistration>,
+        childUid: String,
+        listenBlock: () -> com.google.firebase.firestore.ListenerRegistration
+    ) {
+        if (!registrationsMap.containsKey(childUid)) {
+            registrationsMap[childUid] = listenBlock()
         }
     }
 
@@ -146,27 +149,24 @@ class ParentViewModel : ViewModel() {
         setupMapListener(locationHistoryListeners, childUid, FirebaseRepository::listenToLocationHistory) { history ->
             _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (childUid to history)) }
         }
-        // Single Firestore Listener for Call Logs (eliminates duplicate RTDB listener)
-        if (!firestoreCallLogsRegistrations.containsKey(childUid)) {
-            firestoreCallLogsRegistrations[childUid] = FirebaseRepository.listenToChildCallLogsFirestore(childUid) { logs ->
+        // Consolidated Firestore Listeners (eliminates redundant boilerplate)
+        setupFirestoreListener(firestoreCallLogsRegistrations, childUid) {
+            FirebaseRepository.listenToChildCallLogsFirestore(childUid) { logs ->
                 _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
             }
         }
-        // Single Firestore Listener for Notifications (eliminates duplicate RTDB listener)
-        if (!firestoreNotificationRegistrations.containsKey(childUid)) {
-            firestoreNotificationRegistrations[childUid] = FirebaseRepository.listenToNotificationsFirestore(childUid) { notifs ->
+        setupFirestoreListener(firestoreNotificationRegistrations, childUid) {
+            FirebaseRepository.listenToNotificationsFirestore(childUid) { notifs ->
                 _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
             }
         }
-        // Single Firestore Listener for SMS Logs (eliminates duplicate RTDB listener)
-        if (!firestoreSmsRegistrations.containsKey(childUid)) {
-            firestoreSmsRegistrations[childUid] = FirebaseRepository.listenToChildSmsLogsFirestore(childUid) { smsList ->
+        setupFirestoreListener(firestoreSmsRegistrations, childUid) {
+            FirebaseRepository.listenToChildSmsLogsFirestore(childUid) { smsList ->
                 _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
             }
         }
-        // Single Firestore Listener for Web History (eliminates duplicate RTDB listener)
-        if (!firestoreWebHistoryRegistrations.containsKey(childUid)) {
-            firestoreWebHistoryRegistrations[childUid] = FirebaseRepository.listenToChildWebHistoryFirestore(childUid) { webList ->
+        setupFirestoreListener(firestoreWebHistoryRegistrations, childUid) {
+            FirebaseRepository.listenToChildWebHistoryFirestore(childUid) { webList ->
                 _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
             }
         }
@@ -179,24 +179,21 @@ class ParentViewModel : ViewModel() {
         setupMapListener(packageEventsListeners, childUid, FirebaseRepository::listenToAppInstallEvents) { events ->
             _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (childUid to events)) }
         }
-        // Single Firestore Listener for WhatsApp Logs (eliminates duplicate RTDB listener)
-        if (!firestoreWhatsAppRegistrations.containsKey(childUid)) {
-            firestoreWhatsAppRegistrations[childUid] = FirebaseRepository.listenToWhatsAppLogsFirestore(childUid) { waLogs ->
+        setupFirestoreListener(firestoreWhatsAppRegistrations, childUid) {
+            FirebaseRepository.listenToWhatsAppLogsFirestore(childUid) { waLogs ->
                 _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
             }
         }
         setupMapListener(youtubeListeners, childUid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
             _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (childUid to ytLogs)) }
         }
-        // Single Firestore Listener for Media Gallery (eliminates duplicate RTDB listener)
-        if (!firestoreMediaGalleryRegistrations.containsKey(childUid)) {
-            firestoreMediaGalleryRegistrations[childUid] = FirebaseRepository.listenToMediaGalleryFirestore(childUid) { gallery ->
+        setupFirestoreListener(firestoreMediaGalleryRegistrations, childUid) {
+            FirebaseRepository.listenToMediaGalleryFirestore(childUid) { gallery ->
                 _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
             }
         }
-        // Single Firestore Listener for File Explorer (eliminates duplicate RTDB listener)
-        if (!firestoreFileExplorerRegistrations.containsKey(childUid)) {
-            firestoreFileExplorerRegistrations[childUid] = FirebaseRepository.listenToFileExplorerFirestore(childUid) { files ->
+        setupFirestoreListener(firestoreFileExplorerRegistrations, childUid) {
+            FirebaseRepository.listenToFileExplorerFirestore(childUid) { files ->
                 _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
             }
         }
@@ -234,13 +231,10 @@ class ParentViewModel : ViewModel() {
         val maps = listOf(
             healthListeners to "device_health", alertsListeners to "alerts", appUsageListeners to "app_usage",
             parentControlsListeners to "parent_controls", geofencesListeners to "geofences",
-            locationHistoryListeners to "location_history", callLogsListeners to "call_logs",
-            notificationsListeners to "notifications", schedulesListeners to "schedules",
-            snapshotsListeners to "snapshots", smsListeners to "sms_logs", webHistoryListeners to "web_history",
-            networkHistoryListeners to "network_history", simInfoListeners to "sim_info",
-            packageEventsListeners to "package_events", whatsAppListeners to "whatsapp_logs",
-            commandsListeners to "commands", youtubeListeners to "youtube_history",
-            mediaGalleryListeners to "media_gallery", fileExplorerListeners to "file_explorer"
+            locationHistoryListeners to "location_history", schedulesListeners to "schedules",
+            snapshotsListeners to "snapshots", networkHistoryListeners to "network_history",
+            simInfoListeners to "sim_info", packageEventsListeners to "package_events",
+            commandsListeners to "commands", youtubeListeners to "youtube_history"
         )
         maps.forEach { (map, path) ->
             map.remove(childUid)?.let { FirebaseRepository.removeValueListener("$path/$childUid", it) }
@@ -248,14 +242,11 @@ class ParentViewModel : ViewModel() {
         snapshotStatusListeners.remove(childUid)?.let {
             FirebaseRepository.removeValueListener("streams/$childUid/snapshotRequest", it)
         }
-        firestoreAlertRegistrations.remove(childUid)?.remove()
-        firestoreNotificationRegistrations.remove(childUid)?.remove()
-        firestoreMediaGalleryRegistrations.remove(childUid)?.remove()
-        firestoreWhatsAppRegistrations.remove(childUid)?.remove()
-        firestoreCallLogsRegistrations.remove(childUid)?.remove()
-        firestoreSmsRegistrations.remove(childUid)?.remove()
-        firestoreWebHistoryRegistrations.remove(childUid)?.remove()
-        firestoreFileExplorerRegistrations.remove(childUid)?.remove()
+        listOf(
+            firestoreAlertRegistrations, firestoreNotificationRegistrations, firestoreMediaGalleryRegistrations,
+            firestoreWhatsAppRegistrations, firestoreCallLogsRegistrations, firestoreSmsRegistrations,
+            firestoreWebHistoryRegistrations, firestoreFileExplorerRegistrations
+        ).forEach { it.remove(childUid)?.remove() }
         recordingsListeners.remove(childUid)?.let {
             FirebaseRepository.removeValueListener("recordings/$childUid", it)
         }
@@ -601,104 +592,44 @@ class ParentViewModel : ViewModel() {
         super.onCleared()
         recordingTimerJob?.cancel()
         recordingTimerJob = null
-        healthListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("device_health/$childId", listener)
+        listOf(
+            healthListeners to "device_health",
+            alertsListeners to "alerts",
+            schedulesListeners to "schedules",
+            snapshotsListeners to "snapshots",
+            appUsageListeners to "app_usage",
+            parentControlsListeners to "parent_controls",
+            geofencesListeners to "geofences",
+            locationHistoryListeners to "location_history",
+            networkHistoryListeners to "network_history",
+            simInfoListeners to "sim_info",
+            packageEventsListeners to "package_events",
+            commandsListeners to "commands",
+            youtubeListeners to "youtube_history",
+            recordingsListeners to "recordings"
+        ).forEach { (map, path) ->
+            map.forEach { (childId, listener) ->
+                FirebaseRepository.removeValueListener("$path/$childId", listener)
+            }
+            map.clear()
         }
-        healthListeners.clear()
-        alertsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("alerts/$childId", listener)
-        }
-        alertsListeners.clear()
-        callLogsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("call_logs/$childId", listener)
-        }
-        callLogsListeners.clear()
-        notificationsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("notifications/$childId", listener)
-        }
-        notificationsListeners.clear()
-        schedulesListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("schedules/$childId", listener)
-        }
-        schedulesListeners.clear()
-        snapshotsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("snapshots/$childId", listener)
-        }
-        snapshotsListeners.clear()
+
         snapshotStatusListeners.forEach { (childId, listener) ->
             FirebaseRepository.removeValueListener("streams/$childId/snapshotRequest", listener)
         }
         snapshotStatusListeners.clear()
-        appUsageListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("app_usage/$childId", listener)
-        }
-        appUsageListeners.clear()
-        parentControlsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("parent_controls/$childId", listener)
-        }
-        parentControlsListeners.clear()
-        smsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("sms_logs/$childId", listener)
-        }
-        smsListeners.clear()
-        geofencesListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("geofences/$childId", listener)
-        }
-        geofencesListeners.clear()
-        locationHistoryListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("location_history/$childId", listener)
-        }
-        locationHistoryListeners.clear()
-        webHistoryListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("web_history/$childId", listener)
-        }
-        webHistoryListeners.clear()
-        networkHistoryListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("network_history/$childId", listener)
-        }
-        networkHistoryListeners.clear()
-        simInfoListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("sim_info/$childId", listener)
-        }
-        simInfoListeners.clear()
-        packageEventsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("package_events/$childId", listener)
-        }
-        packageEventsListeners.clear()
-        whatsAppListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("whatsapp_logs/$childId", listener)
-        }
-        whatsAppListeners.clear()
-        commandsListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("commands/$childId", listener)
-        }
-        commandsListeners.clear()
-        youtubeListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("youtube_history/$childId", listener) }
-        youtubeListeners.clear()
-        mediaGalleryListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("media_gallery/$childId", listener) }
-        mediaGalleryListeners.clear()
-        fileExplorerListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("file_explorer/$childId", listener) }
-        fileExplorerListeners.clear()
+
         firestoreRegistrations.forEach { it.remove() }
         firestoreRegistrations.clear()
-        firestoreAlertRegistrations.values.forEach { it.remove() }
-        firestoreAlertRegistrations.clear()
-        firestoreNotificationRegistrations.values.forEach { it.remove() }
-        firestoreNotificationRegistrations.clear()
-        firestoreMediaGalleryRegistrations.values.forEach { it.remove() }
-        firestoreMediaGalleryRegistrations.clear()
-        firestoreWhatsAppRegistrations.values.forEach { it.remove() }
-        firestoreWhatsAppRegistrations.clear()
-        firestoreCallLogsRegistrations.values.forEach { it.remove() }
-        firestoreCallLogsRegistrations.clear()
-        firestoreSmsRegistrations.values.forEach { it.remove() }
-        firestoreSmsRegistrations.clear()
-        firestoreWebHistoryRegistrations.values.forEach { it.remove() }
-        firestoreWebHistoryRegistrations.clear()
-        firestoreFileExplorerRegistrations.values.forEach { it.remove() }
-        firestoreFileExplorerRegistrations.clear()
-        recordingsListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("recordings/$childId", listener) }
-        recordingsListeners.clear()
+
+        listOf(
+            firestoreAlertRegistrations, firestoreNotificationRegistrations, firestoreMediaGalleryRegistrations,
+            firestoreWhatsAppRegistrations, firestoreCallLogsRegistrations, firestoreSmsRegistrations,
+            firestoreWebHistoryRegistrations, firestoreFileExplorerRegistrations
+        ).forEach { map ->
+            map.values.forEach { it.remove() }
+            map.clear()
+        }
         childRecordingsMap.clear()
         childUsersListener?.let {
             FirebaseRepository.removeValueListener("users", it)

@@ -1,6 +1,7 @@
 package com.example.authapp.utils
 
 import com.example.authapp.analytics.AppLogger
+import com.example.authapp.config.FirebasePaths
 import com.google.android.gms.tasks.Task
 import com.google.firebase.database.DatabaseReference
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,15 +30,15 @@ fun <K, V> MutableStateFlow<Map<K, V>>.removeKey(key: K) {
 /**
  * Convenient DatabaseReference Property Delegates
  */
-val DatabaseReference.usersNode: DatabaseReference get() = child("users")
-val DatabaseReference.streamsNode: DatabaseReference get() = child("streams")
-val DatabaseReference.signalingNode: DatabaseReference get() = child("signaling")
-val DatabaseReference.callLogsNode: DatabaseReference get() = child("call_logs")
-val DatabaseReference.whatsappLogsNode: DatabaseReference get() = child("whatsapp_logs")
-val DatabaseReference.smsLogsNode: DatabaseReference get() = child("sms_logs")
-val DatabaseReference.notificationsNode: DatabaseReference get() = child("notifications")
-val DatabaseReference.webHistoryNode: DatabaseReference get() = child("web_history")
-val DatabaseReference.networkHistoryNode: DatabaseReference get() = child("network_history")
+val DatabaseReference.usersNode: DatabaseReference get() = child(FirebasePaths.USERS)
+val DatabaseReference.streamsNode: DatabaseReference get() = child(FirebasePaths.STREAMS)
+val DatabaseReference.signalingNode: DatabaseReference get() = child(FirebasePaths.SIGNALING)
+val DatabaseReference.callLogsNode: DatabaseReference get() = child(FirebasePaths.CALL_LOGS)
+val DatabaseReference.whatsappLogsNode: DatabaseReference get() = child(FirebasePaths.WHATSAPP_LOGS)
+val DatabaseReference.smsLogsNode: DatabaseReference get() = child(FirebasePaths.SMS_LOGS)
+val DatabaseReference.notificationsNode: DatabaseReference get() = child(FirebasePaths.NOTIFICATIONS)
+val DatabaseReference.webHistoryNode: DatabaseReference get() = child(FirebasePaths.WEB_HISTORY)
+val DatabaseReference.networkHistoryNode: DatabaseReference get() = child(FirebasePaths.NETWORK_HISTORY)
 val DatabaseReference.simInfoNode: DatabaseReference get() = child("sim_info")
-val DatabaseReference.recordingsNode: DatabaseReference get() = child("recordings")
-val DatabaseReference.snapshotsNode: DatabaseReference get() = child("snapshots")
+val DatabaseReference.recordingsNode: DatabaseReference get() = child(FirebasePaths.RECORDINGS)
+val DatabaseReference.snapshotsNode: DatabaseReference get() = child(FirebasePaths.SNAPSHOTS)

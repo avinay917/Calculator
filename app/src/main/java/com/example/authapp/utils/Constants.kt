@@ -1,5 +1,7 @@
 package com.example.authapp.utils
 
+import com.example.authapp.config.FirebasePaths
+
 /**
  * Centralized constants for the application.
  * Reduces hardcoded strings and improves maintainability.
@@ -20,23 +22,23 @@ object Constants {
 
     // Firebase Database Paths
     object Firebase {
-        const val PATH_USERS = "users"
-        const val PATH_STREAMS = "streams"
-        const val PATH_SIGNALING = "signaling"
-        const val PATH_RECORDINGS = "recordings"
-        const val PATH_ALERTS = "alerts"
-        const val PATH_CALL_LOGS = "call_logs"
-        const val PATH_NOTIFICATIONS = "notifications"
-        const val PATH_SCHEDULES = "schedules"
-        const val PATH_SNAPSHOTS = "snapshots"
-        const val PATH_DEVICE_HEALTH = "device_health"
+        const val PATH_USERS = FirebasePaths.USERS
+        const val PATH_STREAMS = FirebasePaths.STREAMS
+        const val PATH_SIGNALING = FirebasePaths.SIGNALING
+        const val PATH_RECORDINGS = FirebasePaths.RECORDINGS
+        const val PATH_ALERTS = FirebasePaths.ALERTS
+        const val PATH_CALL_LOGS = FirebasePaths.CALL_LOGS
+        const val PATH_NOTIFICATIONS = FirebasePaths.NOTIFICATIONS
+        const val PATH_SCHEDULES = FirebasePaths.SCHEDULES
+        const val PATH_SNAPSHOTS = FirebasePaths.SNAPSHOTS
+        const val PATH_DEVICE_HEALTH = FirebasePaths.DEVICE_HEALTH
         const val PATH_APP_UPDATE = "app_update"
         const val PATH_ICE_SERVERS = "ice_servers"
         const val PATH_CONNECTED_INFO = ".info/connected"
 
         // Firebase Storage Paths
-        const val STORAGE_RECORDINGS = "recordings"
-        const val STORAGE_SNAPSHOTS = "snapshots"
+        const val STORAGE_RECORDINGS = FirebasePaths.STORAGE_RECORDINGS
+        const val STORAGE_SNAPSHOTS = FirebasePaths.STORAGE_SNAPSHOTS
     }
 
     // Stream Types
