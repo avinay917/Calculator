@@ -66,6 +66,8 @@ import com.example.authapp.ui.viewmodel.ParentViewModel
 import com.example.authapp.webrtc.WebRtcManager
 import java.io.File
 import java.io.FileInputStream
+import com.example.authapp.utils.toast
+import com.example.authapp.utils.longToast
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
@@ -136,7 +138,7 @@ fun ParentScreen(
 
     LaunchedEffect(uiState.userFeedbackMessage) {
         uiState.userFeedbackMessage?.let { msg ->
-            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            context.toast(msg)
             viewModel.clearUserFeedbackMessage()
         }
     }
@@ -146,11 +148,11 @@ fun ParentScreen(
         if (uiState.isRecording) {
             viewModel.onRecordingStopped()
             FirebaseControlRepository.requestRemoteRecording(childId, false, streamType.lowercase())
-            Toast.makeText(context, "Recording stopped. Syncing to Cloud History...", Toast.LENGTH_SHORT).show()
+            context.toast("Recording stopped. Syncing to Cloud History...")
         } else {
             viewModel.onRecordingStarted()
             FirebaseControlRepository.requestRemoteRecording(childId, true, streamType.lowercase())
-            Toast.makeText(context, "High-quality master recording started on child device...", Toast.LENGTH_SHORT).show()
+            context.toast("High-quality master recording started on child device...")
         }
     }
 
@@ -202,10 +204,10 @@ fun ParentScreen(
                 }
                 mediaPlayer = mp
             } else {
-                Toast.makeText(context, "No playable file or storage URL found", Toast.LENGTH_SHORT).show()
+                context.toast("No playable file or storage URL found")
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "Playback error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            context.toast("Playback error: ${e.localizedMessage}")
             viewModel.setCurrentlyPlayingRecId(null)
         }
     }
@@ -652,15 +654,15 @@ fun ParentScreen(
                                     alertsCount = uiState.securityAlertsMap[child.uid]?.size ?: 0,
                                     onAudioClick = {
                                         viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.AUDIO_ONLY)
-                                        Toast.makeText(context, "Requesting Audio Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                        context.toast("Requesting Audio Stream from ${child.name}...")
                                     },
                                     onVideoClick = {
                                         viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.CAMERA_VIDEO)
-                                        Toast.makeText(context, "Requesting Video Stream from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                        context.toast("Requesting Video Stream from ${child.name}...")
                                     },
                                     onScreenClick = {
                                         viewModel.startStream(child, com.example.authapp.utils.Constants.StreamTypes.SCREEN_MIRROR)
-                                        Toast.makeText(context, "Requesting Live Screen Mirror from ${child.name}...", Toast.LENGTH_SHORT).show()
+                                        context.toast("Requesting Live Screen Mirror from ${child.name}...")
                                     },
                                     onLocationClick = {
                                         viewModel.openLocationDialog(child)
@@ -702,41 +704,41 @@ fun ParentScreen(
                         if (selectedChild != null) {
                             val cur = uiState.isTorchActiveMap[selectedChild.uid] == true
                             viewModel.toggleTorch(selectedChild.uid, cur)
-                            Toast.makeText(context, if (!cur) "Turning Torch ON..." else "Turning Torch OFF...", Toast.LENGTH_SHORT).show()
+                            context.toast(if (!cur) "Turning Torch ON..." else "Turning Torch OFF...")
                         }
                     },
                     onToggleSiren = {
                         if (selectedChild != null) {
                             val cur = uiState.isSirenActiveMap[selectedChild.uid] == true
                             viewModel.triggerSiren(selectedChild.uid, cur)
-                            Toast.makeText(context, if (!cur) "Triggering Emergency Siren..." else "Stopping Siren...", Toast.LENGTH_SHORT).show()
+                            context.toast(if (!cur) "Triggering Emergency Siren..." else "Stopping Siren...")
                         }
                     },
                     onToggleAppBlock = { pkg, isBlocked ->
                         if (selectedChild != null) {
                             viewModel.toggleAppBlock(selectedChild.uid, pkg, isBlocked)
                             val action = if (isBlocked) "Unlocked" else "Locked"
-                            Toast.makeText(context, "App $action successfully", Toast.LENGTH_SHORT).show()
+                            context.toast("App $action successfully")
                         }
                     },
                     onToggleStudyMode = { isActive, durationMins ->
                         if (selectedChild != null) {
                             viewModel.toggleStudyMode(selectedChild.uid, isActive, durationMins)
                             val stateText = if (isActive) "Deactivated" else "Activated"
-                            Toast.makeText(context, "Study Mode $stateText", Toast.LENGTH_SHORT).show()
+                            context.toast("Study Mode $stateText")
                         }
                     },
                     onLaunchApp = { pkg ->
                         if (selectedChild != null) {
                             viewModel.launchRemoteApp(selectedChild.uid, pkg)
-                            Toast.makeText(context, "Opening app on child device...", Toast.LENGTH_SHORT).show()
+                            context.toast("Opening app on child device...")
                         }
                     },
                     onCloseApp = { pkg ->
                         if (selectedChild != null) {
                             viewModel.closeRemoteApp(selectedChild.uid, pkg)
                             val msg = if (pkg.isEmpty()) "Returning child device to Home..." else "Closing app on child device..."
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            context.toast(msg)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -759,11 +761,11 @@ fun ParentScreen(
                     schedulesMap = uiState.schedulesMap,
                     onSaveSchedule = { childId, schedule ->
                         viewModel.saveRecordingSchedule(childId, schedule)
-                        Toast.makeText(context, "Schedule saved! Offline active.", Toast.LENGTH_SHORT).show()
+                        context.toast("Schedule saved! Offline active.")
                     },
                     onDeleteSchedule = { childId, scheduleId ->
                         viewModel.deleteRecordingSchedule(childId, scheduleId)
-                        Toast.makeText(context, "Schedule deleted", Toast.LENGTH_SHORT).show()
+                        context.toast("Schedule deleted")
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -831,11 +833,11 @@ fun ParentScreen(
                     schedules = uiState.schedulesMap[childUser.uid] ?: emptyList(),
                     onSaveSchedule = { schedule ->
                         viewModel.saveRecordingSchedule(childUser.uid, schedule)
-                        Toast.makeText(context, "Recording schedule saved", Toast.LENGTH_SHORT).show()
+                        context.toast("Recording schedule saved")
                     },
                     onDeleteSchedule = { scheduleId ->
                         viewModel.deleteRecordingSchedule(childUser.uid, scheduleId)
-                        Toast.makeText(context, "Recording schedule removed", Toast.LENGTH_SHORT).show()
+                        context.toast("Recording schedule removed")
                     },
                     onDismiss = { viewModel.closeScheduleDialog() }
                 )
@@ -864,9 +866,9 @@ fun ParentScreen(
                                     isUnpairing = false
                                     childToUnpair = null
                                     if (success) {
-                                        Toast.makeText(context, "Child device successfully unpaired", Toast.LENGTH_SHORT).show()
+                                        context.toast("Child device successfully unpaired")
                                     } else {
-                                        Toast.makeText(context, "Unpair failed: $error", Toast.LENGTH_LONG).show()
+                                        context.longToast("Unpair failed: $error")
                                     }
                                 }
                             },

@@ -2,6 +2,8 @@ package com.example.authapp.ui.screens
 
 import android.content.Context
 import android.widget.Toast
+import com.example.authapp.utils.toast
+import com.example.authapp.utils.longToast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -94,7 +96,7 @@ fun SignInScreen(
                     } else {
                         authPrefs.edit().clear().apply()
                     }
-                    Toast.makeText(context, "Sign In Successful! Loading dashboard...", Toast.LENGTH_SHORT).show()
+                    context.toast("Sign In Successful! Loading dashboard...")
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_in", "success", mapOf("email" to email))
                     onSignInSuccess(email)
                 } else {
@@ -420,11 +422,7 @@ fun SignInScreen(
                         FirebaseRepository.sendPasswordResetEmail(trimmed) { success, err ->
                             resetLoading = false
                             if (success) {
-                                Toast.makeText(
-                                    context,
-                                    "Password reset link sent to $trimmed! Please check your inbox.",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                                context.longToast("Password reset link sent to $trimmed! Please check your inbox.")
                                 showResetDialog = false
                             } else {
                                 resetError = err ?: "Failed to send reset email. Please try again."

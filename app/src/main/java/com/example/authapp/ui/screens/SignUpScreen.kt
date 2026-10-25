@@ -1,6 +1,7 @@
 package com.example.authapp.ui.screens
 
 import android.widget.Toast
+import com.example.authapp.utils.longToast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -109,7 +110,7 @@ fun SignUpScreen(
             com.example.authapp.data.FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
                 isLoading = false
                 if (success) {
-                    Toast.makeText(context, "Account created successfully! Please Sign In to continue.", Toast.LENGTH_LONG).show()
+                    context.longToast("Account created successfully! Please Sign In to continue.")
                     com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
                     onSignUpSuccess(email)
                 } else {
