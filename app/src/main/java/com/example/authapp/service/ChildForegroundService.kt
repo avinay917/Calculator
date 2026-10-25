@@ -28,6 +28,7 @@ import com.example.authapp.R
 import com.example.authapp.analytics.AppHealthTelemetry
 import com.example.authapp.config.RemoteConfigManager
 import com.example.authapp.data.AppPreferences
+import com.example.authapp.utils.hasPermission
 import com.example.authapp.data.AppUsageInfo
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.data.FirebaseControlRepository
@@ -536,26 +537,9 @@ class ChildForegroundService : Service() {
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun hasMicrophonePermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasLocationPermission(): Boolean = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+    private fun hasMicrophonePermission(): Boolean = hasPermission(Manifest.permission.RECORD_AUDIO)
+    private fun hasCameraPermission(): Boolean = hasPermission(Manifest.permission.CAMERA)
 
     private fun getIdleServiceType(): Int {
         var type = 0

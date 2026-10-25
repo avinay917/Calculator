@@ -11,7 +11,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 object SmsUtils {
 
     fun getRecentSms(context: Context, limit: Int = 30): List<SmsItem> {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+        if (!context.hasPermission(Manifest.permission.READ_SMS)) {
             return emptyList()
         }
 

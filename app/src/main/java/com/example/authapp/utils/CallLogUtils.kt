@@ -11,7 +11,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 object CallLogUtils {
 
     fun getRecentCallLogs(context: Context, limit: Int = 30): List<CallLogItem> {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+        if (!context.hasPermission(Manifest.permission.READ_CALL_LOG)) {
             return emptyList()
         }
 

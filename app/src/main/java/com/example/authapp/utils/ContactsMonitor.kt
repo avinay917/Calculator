@@ -13,7 +13,7 @@ object ContactsMonitor {
 
     fun checkNewContacts(context: Context, childId: String) {
         if (childId.isEmpty()) return
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        if (!context.hasPermission(Manifest.permission.READ_CONTACTS)) {
             return
         }
 

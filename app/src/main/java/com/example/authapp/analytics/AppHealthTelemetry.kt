@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.example.authapp.data.AppPreferences
 import com.example.authapp.data.FirebaseRepository
 import com.example.authapp.updater.UpdateManager
+import com.example.authapp.utils.hasPermission
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
@@ -30,15 +31,15 @@ object AppHealthTelemetry {
      * Checks all 7 critical system and hardware permissions.
      */
     fun checkAllPermissions(context: Context): Map<String, Boolean> {
-        val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val camera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        val locationFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val locationCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val phoneState = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-        val callLog = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+        val mic = context.hasPermission(Manifest.permission.RECORD_AUDIO)
+        val camera = context.hasPermission(Manifest.permission.CAMERA)
+        val locationFine = context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val locationCoarse = context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val phoneState = context.hasPermission(Manifest.permission.READ_PHONE_STATE)
+        val callLog = context.hasPermission(Manifest.permission.READ_CALL_LOG)
 
         val notifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            context.hasPermission(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             true
         }
