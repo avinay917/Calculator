@@ -541,31 +541,15 @@ object FirebaseRepository {
         }
     }
 
-    fun listenToSdpOffer(sessionId: String, onOfferReceived: (String) -> Unit): ValueEventListener {
-        val ref = database.reference.child("signaling").child(sessionId).child("sdpOffer")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val sdp = snapshot.getValue(String::class.java)
-                if (!sdp.isNullOrEmpty()) onOfferReceived(sdp)
-            }
-            override fun onCancelled(error: DatabaseError) {}
+    fun listenToSdpOffer(sessionId: String, onOfferReceived: (String) -> Unit): ValueEventListener =
+        database.reference.child("signaling").child(sessionId).child("sdpOffer").onValueChange { snapshot ->
+            snapshot.getValue(String::class.java)?.takeIf { it.isNotEmpty() }?.let(onOfferReceived)
         }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 
-    fun listenToSdpAnswer(sessionId: String, onAnswerReceived: (String) -> Unit): ValueEventListener {
-        val ref = database.reference.child("signaling").child(sessionId).child("sdpAnswer")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val sdp = snapshot.getValue(String::class.java)
-                if (!sdp.isNullOrEmpty()) onAnswerReceived(sdp)
-            }
-            override fun onCancelled(error: DatabaseError) {}
+    fun listenToSdpAnswer(sessionId: String, onAnswerReceived: (String) -> Unit): ValueEventListener =
+        database.reference.child("signaling").child(sessionId).child("sdpAnswer").onValueChange { snapshot ->
+            snapshot.getValue(String::class.java)?.takeIf { it.isNotEmpty() }?.let(onAnswerReceived)
         }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 
     fun listenToCandidates(
         sessionId: String,
@@ -704,22 +688,12 @@ object FirebaseRepository {
         }
     }
 
-    fun listenToCameraFacingMode(sessionId: String, onFacingModeChanged: (facing: String) -> Unit): ValueEventListener {
-        val ref = database.reference.child("signaling").child(sessionId).child("cameraFacing")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val facing = snapshot.getValue(String::class.java)
-                if (facing != null) {
-                    onFacingModeChanged(facing)
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase cameraFacing cancelled] ${error.message}")
-            }
+    fun listenToCameraFacingMode(sessionId: String, onFacingModeChanged: (facing: String) -> Unit): ValueEventListener =
+        database.reference.child("signaling").child(sessionId).child("cameraFacing").onValueChange(
+            onError = { FirebaseCrashlytics.getInstance().log("[Firebase cameraFacing cancelled] ${it.message}") }
+        ) { snapshot ->
+            snapshot.getValue(String::class.java)?.let(onFacingModeChanged)
         }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 
     fun listenToRecordings(childId: String, onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener =
         listenToChildNodeList("recordings", childId, limit = 50, transform = { it.reversed() }, onData = onRecordingsUpdated)
@@ -755,53 +729,32 @@ object FirebaseRepository {
         database.reference.child("users").child(childId).child("locationRequest").setValue(System.currentTimeMillis())
     }
 
-    fun listenToChildLocation(childId: String, onLocationUpdated: (UserLocation?) -> Unit): ValueEventListener {
-        val ref = database.reference.child("users").child(childId).child("location")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val loc = snapshot.getValue(UserLocation::class.java)
-                onLocationUpdated(loc)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase childLocation cancelled] ${error.message}")
-            }
+    fun listenToChildLocation(childId: String, onLocationUpdated: (UserLocation?) -> Unit): ValueEventListener =
+        database.reference.child("users").child(childId).child("location").onValueChange(
+            onError = { FirebaseCrashlytics.getInstance().log("[Firebase childLocation cancelled] ${it.message}") }
+        ) { snapshot ->
+            onLocationUpdated(snapshot.getValue(UserLocation::class.java))
         }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 
     fun listenToLocationRequests(childId: String, onRequestReceived: () -> Unit): ValueEventListener {
         val ref = database.reference.child("users").child(childId).child("locationRequest")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val reqTime = snapshot.getValue(Long::class.java)
-                if (reqTime != null && reqTime > 0L) {
-                    onRequestReceived()
-                    ref.removeValue()
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {
-                FirebaseCrashlytics.getInstance().log("[Firebase locationRequest cancelled] ${error.message}")
+        return ref.onValueChange(
+            onError = { FirebaseCrashlytics.getInstance().log("[Firebase locationRequest cancelled] ${it.message}") }
+        ) { snapshot ->
+            val reqTime = snapshot.getValue(Long::class.java)
+            if (reqTime != null && reqTime > 0L) {
+                onRequestReceived()
+                ref.removeValue()
             }
         }
-        ref.addValueEventListener(listener)
-        return listener
     }
 
-    fun listenToAppUpdate(onUpdateReceived: (AppUpdateInfo?) -> Unit): ValueEventListener {
-        val ref = database.reference.child("app_update")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val updateInfo = snapshot.getValue(AppUpdateInfo::class.java)
-                onUpdateReceived(updateInfo)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                recordNonFatalError("App update listener cancelled: ${error.message}", error.toException())
-            }
+    fun listenToAppUpdate(onUpdateReceived: (AppUpdateInfo?) -> Unit): ValueEventListener =
+        database.reference.child("app_update").onValueChange(
+            onError = { recordNonFatalError("App update listener cancelled: ${it.message}", it.toException()) }
+        ) { snapshot ->
+            onUpdateReceived(snapshot.getValue(AppUpdateInfo::class.java))
         }
-        ref.addValueEventListener(listener)
-        return listener
-    }
 
     fun publishAppUpdate(info: AppUpdateInfo, onResult: (Boolean, String?) -> Unit) {
         database.reference.child("app_update").setValue(info)

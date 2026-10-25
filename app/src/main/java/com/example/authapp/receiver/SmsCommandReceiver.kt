@@ -52,27 +52,40 @@ class SmsCommandReceiver : BroadcastReceiver() {
             }
             // 2. Emergency Siren Commands
             else if (upperBody.contains("#CALC#SIREN_OFF") || upperBody.contains("#SIREN_OFF")) {
-                RemoteActionsManager.stopSiren()
-                sendSmsReply(context, senderAddress, "🚨 Emergency Siren stopped on child device.")
-                logSmsAlert(childId, "Siren Stopped via SMS Command from $senderAddress")
+                executeAndAcknowledge(context, childId, senderAddress, "🚨 Emergency Siren stopped on child device.", "Siren Stopped via SMS Command") {
+                    RemoteActionsManager.stopSiren()
+                }
             } else if (upperBody.contains("#CALC#SIREN") || upperBody.contains("#SIREN_ON") || upperBody.contains("#SIREN")) {
-                RemoteActionsManager.playSiren(context, 30)
-                sendSmsReply(context, senderAddress, "🚨 Emergency Siren activated on child device at MAX volume.")
-                logSmsAlert(childId, "Siren Triggered via SMS Command from $senderAddress")
+                executeAndAcknowledge(context, childId, senderAddress, "🚨 Emergency Siren activated on child device at MAX volume.", "Siren Triggered via SMS Command") {
+                    RemoteActionsManager.playSiren(context, 30)
+                }
             }
             // 3. Flashlight / Torch Commands
             else if (upperBody.contains("#CALC#TORCH_ON") || upperBody.contains("#TORCH_ON")) {
-                RemoteActionsManager.setTorch(context, true)
-                sendSmsReply(context, senderAddress, "🔦 Flashlight turned ON via SMS command.")
-                logSmsAlert(childId, "Flashlight ON via SMS Command from $senderAddress")
+                executeAndAcknowledge(context, childId, senderAddress, "🔦 Flashlight turned ON via SMS command.", "Flashlight ON via SMS Command") {
+                    RemoteActionsManager.setTorch(context, true)
+                }
             } else if (upperBody.contains("#CALC#TORCH_OFF") || upperBody.contains("#TORCH_OFF")) {
-                RemoteActionsManager.setTorch(context, false)
-                sendSmsReply(context, senderAddress, "🔦 Flashlight turned OFF via SMS command.")
-                logSmsAlert(childId, "Flashlight OFF via SMS Command from $senderAddress")
+                executeAndAcknowledge(context, childId, senderAddress, "🔦 Flashlight turned OFF via SMS command.", "Flashlight OFF via SMS Command") {
+                    RemoteActionsManager.setTorch(context, false)
+                }
             }
         } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().log("[SmsCommandReceiver] onReceive error: ${t.localizedMessage}")
         }
+    }
+
+    private inline fun executeAndAcknowledge(
+        context: Context,
+        childId: String,
+        sender: String,
+        replyText: String,
+        alertTitle: String,
+        action: () -> Unit
+    ) {
+        action()
+        sendSmsReply(context, sender, replyText)
+        logSmsAlert(childId, "$alertTitle from $sender")
     }
 
     private fun handleLocationCommand(context: Context, childId: String, sender: String) {

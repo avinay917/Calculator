@@ -36,74 +36,44 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "FCM wake-up payload received: action=$action, type=$type, streamType=$streamType, session=$sessionId"
         )
 
-        if (action == "START_STREAM") {
-            val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_START
+        when {
+            action == "START_STREAM" -> dispatchChildService(ChildForegroundService.ACTION_START) {
                 putExtra(ChildForegroundService.EXTRA_STREAM_TYPE, streamType)
                 putExtra(ChildForegroundService.EXTRA_SESSION_ID, sessionId)
             }
-            try {
-                ContextCompat.startForegroundService(this, intent)
-            } catch (e: Exception) {
-                AppHealthTelemetry.logDiagnostic(
-                    applicationContext,
-                    "FCM_PUSH",
-                    "FAILED",
-                    "Failed to start foreground service from FCM: ${e.localizedMessage}",
-                    e.localizedMessage
-                )
-                FirebaseCrashlytics.getInstance().recordException(e)
-            }
-        } else if (action == "STOP_STREAM") {
-            val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_STOP_STREAM
-            }
-            try {
-                ContextCompat.startForegroundService(this, intent)
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().log("[FCM] Failed to stop stream: ${e.localizedMessage}")
-                FirebaseCrashlytics.getInstance().recordException(e)
-            }
-        } else if (action == "WAKEUP" && type == "SNAPSHOT") {
-            val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_TAKE_SNAPSHOT
+            action == "STOP_STREAM" -> dispatchChildService(ChildForegroundService.ACTION_STOP_STREAM)
+            action == "WAKEUP" && type == "SNAPSHOT" -> dispatchChildService(ChildForegroundService.ACTION_TAKE_SNAPSHOT) {
                 putExtra(ChildForegroundService.EXTRA_CAMERA_FACING, facing)
             }
-            try {
-                ContextCompat.startForegroundService(this, intent)
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
-            }
-        } else if (action == "WAKEUP" && type == "COMMAND") {
-            val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_EXECUTE_COMMAND
+            action == "WAKEUP" && type == "COMMAND" -> dispatchChildService(ChildForegroundService.ACTION_EXECUTE_COMMAND) {
                 putExtra(ChildForegroundService.EXTRA_COMMAND, command)
                 putExtra(ChildForegroundService.EXTRA_COMMAND_VALUE, commandValue)
             }
-            try {
-                ContextCompat.startForegroundService(this, intent)
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
+            action == "REFRESH_LOCATION" || action == "WAKEUP" -> dispatchChildService(ChildForegroundService.ACTION_START_MONITORING)
+            action == "SECURITY_ALERT" -> {
+                val alertTitle = data["title"] ?: "🚨 Security Alert"
+                val alertMessage = data["message"] ?: "Security event detected on child device"
+                showSecurityAlertNotification(alertTitle, alertMessage)
             }
-        } else if (action == "REFRESH_LOCATION" || action == "WAKEUP") {
-            val intent = Intent(this, ChildForegroundService::class.java).apply {
-                this.action = ChildForegroundService.ACTION_START_MONITORING
-            }
-            try {
-                ContextCompat.startForegroundService(this, intent)
-            } catch (e: Exception) {
-                AppHealthTelemetry.logDiagnostic(
-                    applicationContext,
-                    "FCM_PUSH",
-                    "FAILED",
-                    "Failed to start service for wake-up: ${e.localizedMessage}",
-                    e.localizedMessage
-                )
-            }
-        } else if (action == "SECURITY_ALERT") {
-            val alertTitle = data["title"] ?: "🚨 Security Alert"
-            val alertMessage = data["message"] ?: "Security event detected on child device"
-            showSecurityAlertNotification(alertTitle, alertMessage)
+        }
+    }
+
+    private fun dispatchChildService(action: String, configure: (Intent.() -> Unit)? = null) {
+        val intent = Intent(this, ChildForegroundService::class.java).apply {
+            this.action = action
+            configure?.invoke(this)
+        }
+        try {
+            ContextCompat.startForegroundService(this, intent)
+        } catch (e: Exception) {
+            AppHealthTelemetry.logDiagnostic(
+                applicationContext,
+                "FCM_PUSH",
+                "FAILED",
+                "Failed to dispatch service action $action: ${e.localizedMessage}",
+                e.localizedMessage
+            )
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 
