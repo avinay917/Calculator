@@ -794,53 +794,14 @@ fun CallLogListItem(
         else -> log.type.uppercase()
     }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(typeIcon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (log.name.isNotEmpty() && log.number.isNotEmpty()) {
-                        Text(
-                            text = log.number,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$displayType • $timeStr • $durationStr",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-
-            // Enhanced Audio Call Recording Player Bar
-            if (log.audioRecordingUrl.isNotEmpty()) {
+    ActivityLogCard(
+        icon = typeIcon,
+        iconTint = iconTint,
+        title = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
+        subtitle = if (log.name.isNotEmpty() && log.number.isNotEmpty()) log.number else "",
+        timestampStr = "$displayType • $timeStr • $durationStr",
+        extraContent = if (log.audioRecordingUrl.isNotEmpty()) {
+            {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -913,7 +874,6 @@ fun CallLogListItem(
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // Audio Speed Control Button (0.5x, 1x, 1.25x, 1.5x, 2x)
                         AssistChip(
                             onClick = onSpeedToggle,
                             label = {
@@ -927,113 +887,36 @@ fun CallLogListItem(
                     }
                 }
             }
-        }
-    }
+        } else null
+    )
 }
 
 @Composable
 fun SmsListItem(sms: SmsItem) {
     val isIncoming = sms.type.uppercase() == "INCOMING"
-    val icon = if (isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade
     val tint = if (isIncoming) Color(0xFF388E3C) else Color(0xFF1976D2)
-
-    val timeStr = remember(sms.timestamp) { sms.timestamp.formatTime() }
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(tint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = sms.address.ifEmpty { "Unknown" },
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = if (isIncoming) "Received" else "Sent",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = tint
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = sms.body,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
-    }
+    ActivityLogCard(
+        icon = if (isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade,
+        iconTint = tint,
+        title = sms.address.ifEmpty { "Unknown" },
+        subtitle = sms.body,
+        timestampStr = remember(sms.timestamp) { sms.timestamp.formatTime() },
+        badgeText = if (isIncoming) "Received" else "Sent",
+        badgeColor = tint
+    )
 }
 
 @Composable
 fun WebHistoryListItem(item: WebHistoryItem) {
-    val timeStr = remember(item.timestamp) { item.timestamp.formatTime() }
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (item.isBlocked) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Icon(
-                imageVector = if (item.isBlocked) Icons.Default.Warning else Icons.Default.Language,
-                contentDescription = null,
-                tint = if (item.isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title.ifEmpty { item.url },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = item.url,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
-    }
+    ActivityLogCard(
+        icon = if (item.isBlocked) Icons.Default.Warning else Icons.Default.Language,
+        iconTint = if (item.isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        title = item.title.ifEmpty { item.url },
+        subtitle = item.url,
+        timestampStr = remember(item.timestamp) { item.timestamp.formatTime() },
+        badgeText = if (item.isBlocked) "Blocked" else "",
+        badgeColor = MaterialTheme.colorScheme.error
+    )
 }
 
 @Composable
@@ -1042,75 +925,28 @@ fun NetworkHistoryListItem(item: NetworkHistoryItem) {
     val disconnectTimeStr = remember(item.disconnectedAt) {
         if (item.disconnectedAt > 0L) com.example.authapp.utils.DateTimeUtils.formatTimeOnly(item.disconnectedAt) else "Active now"
     }
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Icon(
-                imageVector = if (item.networkType == "WIFI") Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.ssid.ifEmpty { item.networkType },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "Connected: $connectTimeStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Disconnected: $disconnectTimeStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
-    }
+    ActivityLogCard(
+        icon = if (item.networkType == "WIFI") Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
+        iconTint = MaterialTheme.colorScheme.primary,
+        title = item.ssid.ifEmpty { item.networkType },
+        subtitle = "Connected: $connectTimeStr • Disconnected: $disconnectTimeStr",
+        timestampStr = connectTimeStr
+    )
 }
 
 @Composable
 fun AppInstallEventItem(event: AppInstallEvent) {
     val isInstalled = event.eventType.uppercase() == "INSTALLED"
-    val icon = if (isInstalled) Icons.Default.AddCircle else Icons.Default.Delete
     val tint = if (isInstalled) Color(0xFF388E3C) else Color(0xFFD32F2F)
-
-    val timeStr = remember(event.timestamp) { event.timestamp.formatTime() }
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = event.appName.ifEmpty { event.packageName },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "${event.eventType} • $timeStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = tint
-                )
-            }
-        }
-    }
+    ActivityLogCard(
+        icon = if (isInstalled) Icons.Default.AddCircle else Icons.Default.Delete,
+        iconTint = tint,
+        title = event.appName.ifEmpty { event.packageName },
+        subtitle = event.packageName,
+        timestampStr = remember(event.timestamp) { event.timestamp.formatTime() },
+        badgeText = event.eventType,
+        badgeColor = tint
+    )
 }
 
 @Composable
@@ -1320,12 +1156,21 @@ fun ActivityLogCard(
     badgeColor: Color = Color.Unspecified,
     actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onActionClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     extraContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    val cardModifier = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    } else {
+        Modifier.fillMaxWidth()
+    }
+
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        modifier = Modifier.fillMaxWidth()
+        modifier = cardModifier
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -1391,9 +1236,18 @@ fun ActivityLogCard(
                     }
                 }
 
-                if (actionIcon != null && onActionClick != null) {
-                    IconButton(onClick = onActionClick) {
-                        Icon(actionIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                if (actionIcon != null) {
+                    if (onActionClick != null) {
+                        IconButton(onClick = onActionClick) {
+                            Icon(actionIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -1468,50 +1322,14 @@ fun MediaGalleryCardItem(
     val iconTint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0)
     val sizeStr = remember(media.sizeBytes) { media.sizeBytes.formatAsFileSize() }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = media.fileName.ifEmpty { "Gallery Item" },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${media.filePath.ifEmpty { "Gallery" }} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
+    ActivityLogCard(
+        icon = icon,
+        iconTint = iconTint,
+        title = media.fileName.ifEmpty { "Gallery Item" },
+        subtitle = "${media.filePath.ifEmpty { "Gallery" }} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
+        actionIcon = Icons.Default.ChevronRight,
+        onClick = onClick
+    )
 }
 
 @Composable
@@ -1526,49 +1344,13 @@ fun FileExplorerCardItem(
         if (isDir) "Folder" else file.sizeBytes.formatAsFileSize()
     }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = file.name.ifEmpty { file.path.substringAfterLast("/") },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${file.path} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
+    ActivityLogCard(
+        icon = icon,
+        iconTint = iconTint,
+        title = file.name.ifEmpty { file.path.substringAfterLast("/") },
+        subtitle = "${file.path} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
+        actionIcon = Icons.Default.ChevronRight,
+        onClick = onClick
+    )
 }
 
