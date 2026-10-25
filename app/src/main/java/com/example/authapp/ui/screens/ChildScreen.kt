@@ -86,6 +86,9 @@ fun ChildScreen(
     var currentSecretPin by remember { mutableStateOf(com.example.authapp.data.AppPreferences.getSecretPin(context)) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var newPinInput by remember { mutableStateOf("") }
+    var showDisableAdminPinDialog by remember { mutableStateOf(false) }
+    var disableAdminPinInput by remember { mutableStateOf("") }
+    var disableAdminPinError by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(currentChildUid) {
         if (currentChildUid.isEmpty()) return@DisposableEffect onDispose {}
@@ -691,10 +694,7 @@ fun ChildScreen(
                             }
                         } else {
                             OutlinedButton(
-                                onClick = {
-                                    com.example.authapp.utils.DeviceAdminManager.deactivateDeviceAdmin(context)
-                                    isDeviceAdminActive = false
-                                },
+                                onClick = { showDisableAdminPinDialog = true },
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text("Disable")
@@ -702,6 +702,70 @@ fun ChildScreen(
                         }
                     }
                 }
+            }
+
+            if (showDisableAdminPinDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showDisableAdminPinDialog = false
+                        disableAdminPinInput = ""
+                        disableAdminPinError = null
+                    },
+                    title = { Text("Parent PIN Required 🛡️") },
+                    text = {
+                        Column {
+                            Text("Enter the 6-digit Parent PIN to disable uninstall protection.")
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = disableAdminPinInput,
+                                onValueChange = {
+                                    if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                        disableAdminPinInput = it
+                                        disableAdminPinError = null
+                                    }
+                                },
+                                label = { Text("6-Digit PIN") },
+                                isError = disableAdminPinError != null,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (disableAdminPinError != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(disableAdminPinError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val isOk = com.example.authapp.utils.UninstallProtectionManager.verifyPin(context, disableAdminPinInput)
+                                if (isOk) {
+                                    com.example.authapp.utils.DeviceAdminManager.deactivateDeviceAdmin(context)
+                                    isDeviceAdminActive = false
+                                    showDisableAdminPinDialog = false
+                                    disableAdminPinInput = ""
+                                    disableAdminPinError = null
+                                    android.widget.Toast.makeText(context, "Device Admin Deactivated", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    disableAdminPinError = "Incorrect 6-digit PIN!"
+                                }
+                            }
+                        ) {
+                            Text("Verify & Disable")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showDisableAdminPinDialog = false
+                            disableAdminPinInput = ""
+                            disableAdminPinError = null
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
 

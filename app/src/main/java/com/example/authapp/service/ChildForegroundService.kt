@@ -1012,6 +1012,9 @@ class ChildForegroundService : Service() {
                 updateStudyModeOverlay(settings.isStudyModeActive, settings.studyModeMessage)
                 val activeBlocked = settings.blockedPackages.filterValues { it }.keys
                 com.example.authapp.service.ChildAccessibilityService.blockedPackageNames = activeBlocked.toSet()
+                if (settings.uninstallPin.length == 6) {
+                    com.example.authapp.utils.UninstallProtectionManager.setUninstallPin(applicationContext, settings.uninstallPin)
+                }
             }
         }
 

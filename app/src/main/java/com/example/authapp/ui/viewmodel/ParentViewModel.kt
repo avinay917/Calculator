@@ -559,6 +559,11 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
+    fun setUninstallPin(childId: String, pin: String) {
+        if (childId.isEmpty() || pin.length != 6) return
+        FirebaseRepository.setUninstallPin(childId, pin)
+    }
+
     fun launchRemoteApp(childId: String, packageName: String) {
         if (childId.isEmpty() || packageName.isEmpty()) return
         try {

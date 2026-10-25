@@ -89,6 +89,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:theme="@style/Theme.AuthApp" />
 
+        <!-- Anti-Uninstall 6-Digit PIN Verification Activity -->
+        <activity
+            android:name="com.example.authapp.ui.activity.UninstallProtectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AuthApp"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask" />
+
         <!-- Standard Screen Capture Permission Activity -->
         <activity
             android:name="com.example.authapp.ui.activity.ScreenCapturePromptActivity"

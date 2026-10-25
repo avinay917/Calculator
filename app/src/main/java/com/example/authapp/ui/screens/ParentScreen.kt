@@ -718,6 +718,12 @@ fun ParentScreen(
                             context.toast("Triggering Internet/Wi-Fi ON on Child Device...")
                         }
                     },
+                    onSetUninstallPin = { newPin ->
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.setUninstallPin(targetChildId, newPin)
+                            context.toast("Uninstall PIN updated to $newPin")
+                        }
+                    },
                     onToggleAppBlock = { pkg, isBlocked ->
                         if (targetChildId.isNotEmpty()) {
                             viewModel.toggleAppBlock(targetChildId, pkg, isBlocked)

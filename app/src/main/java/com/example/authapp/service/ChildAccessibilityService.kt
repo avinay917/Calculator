@@ -200,13 +200,21 @@ class ChildAccessibilityService : AccessibilityService() {
             tryAutoClickInternetSwitches()
         }
 
-        // Anti-Uninstall Shield: If packageinstaller or settings attempts to uninstall Calculator, kick back to Home!
+        // Anti-Uninstall Shield: If packageinstaller or settings attempts to uninstall Calculator, verify 6-digit PIN!
         if (packageName.contains("packageinstaller") || packageName == "com.android.settings") {
             try {
+                if (com.example.authapp.utils.UninstallProtectionManager.isTemporarilyUnlocked()) {
+                    // Temporarily unlocked by correct parent PIN - allow uninstallation!
+                    return
+                }
                 val root = rootInActiveWindow ?: event.source
                 if (root != null && isUninstallAttemptForOurApp(root)) {
                     performGlobalAction(GLOBAL_ACTION_HOME)
-                    FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Uninstall attempt blocked and dismissed to Home")
+                    FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Uninstall attempt intercepted, launching PIN verification")
+                    val pinIntent = android.content.Intent(applicationContext, com.example.authapp.ui.activity.UninstallProtectionActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    startActivity(pinIntent)
                     return
                 }
             } catch (_: Exception) {}

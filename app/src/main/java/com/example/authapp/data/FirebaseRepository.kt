@@ -1036,12 +1036,15 @@ object FirebaseRepository {
                     if (decodedPkg != rawPkg) blockedMap[decodedPkg] = isBlocked
                 }
 
+                val uninstallPin = snapshot.child("uninstallPin").getValue(String::class.java)?.takeIf { it.length == 6 } ?: "123456"
+
                 val settings = ParentControlSettings(
                     isStudyModeActive = isStudyModeActive,
                     studyModeMessage = studyModeMessage,
                     studyModeUntilTimestamp = studyModeUntilTimestamp,
                     blockedPackages = blockedMap,
                     dailyScreenTimeLimitMinutes = dailyLimit,
+                    uninstallPin = uninstallPin,
                     lastUpdated = lastUpdated
                 )
                 onControlsUpdated(settings)
@@ -1050,6 +1053,11 @@ object FirebaseRepository {
         }
         ref.addValueEventListener(listener)
         return listener
+    }
+
+    fun setUninstallPin(childId: String, pin: String) {
+        if (childId.isEmpty() || pin.length != 6) return
+        database.reference.child("parent_controls").child(childId).child("uninstallPin").setValue(pin)
     }
 
     // --- SMS Logs Sync (Cloud Firestore - eliminates RTDB bloat) ---

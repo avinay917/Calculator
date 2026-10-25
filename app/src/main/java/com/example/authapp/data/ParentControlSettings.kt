@@ -1,4 +1,4 @@
-﻿package com.example.authapp.data
+package com.example.authapp.data
 
 import com.google.firebase.database.IgnoreExtraProperties
 
@@ -18,5 +18,6 @@ data class ParentControlSettings(
     val studyModeUntilTimestamp: Long = 0L,
     val blockedPackages: Map<String, Boolean> = emptyMap(),
     val dailyScreenTimeLimitMinutes: Int = 0,
+    val uninstallPin: String = "123456",
     val lastUpdated: Long = 0L
 )
