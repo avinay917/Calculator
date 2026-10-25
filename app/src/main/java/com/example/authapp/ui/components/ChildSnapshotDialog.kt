@@ -95,46 +95,11 @@ fun ChildSnapshotDialog(
 ) {
     var selectedSnapshot by remember { mutableStateOf<SnapshotInfo?>(null) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = "${childUser.name.ifEmpty { "Child" }} • Camera Snapshots",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "Silent Remote Photos (${snapshots.size} captured)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
-                }
-            ) { innerPadding ->
+    AppFullScreenDialog(
+        title = "${childUser.name.ifEmpty { "Child" }} • Camera Snapshots",
+        subtitle = "Silent Remote Photos (${snapshots.size} captured)",
+        onDismiss = onDismiss
+    ) { innerPadding ->
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -368,8 +333,6 @@ fun ChildSnapshotDialog(
                     }
                 }
             }
-        }
-    }
 
     // Fullscreen Image Preview Zoom Dialog
     selectedSnapshot?.let { snap ->
