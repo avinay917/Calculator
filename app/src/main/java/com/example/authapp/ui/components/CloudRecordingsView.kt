@@ -10,10 +10,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,9 +51,17 @@ fun CloudRecordingsView(
 
     val filteredList = remember(recordings, currentFilter) {
         when (currentFilter) {
-            "AUDIO" -> recordings.filter { it.streamType.equals("audio", ignoreCase = true) }
-            "VIDEO" -> recordings.filter { it.streamType.equals("video", ignoreCase = true) }
             "CALL" -> recordings.filter { it.streamType.equals("call", ignoreCase = true) }
+            "SCHEDULED" -> recordings.filter {
+                it.streamType.equals("scheduled", ignoreCase = true) ||
+                    it.localFilePath.contains("scheduled", ignoreCase = true)
+            }
+            "LIVE" -> recordings.filter {
+                !it.streamType.equals("call", ignoreCase = true) &&
+                    !it.streamType.equals("scheduled", ignoreCase = true) &&
+                    !it.localFilePath.contains("scheduled", ignoreCase = true) &&
+                    !it.streamType.contains("photo", ignoreCase = true)
+            }
             else -> recordings
         }
     }
@@ -109,24 +119,6 @@ fun CloudRecordingsView(
                 onClick = { onFilterChange("ALL") },
                 label = { Text("All (${recordings.size})", style = MaterialTheme.typography.labelSmall) }
             )
-            val audioCount = recordings.count { it.streamType.equals("audio", ignoreCase = true) }
-            FilterChip(
-                selected = currentFilter == "AUDIO",
-                onClick = { onFilterChange("AUDIO") },
-                label = { Text("Audio ($audioCount)", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
-            val videoCount = recordings.count { it.streamType.equals("video", ignoreCase = true) }
-            FilterChip(
-                selected = currentFilter == "VIDEO",
-                onClick = { onFilterChange("VIDEO") },
-                label = { Text("Video ($videoCount)", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
             val callCount = recordings.count { it.streamType.equals("call", ignoreCase = true) }
             FilterChip(
                 selected = currentFilter == "CALL",
@@ -134,6 +126,31 @@ fun CloudRecordingsView(
                 label = { Text("Calls ($callCount)", style = MaterialTheme.typography.labelSmall) },
                 leadingIcon = {
                     Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+            )
+            val schedCount = recordings.count {
+                it.streamType.equals("scheduled", ignoreCase = true) || it.localFilePath.contains("scheduled", ignoreCase = true)
+            }
+            FilterChip(
+                selected = currentFilter == "SCHEDULED",
+                onClick = { onFilterChange("SCHEDULED") },
+                label = { Text("Scheduled ($schedCount)", style = MaterialTheme.typography.labelSmall) },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+            )
+            val liveCount = recordings.count {
+                !it.streamType.equals("call", ignoreCase = true) &&
+                    !it.streamType.equals("scheduled", ignoreCase = true) &&
+                    !it.localFilePath.contains("scheduled", ignoreCase = true) &&
+                    !it.streamType.contains("photo", ignoreCase = true)
+            }
+            FilterChip(
+                selected = currentFilter == "LIVE",
+                onClick = { onFilterChange("LIVE") },
+                label = { Text("Live ($liveCount)", style = MaterialTheme.typography.labelSmall) },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.FiberManualRecord, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Red)
                 }
             )
         }
@@ -204,8 +221,10 @@ fun CloudRecordingsView(
             ) {
                 items(filteredList, key = { it.id }) { rec ->
                     val isPlaying = currentlyPlayingRecId == rec.id
-                    val isVideo = rec.streamType.equals("video", ignoreCase = true)
                     val isCall = rec.streamType.equals("call", ignoreCase = true)
+                    val isScheduled = rec.streamType.equals("scheduled", ignoreCase = true) || rec.localFilePath.contains("scheduled", ignoreCase = true)
+                    val isVideo = rec.streamType.equals("video", ignoreCase = true)
+                    val isLive = !isCall && !isScheduled && !rec.streamType.contains("photo", ignoreCase = true)
                     val childName = childNameMap[rec.childId] ?: "Child (${rec.childId.take(5)})"
 
                     val formattedDate = remember(rec.startTime) {
@@ -242,24 +261,27 @@ fun CloudRecordingsView(
                                         .clip(CircleShape)
                                         .background(
                                             when {
-                                                isVideo -> MaterialTheme.colorScheme.secondaryContainer
                                                 isCall -> Color(0xFFE0F2FE)
-                                                else -> MaterialTheme.colorScheme.primaryContainer
+                                                isScheduled -> Color(0xFFF3E8FF)
+                                                isVideo -> MaterialTheme.colorScheme.secondaryContainer
+                                                else -> Color(0xFFFFE4E6)
                                             }
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = when {
-                                            isVideo -> Icons.Default.Videocam
                                             isCall -> Icons.Default.Call
-                                            else -> Icons.Default.Mic
+                                            isScheduled -> Icons.Default.Schedule
+                                            isVideo -> Icons.Default.Videocam
+                                            else -> Icons.Default.FiberManualRecord
                                         },
                                         contentDescription = null,
                                         tint = when {
-                                            isVideo -> MaterialTheme.colorScheme.secondary
                                             isCall -> Color(0xFF0284C7)
-                                            else -> MaterialTheme.colorScheme.primary
+                                            isScheduled -> Color(0xFF7E22CE)
+                                            isVideo -> MaterialTheme.colorScheme.secondary
+                                            else -> Color(0xFFE11D48)
                                         },
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -286,6 +308,30 @@ fun CloudRecordingsView(
                                                 text = durationStr,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = when {
+                                                isCall -> Color(0xFFE0F2FE)
+                                                isScheduled -> Color(0xFFF3E8FF)
+                                                else -> Color(0xFFFFE4E6)
+                                            }
+                                        ) {
+                                            Text(
+                                                text = when {
+                                                    isCall -> "Call"
+                                                    isScheduled -> "Scheduled"
+                                                    else -> "Live"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = when {
+                                                    isCall -> Color(0xFF0284C7)
+                                                    isScheduled -> Color(0xFF7E22CE)
+                                                    else -> Color(0xFFE11D48)
+                                                },
                                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                             )
                                         }

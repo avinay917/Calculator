@@ -100,6 +100,61 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     e.localizedMessage
                 )
             }
+        } else if (action == "SECURITY_ALERT") {
+            val alertTitle = data["title"] ?: "🚨 Security Alert"
+            val alertMessage = data["message"] ?: "Security event detected on child device"
+            showSecurityAlertNotification(alertTitle, alertMessage)
+        }
+    }
+
+    private fun showSecurityAlertNotification(title: String, message: String) {
+        try {
+            val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager ?: return
+            val channelId = "security_alerts_channel"
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    channelId,
+                    "Security Alerts",
+                    android.app.NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Alerts for SIM swap, low battery, and emergency events"
+                    enableLights(true)
+                    lightColor = android.graphics.Color.RED
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 400, 200, 400)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                (System.currentTimeMillis() % 10000).toInt(),
+                launchIntent,
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+
+            val notification = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(message))
+                .setSmallIcon(com.example.authapp.R.mipmap.ic_launcher)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+
+            notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 }

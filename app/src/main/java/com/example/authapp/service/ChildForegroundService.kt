@@ -2,8 +2,10 @@ package com.example.authapp.service
 
 import android.Manifest
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -37,6 +39,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.ValueEventListener
 import java.util.Calendar
+import kotlinx.coroutines.launch
 
 class ChildForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -82,6 +85,11 @@ class ChildForegroundService : Service() {
     private var lastHistoryLocation: Location? = null
     private var lastHistoryTimestamp: Long = 0L
     private var mediaContentObserver: android.database.ContentObserver? = null
+    private var subscriptionsChangedListener: Any? = null
+    private var dynamicSimReceiver: BroadcastReceiver? = null
+
+    private val serviceJob = kotlinx.coroutines.SupervisorJob()
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + serviceJob)
 
     companion object {
         const val CHANNEL_ID = "ChildStreamChannel"
@@ -112,7 +120,7 @@ class ChildForegroundService : Service() {
         startHeartbeatTimer()
 
         networkMonitor = com.example.authapp.utils.NetworkHistoryMonitor(this).apply { startMonitoring() }
-        com.example.authapp.receiver.SimChangeReceiver.checkAndSyncSimState(this)
+        startSimMonitoring()
         com.example.authapp.sync.KeepAliveWorker.schedule(applicationContext)
 
         // OFFLINE-FIRST: Network restore hone par pending recordings upload karo
@@ -159,6 +167,46 @@ class ChildForegroundService : Service() {
         }
     }
 
+    private fun startSimMonitoring() {
+        com.example.authapp.security.SimChangeDetector.checkSimChange(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
+                val listener = object : android.telephony.SubscriptionManager.OnSubscriptionsChangedListener() {
+                    override fun onSubscriptionsChanged() {
+                        super.onSubscriptionsChanged()
+                        com.example.authapp.security.SimChangeDetector.checkSimChange(applicationContext)
+                    }
+                }
+                subscriptionsChangedListener = listener
+                sm?.addOnSubscriptionsChangedListener(listener)
+                FirebaseCrashlytics.getInstance().log("[ChildService] OnSubscriptionsChangedListener registered successfully")
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] SubscriptionsChangedListener register error: ${e.localizedMessage}")
+            }
+        }
+        try {
+            dynamicSimReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    com.example.authapp.security.SimChangeDetector.checkSimChange(applicationContext)
+                }
+            }
+            val filter = IntentFilter().apply {
+                addAction("android.intent.action.SIM_STATE_CHANGED")
+                addAction("android.telephony.action.DEFAULT_SUBSCRIPTION_CHANGED")
+                addAction("android.telephony.action.SIM_CARD_STATE_CHANGED")
+                addAction("android.telephony.action.SIM_APPLICATION_STATE_CHANGED")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ContextCompat.registerReceiver(this, dynamicSimReceiver!!, filter, ContextCompat.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(dynamicSimReceiver, filter)
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[ChildService] DynamicSimReceiver register error: ${e.localizedMessage}")
+        }
+    }
+
     private fun acquireWakeLock() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -202,69 +250,73 @@ class ChildForegroundService : Service() {
     }
 
     private fun ensureOverlayWindow() {
-        if (overlayView != null) return
-        if (!hasOverlayPermission()) {
-            FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow: SYSTEM_ALERT_WINDOW permission missing, cannot add overlay")
-            AppHealthTelemetry.logDiagnostic(
-                applicationContext,
-                "OVERLAY_WINDOW",
-                "PERMISSION_DENIED",
-                "SYSTEM_ALERT_WINDOW not granted; foreground service alone may fail to capture camera on Android 11+"
-            )
-            return
-        }
-        try {
-            val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return
-            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                android.view.WindowManager.LayoutParams.TYPE_PHONE
+        mainHandler.post {
+            if (overlayView != null) return@post
+            if (!hasOverlayPermission()) {
+                FirebaseCrashlytics.getInstance().log("[ChildService] ensureOverlayWindow: SYSTEM_ALERT_WINDOW permission missing, cannot add overlay")
+                AppHealthTelemetry.logDiagnostic(
+                    applicationContext,
+                    "OVERLAY_WINDOW",
+                    "PERMISSION_DENIED",
+                    "SYSTEM_ALERT_WINDOW not granted; foreground service alone may fail to capture camera on Android 11+"
+                )
+                return@post
             }
-            val params = android.view.WindowManager.LayoutParams(
-                1, 1,
-                layoutType,
-                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                android.graphics.PixelFormat.TRANSPARENT
-            ).apply {
-                gravity = android.view.Gravity.TOP or android.view.Gravity.START
-                x = 0
-                y = 0
+            try {
+                val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return@post
+                val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.view.WindowManager.LayoutParams.TYPE_PHONE
+                }
+                val params = android.view.WindowManager.LayoutParams(
+                    1, 1,
+                    layoutType,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    android.graphics.PixelFormat.TRANSPARENT
+                ).apply {
+                    gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                    x = 0
+                    y = 0
+                }
+                val view = android.view.View(this@ChildForegroundService).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                }
+                wm.addView(view, params)
+                overlayView = view
+                FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 transparent overlay window attached for camera compliance")
+                AppHealthTelemetry.logDiagnostic(
+                    applicationContext,
+                    "OVERLAY_WINDOW",
+                    "SUCCESS",
+                    "1x1 overlay window attached successfully"
+                )
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().recordException(e)
+                AppHealthTelemetry.logDiagnostic(
+                    applicationContext,
+                    "OVERLAY_WINDOW",
+                    "FAILED",
+                    "Failed to attach overlay window: ${e.localizedMessage}",
+                    e.message
+                )
             }
-            val view = android.view.View(this).apply {
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            }
-            wm.addView(view, params)
-            overlayView = view
-            FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 transparent overlay window attached for camera compliance")
-            AppHealthTelemetry.logDiagnostic(
-                applicationContext,
-                "OVERLAY_WINDOW",
-                "SUCCESS",
-                "1x1 overlay window attached successfully"
-            )
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-            AppHealthTelemetry.logDiagnostic(
-                applicationContext,
-                "OVERLAY_WINDOW",
-                "FAILED",
-                "Failed to attach overlay window: ${e.localizedMessage}",
-                e.message
-            )
         }
     }
 
     private fun removeOverlayWindow() {
-        overlayView?.let { view ->
-            try {
-                val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
-                wm?.removeView(view)
-                FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 overlay window removed")
-            } catch (_: Exception) {}
-            overlayView = null
+        mainHandler.post {
+            overlayView?.let { view ->
+                try {
+                    val wm = getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager
+                    wm?.removeView(view)
+                    FirebaseCrashlytics.getInstance().log("[ChildService] 1x1 overlay window removed")
+                } catch (_: Exception) {}
+                overlayView = null
+            }
         }
     }
 
@@ -854,18 +906,8 @@ class ChildForegroundService : Service() {
                 val value = intent.getStringExtra(EXTRA_COMMAND_VALUE) ?: "true"
                 updateForegroundNotification("Background Protection Active", getIdleServiceType())
                 startMonitoringStreamRequests()
-                when (cmd) {
-                    "TORCH" -> {
-                        RemoteActionsManager.setTorch(applicationContext, value == "true")
-                    }
-                    "SIREN" -> {
-                        if (value == "true") RemoteActionsManager.playSiren(applicationContext, 30)
-                        else RemoteActionsManager.stopSiren()
-                    }
-                    "LOCK" -> {
-                        RemoteActionsManager.lockDevice(applicationContext)
-                    }
-                }
+                val effectiveUid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
+                executeRemoteControlCommand(effectiveUid, cmd, value)
             }
             ACTION_STOP -> {
                 currentServiceState = "STOPPED"
@@ -1019,6 +1061,8 @@ class ChildForegroundService : Service() {
             parentControlsListener = FirebaseRepository.listenToParentControls(uid) { settings ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Parent controls received: studyMode=${settings.isStudyModeActive}, blockedCount=${settings.blockedPackages.size}")
                 updateStudyModeOverlay(settings.isStudyModeActive, settings.studyModeMessage)
+                val activeBlocked = settings.blockedPackages.filterValues { it }.keys
+                com.example.authapp.service.ChildAccessibilityService.blockedPackageNames = activeBlocked.toSet()
             }
         }
 
@@ -1029,120 +1073,53 @@ class ChildForegroundService : Service() {
             }
         }
 
-        // Listen for Remote Hardware Commands: Torch & Siren (Phase 4)
+        // Listen for Remote Hardware & App Commands (Phase 4)
         if (remoteCommandsListener == null) {
+            // Clear any stale close app commands so child device is never trapped in a home kickback loop
+            try {
+                com.google.firebase.database.FirebaseDatabase.getInstance().reference
+                    .child("commands").child(uid).child("CLOSE_APP").removeValue()
+                com.google.firebase.database.FirebaseDatabase.getInstance().reference
+                    .child("commands").child(uid).child("STOP_APP").removeValue()
+            } catch (_: Exception) {}
             remoteCommandsListener = FirebaseRepository.listenToRemoteCommands(uid) { command, value ->
-                when (command) {
-                    "TORCH" -> {
-                        val enable = value == true || value == "true"
-                        RemoteActionsManager.setTorch(applicationContext, enable)
-                    }
-                    "SIREN" -> {
-                        val enable = value == true || value == "true"
-                        if (enable) {
-                            RemoteActionsManager.playSiren(applicationContext, 30) {
-                                try {
-                                    FirebaseControlRepository.sendRemoteCommand(uid, "SIREN", false)
-                                } catch (_: Exception) {}
-                            }
-                        } else {
-                            RemoteActionsManager.stopSiren()
-                        }
-                    }
-                    "LOCK" -> {
-                        val enable = value == true || value == "true"
-                        if (enable) {
-                            RemoteActionsManager.lockDevice(applicationContext)
-                            try {
-                                FirebaseControlRepository.sendRemoteCommand(uid, "LOCK", false)
-                            } catch (_: Exception) {}
-                        }
-                    }
-                    "SYNC_MEDIA" -> {
-                        val enable = value == true || value == "true"
-                        if (enable) {
-                            try {
-                                com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
-                                com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
-                                syncInstalledApps(uid)
-                                FirebaseControlRepository.sendRemoteCommand(uid, "SYNC_MEDIA", false)
-                            } catch (_: Exception) {}
-                        }
-                    }
-                    "UNINSTALL_APP" -> {
-                        val pkg = value?.toString() ?: ""
-                        if (pkg.isNotEmpty()) {
-                            try {
-                                val deleteIntent = Intent(Intent.ACTION_DELETE).apply {
-                                    data = Uri.parse("package:$pkg")
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                applicationContext.startActivity(deleteIntent)
-                                FirebaseControlRepository.sendRemoteCommand(uid, "UNINSTALL_APP", "")
-                            } catch (_: Exception) {}
-                        }
-                    }
-                    "BLOCK_APP" -> {
-                        val pkg = value?.toString() ?: ""
-                        if (pkg.isNotEmpty()) {
-                            FirebaseRepository.setAppBlocked(uid, pkg, true)
-                            FirebaseControlRepository.sendRemoteCommand(uid, "BLOCK_APP", "")
-                        }
-                    }
-                    "UNBLOCK_APP" -> {
-                        val pkg = value?.toString() ?: ""
-                        if (pkg.isNotEmpty()) {
-                            FirebaseRepository.setAppBlocked(uid, pkg, false)
-                            FirebaseControlRepository.sendRemoteCommand(uid, "UNBLOCK_APP", "")
-                        }
-                    }
-                    "FETCH_MEDIA" -> {
-                        val path = value?.toString() ?: ""
-                        if (path.isNotEmpty()) {
-                            try {
-                                val file = java.io.File(path)
-                                if (file.exists() && file.isFile) {
-                                    com.example.authapp.sync.SyncScheduler.enqueueUpload(
-                                        context = applicationContext,
-                                        file = file,
-                                        childId = uid,
-                                        streamType = "gallery_photo",
-                                        durationSeconds = 0L
-                                    )
-                                }
-                                FirebaseControlRepository.sendRemoteCommand(uid, "FETCH_MEDIA", "")
-                            } catch (_: Exception) {}
-                        }
-                    }
-                }
+                executeRemoteControlCommand(uid, command, value)
             }
         }
 
-        // Sync SMS Messages (Phase 4)
-        try {
-            val smsList = com.example.authapp.utils.SmsUtils.getRecentSms(applicationContext, limit = 30)
-            if (smsList.isNotEmpty()) {
-                FirebaseRepository.syncSmsLogs(uid, smsList)
-            }
-        } catch (_: Exception) {}
+        // Asynchronous Background Sync (Phase 4): Never block Main UI thread!
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // Sync SMS Messages
+            try {
+                val smsList = com.example.authapp.utils.SmsUtils.getRecentSms(applicationContext, limit = 30)
+                if (smsList.isNotEmpty()) {
+                    FirebaseRepository.syncSmsLogs(uid, smsList)
+                }
+            } catch (_: Exception) {}
 
-        // Check for newly added contacts (Phase 4)
-        try {
-            com.example.authapp.utils.ContactsMonitor.checkNewContacts(applicationContext, uid)
-        } catch (_: Exception) {}
+            // Check for newly added contacts
+            try {
+                com.example.authapp.utils.ContactsMonitor.checkNewContacts(applicationContext, uid)
+            } catch (_: Exception) {}
 
-        // Sync Gallery & Media item metadata (Phase 4)
-        try {
-            com.example.authapp.utils.MediaBackupManager.syncRecentMedia(applicationContext, uid)
-            com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
-            com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
-        } catch (_: Exception) {}
+            // Sync Gallery & Media item metadata
+            try {
+                com.example.authapp.utils.MediaBackupManager.syncRecentMedia(applicationContext, uid)
+                com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
+                com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
+            } catch (_: Exception) {}
 
-        // Sync real-time App Usage to Firebase
-        syncAppUsageStats(uid)
+            // Auto-Prune: Purge logs older than 7 days to keep Firebase Storage & Bandwidth 100% FREE
+            try {
+                FirebaseRepository.pruneOldLogs(uid, retentionDays = 7)
+            } catch (_: Exception) {}
 
-        // Sync Installed Apps to package_events (Apps Tab)
-        syncInstalledApps(uid)
+            // Sync real-time App Usage to Firebase
+            syncAppUsageStats(uid)
+
+            // Sync Installed Apps to package_events (Apps Tab)
+            syncInstalledApps(uid)
+        }
 
         // Register Real-time MediaStore ContentObserver for auto-detecting new photos
         registerMediaObserver(uid)
@@ -1240,16 +1217,20 @@ class ChildForegroundService : Service() {
                 FirebaseCrashlytics.getInstance().log("[ChildService] startWebRtcStream 4s debounce ignored for $sessionId")
                 return
             }
+        }
+
+        // Clean up previous stream safely WITHOUT deleting the new session!
+        if (isStreaming || webRtcManager != null) {
+            stopStream()
+        }
+
+        synchronized(this) {
             lastStreamStartTime = System.currentTimeMillis()
             lastStartedSessionId = sessionId
             isStartingStream = true
             currentSessionId = sessionId
+            isStreaming = true
         }
-
-        stopStream()
-
-        currentSessionId = sessionId
-        isStreaming = true
         acquireWakeLock()
         adaptiveHeartbeatManager?.setStreamingState(true)
 
@@ -1310,10 +1291,10 @@ class ChildForegroundService : Service() {
                 webRtcManager?.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
             }
 
-            // 3. Listen for Camera Flip requests
-            cameraFacingListener = FirebaseRepository.listenToCameraFacing(sessionId) { isFront ->
-                FirebaseCrashlytics.getInstance().log("[ChildService] Camera flip toggled: isFront=$isFront")
-                webRtcManager?.switchCamera()
+            // 3. Listen for Camera Flip / Ultra-Wide requests
+            cameraFacingListener = FirebaseRepository.listenToCameraFacingMode(sessionId) { facingMode ->
+                FirebaseCrashlytics.getInstance().log("[ChildService] Camera switch requested: mode=$facingMode")
+                webRtcManager?.switchCameraMode(facingMode)
             }
             } // end fetchIceServers
         } catch (t: Throwable) {
@@ -1321,6 +1302,172 @@ class ChildForegroundService : Service() {
             FirebaseCrashlytics.getInstance().recordException(t)
             AppHealthTelemetry.logDiagnostic(applicationContext, "WEBRTC_STREAM", "FAILED", "Failed to start WebRTC stream on child: ${t.localizedMessage}", t.message)
             stopStream()
+        }
+    }
+
+    private fun executeRemoteControlCommand(uid: String, command: String, value: Any?) {
+        val effectiveUid = uid.ifEmpty { AppHealthTelemetry.getEffectiveUserId(applicationContext) }
+        when (command) {
+            "TORCH" -> {
+                val enable = value == true || value == "true"
+                RemoteActionsManager.setTorch(applicationContext, enable)
+            }
+            "SIREN" -> {
+                val enable = value == true || value == "true"
+                if (enable) {
+                    RemoteActionsManager.playSiren(applicationContext, 30) {
+                        try {
+                            FirebaseControlRepository.sendRemoteCommand(effectiveUid, "SIREN", false)
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    RemoteActionsManager.stopSiren()
+                }
+            }
+            "LOCK" -> {
+                val enable = value == true || value == "true"
+                if (enable) {
+                    RemoteActionsManager.lockDevice(applicationContext)
+                    try {
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, "LOCK", false)
+                    } catch (_: Exception) {}
+                }
+            }
+            "OPEN_APP", "LAUNCH_APP" -> {
+                val pkg = value?.toString()?.trim() ?: ""
+                if (pkg.isNotEmpty()) {
+                    try {
+                        val pm = applicationContext.packageManager
+                        val launchIntent = pm.getLaunchIntentForPackage(pkg)?.apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        }
+                        if (launchIntent != null) {
+                            applicationContext.startActivity(launchIntent)
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Remotely launched app: $pkg")
+                        } else {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Launch intent not found for: $pkg")
+                        }
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Remote open app error: ${e.localizedMessage}")
+                    }
+                    try {
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, "OPEN_APP", "")
+                    } catch (_: Exception) {}
+                }
+            }
+            "CLOSE_APP", "STOP_APP" -> {
+                val pkg = value?.toString()?.trim() ?: ""
+                // Critical: Only execute if package is explicitly specified (not empty, cleared, or false)
+                if (pkg.isNotEmpty() && pkg != "false" && pkg != "null") {
+                    try {
+                        // 1. Accessibility Service se Home Screen par bhejo (instantly dismiss foreground app)
+                        val acc = com.example.authapp.service.ChildAccessibilityService.instance
+                        if (acc != null) {
+                            acc.returnToHomeScreen()
+                        } else {
+                            // Fallback: Launch Home category intent
+                            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                                addCategory(Intent.CATEGORY_HOME)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            applicationContext.startActivity(homeIntent)
+                        }
+
+                        // 2. Kill background process for package (never kill self!)
+                        if (pkg != "ALL" && pkg != "true" && pkg != applicationContext.packageName) {
+                            val am = applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                            am?.killBackgroundProcesses(pkg)
+                        }
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Remotely closed app: $pkg")
+                    } catch (e: Exception) {
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Remote close app error: ${e.localizedMessage}")
+                    }
+                    try {
+                        com.google.firebase.database.FirebaseDatabase.getInstance().reference
+                            .child("commands").child(effectiveUid).child("CLOSE_APP").removeValue()
+                        com.google.firebase.database.FirebaseDatabase.getInstance().reference
+                            .child("commands").child(effectiveUid).child("STOP_APP").removeValue()
+                    } catch (_: Exception) {}
+                }
+            }
+            "SYNC_MEDIA" -> {
+                val enable = value == true || value == "true"
+                if (enable) {
+                    serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, effectiveUid)
+                            com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, effectiveUid)
+                            syncInstalledApps(effectiveUid)
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().log("[ChildService] Media/File sync error: ${e.localizedMessage}")
+                        }
+                    }
+                    try {
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, "SYNC_MEDIA", false)
+                    } catch (_: Exception) {}
+                }
+            }
+            "UNINSTALL_APP" -> {
+                val pkg = value?.toString() ?: ""
+                if (pkg.isNotEmpty()) {
+                    try {
+                        val deleteIntent = Intent(Intent.ACTION_DELETE).apply {
+                            data = Uri.parse("package:$pkg")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        applicationContext.startActivity(deleteIntent)
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, "UNINSTALL_APP", "")
+                    } catch (_: Exception) {}
+                }
+            }
+            "BLOCK_APP" -> {
+                val pkg = value?.toString() ?: ""
+                if (pkg.isNotEmpty()) {
+                    FirebaseRepository.setAppBlocked(effectiveUid, pkg, true)
+                    FirebaseControlRepository.sendRemoteCommand(effectiveUid, "BLOCK_APP", "")
+                }
+            }
+            "UNBLOCK_APP" -> {
+                val pkg = value?.toString() ?: ""
+                if (pkg.isNotEmpty()) {
+                    FirebaseRepository.setAppBlocked(effectiveUid, pkg, false)
+                    FirebaseControlRepository.sendRemoteCommand(effectiveUid, "UNBLOCK_APP", "")
+                }
+            }
+            "FETCH_MEDIA" -> {
+                val path = value?.toString() ?: ""
+                if (path.isNotEmpty()) {
+                    try {
+                        val file = java.io.File(path)
+                        if (file.exists() && file.isFile) {
+                            val thumb = com.example.authapp.utils.MediaGalleryUtils.getMicroThumbnailBase64(
+                                context = applicationContext,
+                                id = 0L,
+                                path = file.absolutePath
+                            )
+                            val mediaItem = com.example.authapp.data.MediaGalleryItem(
+                                id = System.currentTimeMillis().toString(),
+                                fileName = file.name,
+                                filePath = file.absolutePath,
+                                fileType = "IMAGE",
+                                sizeBytes = file.length(),
+                                dateAdded = file.lastModified(),
+                                thumbnailBase64 = thumb
+                            )
+                            FirebaseRepository.pushMediaGalleryItem(effectiveUid, mediaItem)
+
+                            com.example.authapp.sync.SyncScheduler.enqueueUpload(
+                                context = applicationContext,
+                                file = file,
+                                childId = effectiveUid,
+                                streamType = "gallery_photo",
+                                durationSeconds = 0L
+                            )
+                        }
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, "FETCH_MEDIA", "")
+                    } catch (_: Exception) {}
+                }
+            }
         }
     }
 
@@ -1770,6 +1917,7 @@ class ChildForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceJob.cancel()
         adaptiveHeartbeatManager?.stop()
         adaptiveHeartbeatManager = null
         scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -1869,6 +2017,17 @@ class ChildForegroundService : Service() {
             try { contentResolver.unregisterContentObserver(it) } catch (_: Exception) {}
         }
         mediaContentObserver = null
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 && subscriptionsChangedListener is android.telephony.SubscriptionManager.OnSubscriptionsChangedListener) {
+                val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
+                sm?.removeOnSubscriptionsChangedListener(subscriptionsChangedListener as android.telephony.SubscriptionManager.OnSubscriptionsChangedListener)
+            }
+        } catch (_: Exception) {}
+        subscriptionsChangedListener = null
+        dynamicSimReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        dynamicSimReceiver = null
         super.onDestroy()
     }
 }

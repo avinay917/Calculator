@@ -164,7 +164,9 @@ data class FileExplorerItem(
     val isDirectory: Boolean = false,
     val sizeBytes: Long = 0L,
     val lastModified: Long = 0L,
-    val parentPath: String = ""
+    val parentPath: String = "",
+    val thumbnailBase64: String = "",
+    val downloadUrl: String = ""
 )
 
 @IgnoreExtraProperties

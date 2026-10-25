@@ -37,6 +37,8 @@ fun ChildControlsView(
     onToggleSiren: () -> Unit = {},
     onToggleAppBlock: (packageName: String, isCurrentlyBlocked: Boolean) -> Unit,
     onToggleStudyMode: (isActive: Boolean, durationMinutes: Int) -> Unit,
+    onLaunchApp: (packageName: String) -> Unit = {},
+    onCloseApp: (packageName: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (childUsers.isEmpty()) {
@@ -355,19 +357,40 @@ fun ChildControlsView(
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AppBlocking,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "App Lock & Blocker (${appUsageList.size} Apps)",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AppBlocking,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "App Controls & Lock (${appUsageList.size})",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { onCloseApp("") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Go Home",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
 
@@ -437,6 +460,34 @@ fun ChildControlsView(
                                     color = if (isBlocked) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+
+                            // 1. Remote Launch Button
+                            IconButton(
+                                onClick = { onLaunchApp(app.packageName) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Open App Remotely",
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // 2. Remote Close Button
+                            IconButton(
+                                onClick = { onCloseApp(app.packageName) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Close App Remotely",
+                                    tint = Color(0xFFE65100),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(2.dp))
 
                             FilledTonalButton(
                                 onClick = { onToggleAppBlock(app.packageName, isBlocked) },

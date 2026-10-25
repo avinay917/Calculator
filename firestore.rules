@@ -68,6 +68,31 @@ service cloud.firestore {
       allow write: if isOwner(childId);
     }
 
+    match /whatsapp_logs/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /notifications/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /clipboard_logs/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /keystrokes/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /app_usage/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
     // Fallback: deny all other access
     match /{document=**} {
       allow read, write: if false;

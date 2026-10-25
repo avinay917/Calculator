@@ -730,6 +730,19 @@ fun ParentScreen(
                             Toast.makeText(context, "Study Mode $stateText", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onLaunchApp = { pkg ->
+                        if (selectedChild != null) {
+                            viewModel.launchRemoteApp(selectedChild.uid, pkg)
+                            Toast.makeText(context, "Opening app on child device...", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onCloseApp = { pkg ->
+                        if (selectedChild != null) {
+                            viewModel.closeRemoteApp(selectedChild.uid, pkg)
+                            val msg = if (pkg.isEmpty()) "Returning child device to Home..." else "Closing app on child device..."
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             } else if (uiState.selectedTab == 2) {

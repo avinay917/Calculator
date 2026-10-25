@@ -14,6 +14,7 @@ import {
   Trash2,
   Clock,
   CheckCircle,
+  Home,
 } from "lucide-react";
 
 interface ControlsPanelProps {
@@ -244,6 +245,24 @@ export default function ControlsPanel({
             <h3 className="text-xs font-bold text-white">Remote Screen Lock</h3>
             <p className="text-[10px] text-gray-400">
               Immediately locks the child phone screen remotely
+            </p>
+          </div>
+        </button>
+
+        {/* Go Home / Close Active Apps */}
+        <button
+          onClick={() => {
+            sendCommand("CLOSE_APP", "ALL");
+          }}
+          className="p-4 bg-[#1B1B22] border border-[#2B2B36] hover:border-amber-500/50 rounded-2xl flex items-center gap-3 text-left transition group cursor-pointer"
+        >
+          <div className="p-3 bg-amber-600/20 text-amber-400 rounded-xl group-hover:scale-105 transition">
+            <Home className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-white">Go Home (Close Active App)</h3>
+            <p className="text-[10px] text-gray-400">
+              Closes current foreground apps and returns child to home screen
             </p>
           </div>
         </button>

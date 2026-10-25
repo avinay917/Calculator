@@ -117,6 +117,13 @@
         ".indexOn": ["timestamp", "packageName"]
       }
     },
+    "installed_apps": {
+      "$childUid": {
+        ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $childUid",
+        ".indexOn": ["appName", "packageName"]
+      }
+    },
     "parent_controls": {
       "$childUid": {
         ".read": "auth != null && (auth.uid == $childUid || root.child('users').child($childUid).child('parentId').val() == auth.uid)",

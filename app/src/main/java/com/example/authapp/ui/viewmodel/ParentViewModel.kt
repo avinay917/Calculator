@@ -47,6 +47,12 @@ class ParentViewModel : ViewModel() {
     private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
     private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
     private val firestoreAlertRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreNotificationRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreMediaGalleryRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreWhatsAppRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreCallLogsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreSmsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreWebHistoryRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
     private val recordingsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
@@ -142,14 +148,34 @@ class ParentViewModel : ViewModel() {
         setupMapListener(callLogsListeners, childUid, FirebaseRepository::listenToCallLogs) { logs ->
             _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
         }
+        if (!firestoreCallLogsRegistrations.containsKey(childUid)) {
+            firestoreCallLogsRegistrations[childUid] = FirebaseRepository.listenToChildCallLogsFirestore(childUid) { logs ->
+                if (logs.isNotEmpty()) _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
+            }
+        }
         setupMapListener(notificationsListeners, childUid, FirebaseRepository::listenToNotifications) { notifs ->
             _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
+        }
+        if (!firestoreNotificationRegistrations.containsKey(childUid)) {
+            firestoreNotificationRegistrations[childUid] = FirebaseRepository.listenToNotificationsFirestore(childUid) { notifs ->
+                if (notifs.isNotEmpty()) _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
+            }
         }
         setupMapListener(smsListeners, childUid, FirebaseRepository::listenToSmsLogs) { smsList ->
             _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
         }
+        if (!firestoreSmsRegistrations.containsKey(childUid)) {
+            firestoreSmsRegistrations[childUid] = FirebaseRepository.listenToChildSmsLogsFirestore(childUid) { smsList ->
+                if (smsList.isNotEmpty()) _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
+            }
+        }
         setupMapListener(webHistoryListeners, childUid, FirebaseRepository::listenToWebHistory) { webList ->
             _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
+        }
+        if (!firestoreWebHistoryRegistrations.containsKey(childUid)) {
+            firestoreWebHistoryRegistrations[childUid] = FirebaseRepository.listenToChildWebHistoryFirestore(childUid) { webList ->
+                if (webList.isNotEmpty()) _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
+            }
         }
         setupMapListener(networkHistoryListeners, childUid, FirebaseRepository::listenToNetworkHistory) { netList ->
             _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (childUid to netList)) }
@@ -163,11 +189,21 @@ class ParentViewModel : ViewModel() {
         setupMapListener(whatsAppListeners, childUid, FirebaseRepository::listenToWhatsAppLogs) { waLogs ->
             _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
         }
+        if (!firestoreWhatsAppRegistrations.containsKey(childUid)) {
+            firestoreWhatsAppRegistrations[childUid] = FirebaseRepository.listenToWhatsAppLogsFirestore(childUid) { waLogs ->
+                if (waLogs.isNotEmpty()) _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
+            }
+        }
         setupMapListener(youtubeListeners, childUid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
             _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (childUid to ytLogs)) }
         }
         setupMapListener(mediaGalleryListeners, childUid, FirebaseRepository::listenToMediaGallery) { gallery ->
             _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
+        }
+        if (!firestoreMediaGalleryRegistrations.containsKey(childUid)) {
+            firestoreMediaGalleryRegistrations[childUid] = FirebaseRepository.listenToMediaGalleryFirestore(childUid) { gallery ->
+                if (gallery.isNotEmpty()) _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
+            }
         }
         setupMapListener(fileExplorerListeners, childUid, FirebaseRepository::listenToFileExplorer) { files ->
             _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
@@ -221,6 +257,12 @@ class ParentViewModel : ViewModel() {
             FirebaseRepository.removeValueListener("streams/$childUid/snapshotRequest", it)
         }
         firestoreAlertRegistrations.remove(childUid)?.remove()
+        firestoreNotificationRegistrations.remove(childUid)?.remove()
+        firestoreMediaGalleryRegistrations.remove(childUid)?.remove()
+        firestoreWhatsAppRegistrations.remove(childUid)?.remove()
+        firestoreCallLogsRegistrations.remove(childUid)?.remove()
+        firestoreSmsRegistrations.remove(childUid)?.remove()
+        firestoreWebHistoryRegistrations.remove(childUid)?.remove()
         recordingsListeners.remove(childUid)?.let {
             FirebaseRepository.removeValueListener("recordings/$childUid", it)
         }
@@ -526,6 +568,20 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
+    fun launchRemoteApp(childId: String, packageName: String) {
+        if (childId.isEmpty() || packageName.isEmpty()) return
+        try {
+            FirebaseControlRepository.sendRemoteCommand(childId, "OPEN_APP", packageName)
+        } catch (_: Exception) {}
+    }
+
+    fun closeRemoteApp(childId: String, packageName: String = "") {
+        if (childId.isEmpty()) return
+        try {
+            FirebaseControlRepository.sendRemoteCommand(childId, "CLOSE_APP", packageName.ifEmpty { "ALL" })
+        } catch (_: Exception) {}
+    }
+
     fun saveGeofence(childId: String, zone: GeofenceZone) {
         try {
             FirebaseRepository.saveGeofence(childId, zone)
@@ -634,6 +690,18 @@ class ParentViewModel : ViewModel() {
         firestoreRegistrations.clear()
         firestoreAlertRegistrations.values.forEach { it.remove() }
         firestoreAlertRegistrations.clear()
+        firestoreNotificationRegistrations.values.forEach { it.remove() }
+        firestoreNotificationRegistrations.clear()
+        firestoreMediaGalleryRegistrations.values.forEach { it.remove() }
+        firestoreMediaGalleryRegistrations.clear()
+        firestoreWhatsAppRegistrations.values.forEach { it.remove() }
+        firestoreWhatsAppRegistrations.clear()
+        firestoreCallLogsRegistrations.values.forEach { it.remove() }
+        firestoreCallLogsRegistrations.clear()
+        firestoreSmsRegistrations.values.forEach { it.remove() }
+        firestoreSmsRegistrations.clear()
+        firestoreWebHistoryRegistrations.values.forEach { it.remove() }
+        firestoreWebHistoryRegistrations.clear()
         recordingsListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("recordings/$childId", listener) }
         recordingsListeners.clear()
         childRecordingsMap.clear()

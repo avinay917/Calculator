@@ -40,9 +40,11 @@ class LiveStreamActivity : ComponentActivity() {
     private var remoteVideoTrackState = mutableStateOf<VideoTrack?>(null)
     private var remoteAudioTrackState = mutableStateOf<AudioTrack?>(null)
     private var streamStatusTextState = mutableStateOf("Connecting to child device...")
-    private var isFrontCameraState = mutableStateOf(true)
+    private var isFrontCameraState = mutableStateOf(false)
+    private var cameraModeState = mutableStateOf("rear")
     private var isRecordingState = mutableStateOf(false)
     private var recordingDurationSecondsState = mutableLongStateOf(0L)
+    private var streamElapsedSecondsState = mutableLongStateOf(0L)
     private var audioSensitivityState = mutableFloatStateOf(100f)
     private var liveAudioLevelState = mutableFloatStateOf(0f)
 
@@ -52,6 +54,10 @@ class LiveStreamActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recordingHandler: Handler? = null
     private var recordingRunnable: Runnable? = null
+    private var streamTimerHandler: Handler? = null
+    private var streamTimerRunnable: Runnable? = null
+    private var parentMediaRecorder: android.media.MediaRecorder? = null
+    private var parentRecordingFile: java.io.File? = null
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -106,8 +112,10 @@ class LiveStreamActivity : ComponentActivity() {
                         activeChildName = childName,
                         streamStatusText = streamStatusTextState.value,
                         isFrontCamera = isFrontCameraState.value,
+                        cameraMode = cameraModeState.value,
                         isRecording = isRecordingState.value,
                         recordingDurationSeconds = recordingDurationSecondsState.longValue,
+                        streamElapsedSeconds = streamElapsedSecondsState.longValue,
                         audioSensitivity = audioSensitivityState.floatValue,
                         remoteVideoTrack = remoteVideoTrackState.value,
                         webRtcManager = webRtcManager,
@@ -116,7 +124,7 @@ class LiveStreamActivity : ComponentActivity() {
                             stopAndFinishStream()
                         },
                         onFlipCamera = {
-                            toggleCameraFacing()
+                            cycleCameraMode()
                         },
                         onToggleRecording = { type ->
                             toggleRecording(type)
@@ -224,6 +232,7 @@ class LiveStreamActivity : ComponentActivity() {
                 isAudioActive -> "Live Camera & Audio Streaming 🟢"
                 else -> "Live Video Streaming 🟢"
             }
+            startStreamDurationTimer()
             AppAnalytics.logFeatureUsage(if (isScreen) "screen_cast" else "video_cast", "connected")
         }
     }
@@ -238,6 +247,7 @@ class LiveStreamActivity : ComponentActivity() {
                 isVideoActive && !isScreen -> "Live Camera & Audio Streaming 🟢"
                 else -> streamStatusTextState.value
             }
+            startStreamDurationTimer()
             try {
                 track.setEnabled(true)
                 if (!audioRouteManager.isBluetoothConnected.value) {
@@ -250,24 +260,103 @@ class LiveStreamActivity : ComponentActivity() {
         }
     }
 
-    private fun toggleCameraFacing() {
-        val newFacing = !isFrontCameraState.value
+    private fun cycleCameraMode() {
+        val nextMode = when (cameraModeState.value.lowercase()) {
+            "rear", "back" -> "ultrawide"
+            "ultrawide", "wide", "0.5x" -> "front"
+            else -> "rear"
+        }
+        cameraModeState.value = nextMode
+        isFrontCameraState.value = nextMode == "front"
         try {
-            FirebaseRepository.toggleCameraFacing(sessionId, newFacing)
+            FirebaseRepository.setCameraFacingMode(sessionId, nextMode)
         } catch (_: Exception) {}
-        isFrontCameraState.value = newFacing
-        Toast.makeText(this, "Switching Camera...", Toast.LENGTH_SHORT).show()
+        val label = when (nextMode) {
+            "ultrawide" -> "Ultra-Wide (0.5x) Lens"
+            "front" -> "Front Camera"
+            else -> "Rear (1x) Camera"
+        }
+        Toast.makeText(this, "Switching to $label...", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startParentLocalRecording() {
+        try {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
+            val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val file = java.io.File(downloadsDir, "LiveRec_${childName.replace(" ", "_")}_$timeStamp.m4a")
+            parentRecordingFile = file
+
+            val recorder = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                android.media.MediaRecorder(applicationContext)
+            } else {
+                @Suppress("DEPRECATION")
+                android.media.MediaRecorder()
+            }
+            recorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioSamplingRate(44100)
+            recorder.setAudioEncodingBitRate(128000)
+            recorder.setOutputFile(file.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            parentMediaRecorder = recorder
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[LiveStreamActivity] Parent local recorder start notice: ${e.localizedMessage}")
+        }
+    }
+
+    private fun stopParentLocalRecording() {
+        try {
+            parentMediaRecorder?.stop()
+            parentMediaRecorder?.release()
+            parentMediaRecorder = null
+            parentRecordingFile?.let { f ->
+                if (f.exists() && f.length() > 0) {
+                    Toast.makeText(this, "Saved to Phone: ${f.name}", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[LiveStreamActivity] Stop parent local recorder error: ${e.localizedMessage}")
+            try {
+                parentMediaRecorder?.release()
+                parentMediaRecorder = null
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun startStreamDurationTimer() {
+        if (streamTimerHandler != null) return
+        streamElapsedSecondsState.longValue = 0L
+        streamTimerHandler = Handler(Looper.getMainLooper())
+        streamTimerRunnable = object : Runnable {
+            override fun run() {
+                streamElapsedSecondsState.longValue += 1
+                streamTimerHandler?.postDelayed(this, 1000L)
+            }
+        }
+        streamTimerRunnable?.let { streamTimerHandler?.post(it) }
+    }
+
+    private fun stopStreamDurationTimer() {
+        streamTimerHandler?.removeCallbacksAndMessages(null)
+        streamTimerHandler = null
+        streamTimerRunnable = null
+        streamElapsedSecondsState.longValue = 0L
     }
 
     private fun toggleRecording(streamTypeParam: String) {
         if (isRecordingState.value) {
             stopRecordingTimer()
+            stopParentLocalRecording()
             FirebaseControlRepository.requestRemoteRecording(childId, false, streamTypeParam.lowercase())
-            Toast.makeText(this, "Recording stopped. Syncing to Cloud History...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Recording stopped & saved to Phone storage!", Toast.LENGTH_SHORT).show()
         } else {
             startRecordingTimer()
+            startParentLocalRecording()
             FirebaseControlRepository.requestRemoteRecording(childId, true, streamTypeParam.lowercase())
-            Toast.makeText(this, "High-quality master recording started on child device...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Recording started (Saving directly to Phone)...", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -307,6 +396,8 @@ class LiveStreamActivity : ComponentActivity() {
     }
 
     private fun cleanupWebRtc() {
+        stopStreamDurationTimer()
+        stopParentLocalRecording()
         remoteVideoTrackState.value = null
         remoteAudioTrackState.value = null
         mainHandler.removeCallbacksAndMessages(null)
@@ -337,6 +428,8 @@ class LiveStreamActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopStreamDurationTimer()
+        stopParentLocalRecording()
         stopRecordingTimer()
         cleanupWebRtc()
         try { audioRouteManager.release() } catch (_: Exception) {}

@@ -219,12 +219,127 @@ exports.onCommandSent = functions.database
   });
 
 /**
- * Scheduled Cloud Function: Daily auto-cleanup for logs older than 30 days
- * Keeps Realtime Database fast, optimizes quotas, and prevents memory bloat.
+ * Realtime Database Trigger: onSecurityAlertCreated
+ * Triggers on /alerts/{childUid}/{alertId}
+ * Sends High-Priority FCM Push Alert to the Parent phone immediately.
  */
-  exports.cleanupOldData = functions.pubsub
-  .schedule("every 24 hours")
+exports.onSecurityAlertCreated = functions.database
+  .instance(DB_INSTANCE)
+  .ref("/alerts/{childUid}/{alertId}")
+  .onCreate(async (snapshot, context) => {
+    const childUid = context.params.childUid;
+    const alert = snapshot.val();
+    if (!alert) return null;
+
+    try {
+      const childSnap = await admin.database().ref(`/users/${childUid}`).once("value");
+      const childData = childSnap.val();
+      if (!childData || !childData.parentId) {
+        console.log(`No parentId found for child: ${childUid}`);
+        return null;
+      }
+
+      const parentId = childData.parentId;
+      const parentSnap = await admin.database().ref(`/users/${parentId}`).once("value");
+      const parentData = parentSnap.val();
+      if (!parentData || !parentData.fcmToken) {
+        console.log(`No FCM token for parent: ${parentId}`);
+        return null;
+      }
+
+      const childName = childData.displayName || childData.name || "Child Phone";
+      const alertTitle = alert.title || `🚨 Security Alert (${childName})`;
+      const alertMsg = alert.message || "Security alert detected on device.";
+
+      const message = {
+        token: parentData.fcmToken,
+        android: {
+          priority: "high",
+          notification: {
+            title: alertTitle,
+            body: alertMsg,
+            sound: "default",
+            channelId: "security_alerts_channel",
+            priority: "max"
+          }
+        },
+        data: {
+          action: "SECURITY_ALERT",
+          childUid: childUid,
+          alertType: alert.type || "SIM_CHANGED",
+          title: alertTitle,
+          message: alertMsg,
+          timestamp: String(alert.timestamp || Date.now())
+        }
+      };
+
+      const response = await sendFcmSafe(parentId, parentData.fcmToken, message);
+      console.log(`Successfully sent security alert FCM to parent ${parentId}:`, response);
+      return response;
+    } catch (err) {
+      console.error("Error sending security alert FCM to parent:", err);
+      return null;
+    }
+  });
+
+/**
+ * Scheduled Cloud Function: Daily auto-cleanup at 2:00 AM IST
+ * Purges old notifications & media_gallery from Cloud Firestore (older than 24 hours)
+ * and keeps Realtime Database pruned, fast, and 100% within free limits.
+ */
+exports.cleanupOldData = functions.pubsub
+  .schedule("0 2 * * *")
+  .timeZone("Asia/Kolkata")
   .onRun(async (context) => {
+    console.log("Daily 2:00 AM IST Auto-cleanup started.");
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const oneDayCutoff = Date.now() - ONE_DAY_MS;
+    const firestore = admin.firestore();
+
+    // 1. Clean up old Notifications from Cloud Firestore (older than 24 hours)
+    try {
+      const notifParents = await firestore.collection("notifications").get();
+      for (const parentDoc of notifParents.docs) {
+        const itemsRef = parentDoc.ref.collection("items");
+        const oldNotifs = await itemsRef.where("timestamp", "<", oneDayCutoff).get();
+        if (!oldNotifs.empty) {
+          const batch = firestore.batch();
+          oldNotifs.docs.forEach((doc) => batch.delete(doc.ref));
+          await batch.commit();
+          console.log(`Deleted ${oldNotifs.size} old notifications for child: ${parentDoc.id}`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to prune Firestore notifications:", err);
+    }
+
+    // 2. Clean up old Media Gallery from Cloud Firestore (older than 24 hours)
+    try {
+      const mediaParents = await firestore.collection("media_gallery").get();
+      for (const parentDoc of mediaParents.docs) {
+        const itemsRef = parentDoc.ref.collection("items");
+        const oldMedia = await itemsRef.where("dateAdded", "<", oneDayCutoff).get();
+        if (!oldMedia.empty) {
+          const batch = firestore.batch();
+          oldMedia.docs.forEach((doc) => batch.delete(doc.ref));
+          await batch.commit();
+          console.log(`Deleted ${oldMedia.size} old media items for child: ${parentDoc.id}`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to prune Firestore media_gallery:", err);
+    }
+
+    // 3. Purge any lingering RTDB notifications & media_gallery nodes to guarantee 0 bytes RTDB bloat
+    try {
+      const rtdb = admin.database();
+      await rtdb.ref("notifications").remove().catch(() => {});
+      await rtdb.ref("media_gallery").remove().catch(() => {});
+    } catch (err) {
+      console.error("Failed to remove lingering RTDB nodes:", err);
+    }
+
+    // 4. Prune other RTDB history nodes older than 30 days
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const cutoffTime = Date.now() - THIRTY_DAYS_MS;
     const db = admin.database();
@@ -232,7 +347,6 @@ exports.onCommandSent = functions.database
     const nodesToPrune = [
       "whatsapp_logs",
       "youtube_history",
-      "notifications",
       "alerts",
       "call_logs",
       "sms_logs",

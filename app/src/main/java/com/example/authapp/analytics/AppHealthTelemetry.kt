@@ -243,11 +243,11 @@ object AppHealthTelemetry {
             FirebaseCrashlytics.getInstance().recordException(Exception("[$feature] $reason: $technicalError"))
         }
 
-        // 2. Realtime Database Write for immediate owner visibility
-        if (uid.isNotEmpty()) {
+        // 2. Realtime Database Write for immediate owner visibility (capped to latest to prevent RTDB bloat)
+        if (uid.isNotEmpty() && (event == "FAILED" || event == "STARTED")) {
             try {
                 val ref = database.reference.child("feature_diagnostics").child(uid)
-                ref.push().setValue(logEntry)
+                ref.child("latest").setValue(logEntry)
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("[Telemetry] Push diagnostic failed: ${e.localizedMessage}")
             }

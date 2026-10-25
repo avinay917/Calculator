@@ -128,6 +128,7 @@ fun SecurityAlertItem(alert: SecurityAlert) {
         "LOW_BATTERY", "BATTERY_LOW" -> Pair(Icons.Default.BatteryAlert, Color(0xFFC62828))
         "CHARGER_CONNECTED" -> Pair(Icons.Default.BatteryChargingFull, Color(0xFF1976D2))
         "SIM_CHANGED" -> Pair(Icons.Default.SimCardAlert, Color(0xFFD32F2F))
+        "SIM_REMOVED" -> Pair(Icons.Default.SimCardAlert, Color(0xFFB71C1C))
         "GEOFENCE_EXIT" -> Pair(Icons.Default.LocationOff, Color(0xFFE65100))
         "GEOFENCE_ENTER" -> Pair(Icons.Default.LocationOn, Color(0xFF2E7D32))
         "APP_INSTALLED" -> Pair(Icons.Default.AddCircle, Color(0xFF2E7D32))

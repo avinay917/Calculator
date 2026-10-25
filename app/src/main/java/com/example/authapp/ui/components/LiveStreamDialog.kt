@@ -3,6 +3,7 @@ package com.example.authapp.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,8 +44,10 @@ fun LiveStreamDialog(
     activeChildName: String?,
     streamStatusText: String,
     isFrontCamera: Boolean,
+    cameraMode: String = if (isFrontCamera) "front" else "rear",
     isRecording: Boolean,
     recordingDurationSeconds: Long,
+    streamElapsedSeconds: Long = 0L,
     audioSensitivity: Float,
     remoteVideoTrack: VideoTrack?,
     webRtcManager: WebRtcManager?,
@@ -155,13 +158,53 @@ fun LiveStreamDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
+                            // Compact Quick Record Button (Top Corner)
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isRecording) Color(0xFFDC2626) else Color.Black.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onToggleRecording(if (isVideo) "video" else "audio") }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                        contentDescription = "Quick Record",
+                                        tint = if (isRecording) Color.White else Color.Red,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    val recTimeStr = remember(recordingDurationSeconds) {
+                                        val m = recordingDurationSeconds / 60
+                                        val s = recordingDurationSeconds % 60
+                                        String.format(Locale.getDefault(), "%02d:%02d", m, s)
+                                    }
+                                    Text(
+                                        text = if (isRecording) "REC $recTimeStr" else "REC",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Live Elapsed Time Badge (🔴 LIVE 02:45)
+                            val liveElapsedStr = remember(streamElapsedSeconds) {
+                                val m = streamElapsedSeconds / 60
+                                val s = streamElapsedSeconds % 60
+                                String.format(Locale.getDefault(), "%02d:%02d", m, s)
+                            }
                             Surface(
                                 shape = CircleShape,
                                 color = Color(0xFFE53935)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -171,7 +214,7 @@ fun LiveStreamDialog(
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = "LIVE",
+                                        text = if (streamElapsedSeconds > 0) "LIVE $liveElapsedStr" else "LIVE",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                         color = Color.White
                                     )
@@ -324,15 +367,25 @@ fun LiveStreamDialog(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                FilledTonalIconButton(
+                                FilledTonalButton(
                                     onClick = onFlipCamera,
-                                    modifier = Modifier.size(50.dp),
-                                    shape = CircleShape
+                                    modifier = Modifier.height(50.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Cameraswitch,
-                                        contentDescription = if (isFrontCamera) "Switch to Back Camera" else "Switch to Front Camera",
-                                        modifier = Modifier.size(24.dp)
+                                        contentDescription = "Switch Camera Lens",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = when (cameraMode.lowercase()) {
+                                            "ultrawide", "ultra_wide", "0.5x" -> "0.5x Wide"
+                                            "front" -> "Front"
+                                            else -> "1x Rear"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                                     )
                                 }
 

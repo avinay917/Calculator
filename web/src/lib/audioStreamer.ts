@@ -15,7 +15,7 @@ export class AudioStreamReceiver {
   ) {}
 
   public async start(childUid: string) {
-    this.stop();
+    this.stop(false);
     this.childUid = childUid;
     this.isRunning = true;
     this.nextPlayTime = 0;
@@ -101,7 +101,7 @@ export class AudioStreamReceiver {
     this.nextPlayTime = startTime + audioBuffer.duration;
   }
 
-  public stop() {
+  public stop(notifyServer: boolean = true) {
     this.isRunning = false;
 
     if (this.unsubscribe) {
@@ -116,7 +116,7 @@ export class AudioStreamReceiver {
       this.audioContext = null;
     }
 
-    if (this.childUid) {
+    if (notifyServer && this.childUid) {
       set(ref(rtdb, `streams/${this.childUid}/status`), {
         status: "STOPPED",
         streamType: "audio",

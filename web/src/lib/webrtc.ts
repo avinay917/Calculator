@@ -10,15 +10,15 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun4.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" },
 
-  // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (STUN & Fallback TURN Relay)
-  { urls: "stun:8.231.104.217:3478" },
+  // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Always Free Tier - us-central1)
+  { urls: "stun:34.46.137.244:3478" },
   {
-    urls: "turn:8.231.104.217:3478",
+    urls: "turn:34.46.137.244:3478",
     username: "apnasatthi",
     credential: "ApnaPass@2026",
   },
   {
-    urls: "turn:8.231.104.217:3478?transport=tcp",
+    urls: "turn:34.46.137.244:3478?transport=tcp",
     username: "apnasatthi",
     credential: "ApnaPass@2026",
   },
@@ -56,7 +56,7 @@ export class WebRtcReceiver {
   ) {}
 
   public async startReceiver(childUid: string, streamType: "video" | "audio" = "video") {
-    this.stop();
+    this.stop(false);
     this.childUid = childUid;
     this.sessionId = "session_" + Date.now();
     this.pendingCandidates = [];
@@ -270,12 +270,12 @@ export class WebRtcReceiver {
     }
   }
 
-  public async switchCamera(facing: "front" | "back") {
+  public async switchCamera(facing: "front" | "back" | "ultrawide" | string) {
     if (!this.sessionId) return;
     await set(ref(rtdb, `signaling/${this.sessionId}/cameraFacing`), facing);
   }
 
-  public stop() {
+  public stop(notifyServer: boolean = true) {
     this.listeners.forEach((unsub) => unsub());
     this.listeners = [];
     this.pendingCandidates = [];
@@ -303,7 +303,7 @@ export class WebRtcReceiver {
       this.audioCtx = null;
     }
 
-    if (this.childUid) {
+    if (notifyServer && this.childUid) {
       set(ref(rtdb, `streams/${this.childUid}/status`), {
         status: "STOPPED",
         streamType: "video",

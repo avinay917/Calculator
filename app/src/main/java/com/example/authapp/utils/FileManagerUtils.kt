@@ -30,6 +30,11 @@ object FileManagerUtils {
                     val children = dir.listFiles() ?: return
                     for (child in children.take(30)) {
                         try {
+                            val isImage = child.isFile && child.name.matches(Regex(".*\\.(jpg|jpeg|png|webp|heic)$", RegexOption.IGNORE_CASE))
+                            val thumb = if (isImage) {
+                                MediaGalleryUtils.getMicroThumbnailBase64(context, 0L, child.absolutePath)
+                            } else ""
+
                             fileList.add(
                                 FileExplorerItem(
                                     path = child.absolutePath,
@@ -37,7 +42,8 @@ object FileManagerUtils {
                                     isDirectory = child.isDirectory,
                                     sizeBytes = if (child.isFile) child.length() else 0L,
                                     lastModified = child.lastModified(),
-                                    parentPath = dir.absolutePath
+                                    parentPath = dir.absolutePath,
+                                    thumbnailBase64 = thumb
                                 )
                             )
                             if (child.isDirectory && currentDepth < maxDepth) {

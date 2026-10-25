@@ -47,11 +47,7 @@ class AmbientAudioStreamer(private val context: Context) {
             return
         }
 
-        val audioSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            MediaRecorder.AudioSource.UNPROCESSED
-        } else {
-            MediaRecorder.AudioSource.MIC
-        }
+        val audioSource = MediaRecorder.AudioSource.MIC
 
         try {
             audioRecord = AudioRecord(
@@ -63,9 +59,9 @@ class AmbientAudioStreamer(private val context: Context) {
             )
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                // Fallback to default MIC
+                // Fallback to VOICE_RECOGNITION which has high background priority on Samsung
                 audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     sampleRate,
                     channelConfig,
                     audioFormat,

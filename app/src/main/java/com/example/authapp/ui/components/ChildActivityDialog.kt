@@ -1169,11 +1169,40 @@ fun UnifiedSimAndNetworkView(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     if (simInfo != null) {
+                        val isSimAbsent = simInfo.simState == "ABSENT" || simInfo.operatorName == "No SIM Card"
+                        if (isSimAbsent) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "SIM Card Removed or Missing",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+
                         val lastCheckedStr = if (simInfo.lastUpdated > 0L) simInfo.lastUpdated.formatTime() else "Recent"
 
                         InfoRow("Operator / Carrier", simInfo.operatorName.ifEmpty { "Detected" })
                         InfoRow("Country ISO", simInfo.countryIso.ifEmpty { "IN" }.uppercase())
-                        InfoRow("SIM Status", simInfo.simState.ifEmpty { "Ready (Active)" })
+                        InfoRow("SIM Status", if (isSimAbsent) "ABSENT / REMOVED" else simInfo.simState.ifEmpty { "Ready (Active)" })
                         InfoRow("Last Updated", lastCheckedStr)
                     } else {
                         Text(

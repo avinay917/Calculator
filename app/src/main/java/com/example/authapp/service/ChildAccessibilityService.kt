@@ -47,8 +47,32 @@ class ChildAccessibilityService : AccessibilityService() {
             "com.opera.browser:id/url_field"
         )
 
+        private val SYSTEM_PROTECTED_PACKAGES = setOf(
+            "com.android.settings",
+            "com.android.systemui",
+            "com.sec.android.app.launcher",
+            "com.google.android.apps.nexuslauncher",
+            "com.android.launcher",
+            "com.android.launcher3",
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller",
+            "com.samsung.android.dialer",
+            "com.google.android.dialer",
+            "com.android.phone",
+            "com.android.server.telecom",
+            "com.google.android.gms",
+            "com.android.vending"
+        )
+
         var instance: ChildAccessibilityService? = null
             private set
+
+        @Volatile
+        var blockedPackageNames: Set<String> = emptySet()
+    }
+
+    fun returnToHomeScreen(): Boolean {
+        return performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
     override fun onServiceConnected() {
@@ -98,6 +122,16 @@ class ChildAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val packageName = event.packageName?.toString() ?: return
+
+        // Safety: Never intercept or block own Calculator app or vital System apps (Settings, Launcher, Dialer, etc.)!
+        if (packageName == applicationContext.packageName || SYSTEM_PROTECTED_PACKAGES.contains(packageName)) return
+
+        // 1. Blocked App Auto-Kickback: If child opens a blocked app, immediately return to Home Screen!
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && blockedPackageNames.isNotEmpty() && blockedPackageNames.contains(packageName)) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Blocked app $packageName opened - intercepted and dismissed to Home")
+            return
+        }
 
         if (!BROWSER_PACKAGES.contains(packageName)) return
 

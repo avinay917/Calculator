@@ -329,7 +329,7 @@ class WebRtcManager(
                             val parameters = sender?.parameters
                             if (parameters != null && parameters.encodings.isNotEmpty()) {
                                 for (encoding in parameters.encodings) {
-                                    encoding.maxBitrateBps = 1000 * 1000 // 1 Mbps max bitrate for 480p/720p
+                                    encoding.maxBitrateBps = 750 * 1000 // 750 Kbps max bitrate (Smooth 60fps while cutting 25% TURN bandwidth)
                                     encoding.minBitrateBps = 150 * 1000  // 150 Kbps fallback for weak network
                                 }
                                 sender.parameters = parameters
@@ -765,13 +765,13 @@ class WebRtcManager(
                 PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
 
-                // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (STUN & Fallback TURN Relay)
-                PeerConnection.IceServer.builder("stun:8.231.104.217:3478").createIceServer(),
-                PeerConnection.IceServer.builder("turn:8.231.104.217:3478")
+                // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Always Free Tier - us-central1)
+                PeerConnection.IceServer.builder("stun:34.46.137.244:3478").createIceServer(),
+                PeerConnection.IceServer.builder("turn:34.46.137.244:3478")
                     .setUsername("apnasatthi")
                     .setPassword("ApnaPass@2026")
                     .createIceServer(),
-                PeerConnection.IceServer.builder("turn:8.231.104.217:3478?transport=tcp")
+                PeerConnection.IceServer.builder("turn:34.46.137.244:3478?transport=tcp")
                     .setUsername("apnasatthi")
                     .setPassword("ApnaPass@2026")
                     .createIceServer(),
@@ -925,6 +925,98 @@ class WebRtcManager(
                 FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switch notice: $errorDescription")
             }
         })
+    }
+
+    fun getCameraDeviceName(targetMode: String): String? {
+        try {
+            val cameraManager = appContext.getSystemService(Context.CAMERA_SERVICE) as? android.hardware.camera2.CameraManager ?: return null
+            val enumerator = Camera2Enumerator(appContext)
+            val deviceNames = enumerator.deviceNames ?: return null
+
+            var frontDevice: String? = null
+            var standardBackDevice: String? = null
+            var ultrawideDevice: String? = null
+            var minFocalLength = Float.MAX_VALUE
+
+            for (deviceName in deviceNames) {
+                if (enumerator.isFrontFacing(deviceName)) {
+                    if (frontDevice == null) frontDevice = deviceName
+                } else {
+                    // Back facing camera: check focal lengths
+                    try {
+                        val chars = cameraManager.getCameraCharacteristics(deviceName)
+                        val focalLengths = chars.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                        val focalLength = focalLengths?.minOrNull() ?: 5.0f
+                        if (focalLength < 2.8f) {
+                            ultrawideDevice = deviceName
+                        }
+                        if (focalLength < minFocalLength) {
+                            minFocalLength = focalLength
+                        }
+                        if (standardBackDevice == null || focalLength >= 2.8f) {
+                            standardBackDevice = deviceName
+                        }
+                    } catch (_: Exception) {
+                        if (standardBackDevice == null) standardBackDevice = deviceName
+                    }
+                }
+            }
+
+            if (ultrawideDevice == null) {
+                val backDevices = deviceNames.filter { !enumerator.isFrontFacing(it) }
+                if (backDevices.size > 1) {
+                    ultrawideDevice = backDevices.minByOrNull { dev ->
+                        try {
+                            val chars = cameraManager.getCameraCharacteristics(dev)
+                            chars.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.minOrNull() ?: 5.0f
+                        } catch (_: Exception) { 5.0f }
+                    }
+                }
+            }
+
+            return when (targetMode.lowercase()) {
+                "front" -> frontDevice ?: deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+                "ultrawide", "ultra_wide", "wide", "0.5x" -> ultrawideDevice ?: standardBackDevice ?: deviceNames.firstOrNull { !enumerator.isFrontFacing(it) }
+                else -> standardBackDevice ?: deviceNames.firstOrNull { !enumerator.isFrontFacing(it) }
+            }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] getCameraDeviceName error: ${e.localizedMessage}")
+            return null
+        }
+    }
+
+    fun switchCameraMode(targetMode: String, onSwitched: ((String) -> Unit)? = null) {
+        if (isStopped) return
+        val capturer = videoCapturer as? CameraVideoCapturer
+        if (capturer == null || !isCameraRunning) {
+            FirebaseCrashlytics.getInstance().log("[WebRTC] switchCameraMode ignored: camera is not running")
+            return
+        }
+
+        val targetDeviceName = getCameraDeviceName(targetMode)
+        if (targetDeviceName != null) {
+            try {
+                capturer.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+                    override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switched to $targetMode ($targetDeviceName, isFront=$isFrontCamera)")
+                        onSwitched?.invoke(targetMode)
+                    }
+                    override fun onCameraSwitchError(errorDescription: String?) {
+                        FirebaseCrashlytics.getInstance().log("[WebRTC] Camera switch error for $targetDeviceName: $errorDescription")
+                        switchCamera { isFront ->
+                            onSwitched?.invoke(if (isFront) "front" else "back")
+                        }
+                    }
+                }, targetDeviceName)
+                return
+            } catch (e: Throwable) {
+                FirebaseCrashlytics.getInstance().log("[WebRTC] Direct device switch failed: ${e.localizedMessage}")
+            }
+        }
+
+        switchCamera { isFront ->
+            onSwitched?.invoke(if (isFront) "front" else "back")
+        }
     }
 
     private var audioLevelHandler: android.os.Handler? = null
