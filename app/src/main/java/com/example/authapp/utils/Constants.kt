@@ -78,11 +78,11 @@ object Constants {
     object Snapshot {
         const val STATUS_REQUESTED = "REQUESTED"
         const val STATUS_PROCESSING = "PROCESSING"
-        const val CAMERA_BACK = "back"
-        const val CAMERA_FRONT = "front"
+        const val CAMERA_BACK = Camera.BACK
+        const val CAMERA_FRONT = Camera.FRONT
     }
 
-    // Camera Facing
+    // Camera Facing (Single canonical source)
     object Camera {
         const val FRONT = "front"
         const val BACK = "back"

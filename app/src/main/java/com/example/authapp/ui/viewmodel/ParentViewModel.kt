@@ -146,36 +146,28 @@ class ParentViewModel : ViewModel() {
         setupMapListener(locationHistoryListeners, childUid, FirebaseRepository::listenToLocationHistory) { history ->
             _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (childUid to history)) }
         }
-        setupMapListener(callLogsListeners, childUid, FirebaseRepository::listenToCallLogs) { logs ->
-            _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
-        }
+        // Single Firestore Listener for Call Logs (eliminates duplicate RTDB listener)
         if (!firestoreCallLogsRegistrations.containsKey(childUid)) {
             firestoreCallLogsRegistrations[childUid] = FirebaseRepository.listenToChildCallLogsFirestore(childUid) { logs ->
-                if (logs.isNotEmpty()) _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
+                _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
             }
         }
-        setupMapListener(notificationsListeners, childUid, FirebaseRepository::listenToNotifications) { notifs ->
-            _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
-        }
+        // Single Firestore Listener for Notifications (eliminates duplicate RTDB listener)
         if (!firestoreNotificationRegistrations.containsKey(childUid)) {
             firestoreNotificationRegistrations[childUid] = FirebaseRepository.listenToNotificationsFirestore(childUid) { notifs ->
-                if (notifs.isNotEmpty()) _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
+                _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
             }
         }
-        setupMapListener(smsListeners, childUid, FirebaseRepository::listenToSmsLogs) { smsList ->
-            _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
-        }
+        // Single Firestore Listener for SMS Logs (eliminates duplicate RTDB listener)
         if (!firestoreSmsRegistrations.containsKey(childUid)) {
             firestoreSmsRegistrations[childUid] = FirebaseRepository.listenToChildSmsLogsFirestore(childUid) { smsList ->
-                if (smsList.isNotEmpty()) _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
+                _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
             }
         }
-        setupMapListener(webHistoryListeners, childUid, FirebaseRepository::listenToWebHistory) { webList ->
-            _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
-        }
+        // Single Firestore Listener for Web History (eliminates duplicate RTDB listener)
         if (!firestoreWebHistoryRegistrations.containsKey(childUid)) {
             firestoreWebHistoryRegistrations[childUid] = FirebaseRepository.listenToChildWebHistoryFirestore(childUid) { webList ->
-                if (webList.isNotEmpty()) _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
+                _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
             }
         }
         setupMapListener(networkHistoryListeners, childUid, FirebaseRepository::listenToNetworkHistory) { netList ->
@@ -187,31 +179,25 @@ class ParentViewModel : ViewModel() {
         setupMapListener(packageEventsListeners, childUid, FirebaseRepository::listenToAppInstallEvents) { events ->
             _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (childUid to events)) }
         }
-        setupMapListener(whatsAppListeners, childUid, FirebaseRepository::listenToWhatsAppLogs) { waLogs ->
-            _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
-        }
+        // Single Firestore Listener for WhatsApp Logs (eliminates duplicate RTDB listener)
         if (!firestoreWhatsAppRegistrations.containsKey(childUid)) {
             firestoreWhatsAppRegistrations[childUid] = FirebaseRepository.listenToWhatsAppLogsFirestore(childUid) { waLogs ->
-                if (waLogs.isNotEmpty()) _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
+                _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
             }
         }
         setupMapListener(youtubeListeners, childUid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
             _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (childUid to ytLogs)) }
         }
-        setupMapListener(mediaGalleryListeners, childUid, FirebaseRepository::listenToMediaGallery) { gallery ->
-            _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
-        }
+        // Single Firestore Listener for Media Gallery (eliminates duplicate RTDB listener)
         if (!firestoreMediaGalleryRegistrations.containsKey(childUid)) {
             firestoreMediaGalleryRegistrations[childUid] = FirebaseRepository.listenToMediaGalleryFirestore(childUid) { gallery ->
-                if (gallery.isNotEmpty()) _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
+                _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
             }
         }
-        setupMapListener(fileExplorerListeners, childUid, FirebaseRepository::listenToFileExplorer) { files ->
-            _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
-        }
+        // Single Firestore Listener for File Explorer (eliminates duplicate RTDB listener)
         if (!firestoreFileExplorerRegistrations.containsKey(childUid)) {
             firestoreFileExplorerRegistrations[childUid] = FirebaseRepository.listenToFileExplorerFirestore(childUid) { files ->
-                if (files.isNotEmpty()) _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
+                _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
             }
         }
         if (!snapshotsListeners.containsKey(childUid)) {
