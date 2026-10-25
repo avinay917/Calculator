@@ -53,6 +53,7 @@ class ParentViewModel : ViewModel() {
     private val firestoreCallLogsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
     private val firestoreSmsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
     private val firestoreWebHistoryRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val firestoreFileExplorerRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
     private val recordingsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
     private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
     private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
@@ -208,6 +209,11 @@ class ParentViewModel : ViewModel() {
         setupMapListener(fileExplorerListeners, childUid, FirebaseRepository::listenToFileExplorer) { files ->
             _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
         }
+        if (!firestoreFileExplorerRegistrations.containsKey(childUid)) {
+            firestoreFileExplorerRegistrations[childUid] = FirebaseRepository.listenToFileExplorerFirestore(childUid) { files ->
+                if (files.isNotEmpty()) _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
+            }
+        }
         if (!snapshotsListeners.containsKey(childUid)) {
             snapshotsListeners[childUid] = FirebaseRepository.listenToSnapshots(childUid) { snapshots ->
                 _uiState.update { current ->
@@ -263,6 +269,7 @@ class ParentViewModel : ViewModel() {
         firestoreCallLogsRegistrations.remove(childUid)?.remove()
         firestoreSmsRegistrations.remove(childUid)?.remove()
         firestoreWebHistoryRegistrations.remove(childUid)?.remove()
+        firestoreFileExplorerRegistrations.remove(childUid)?.remove()
         recordingsListeners.remove(childUid)?.let {
             FirebaseRepository.removeValueListener("recordings/$childUid", it)
         }
@@ -702,6 +709,8 @@ class ParentViewModel : ViewModel() {
         firestoreSmsRegistrations.clear()
         firestoreWebHistoryRegistrations.values.forEach { it.remove() }
         firestoreWebHistoryRegistrations.clear()
+        firestoreFileExplorerRegistrations.values.forEach { it.remove() }
+        firestoreFileExplorerRegistrations.clear()
         recordingsListeners.forEach { (childId, listener) -> FirebaseRepository.removeValueListener("recordings/$childId", listener) }
         recordingsListeners.clear()
         childRecordingsMap.clear()

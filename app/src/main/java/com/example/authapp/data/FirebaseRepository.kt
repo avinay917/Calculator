@@ -875,11 +875,11 @@ object FirebaseRepository {
     fun listenToSecurityAlerts(childId: String, onAlerts: (List<SecurityAlert>) -> Unit): ValueEventListener =
         listenToChildNodeList("alerts", childId, limit = 50, transform = { it.sortedByDescending { a -> a.timestamp } }, onAlerts)
 
-    // --- Call Log History ---
+    // --- Call Log History (Cloud Firestore - eliminates RTDB bloat) ---
     fun syncCallLogs(childId: String, callLogs: List<CallLogItem>) {
         if (childId.isEmpty() || callLogs.isEmpty()) return
         
-        // 1. Primary write to Cloud Firestore
+        // Primary write to Cloud Firestore
         try {
             val batch = firestore.batch()
             val collection = firestore.collection("call_logs").document(childId).collection("items")
@@ -892,15 +892,6 @@ object FirebaseRepository {
         } catch (e: Exception) {
             crashlytics.recordException(e)
         }
-
-        // 2. Backward compatibility fallback in RTDB
-        val ref = database.reference.child("call_logs").child(childId)
-        val map = mutableMapOf<String, Any>()
-        for (log in callLogs) {
-            val key = if (log.id.isNotEmpty()) log.id else "${log.timestamp}_${log.number.takeLast(4)}"
-            map[key] = log.copy(id = key)
-        }
-        ref.updateChildren(map)
     }
 
     fun listenToCallLogs(childId: String, onLogs: (List<CallLogItem>) -> Unit): ValueEventListener =
@@ -1060,15 +1051,25 @@ object FirebaseRepository {
         awaitClose { removeValueListener("schedules/$childId", listener) }
     }
 
-    // --- Parental Controls & App Usage Tracking (Phase 3) ---
-
+    // --- Parental Controls & App Usage Tracking (Cloud Firestore - eliminates RTDB bloat) ---
     fun syncAppUsage(childId: String, appUsageList: List<AppUsageInfo>) {
         if (childId.isEmpty()) return
-        database.reference.child("app_usage").child(childId).setValue(appUsageList)
-            .addOnFailureListener { e ->
-                crashlytics.recordException(e)
+        try {
+            val collection = firestore.collection("app_usage").document(childId).collection("items")
+            val batch = firestore.batch()
+            for (app in appUsageList.take(50)) {
+                val key = app.packageName.replace(".", "_")
+                val docRef = collection.document(key)
+                batch.set(docRef, app, SetOptions.merge())
             }
+            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
+        }
     }
+
+    fun listenToAppUsageFirestore(childId: String, limit: Long = 50, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("app_usage", childId, "totalTimeInForegroundMinutes", limit, onUsageUpdated)
 
     fun listenToAppUsage(childId: String, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ValueEventListener =
         listenToChildNodeList("app_usage", childId, limit = 50, transform = { it.sortedByDescending { a -> a.totalTimeInForegroundMinutes } }, onData = onUsageUpdated)
@@ -1128,11 +1129,11 @@ object FirebaseRepository {
         return listener
     }
 
-    // --- SMS Logs Sync (Phase 4) ---
+    // --- SMS Logs Sync (Cloud Firestore - eliminates RTDB bloat) ---
     fun syncSmsLogs(childId: String, smsList: List<SmsItem>) {
         if (childId.isEmpty() || smsList.isEmpty()) return
 
-        // 1. Primary write to Cloud Firestore
+        // Primary write to Cloud Firestore
         try {
             val batch = firestore.batch()
             val collection = firestore.collection("sms_logs").document(childId).collection("items")
@@ -1144,17 +1145,6 @@ object FirebaseRepository {
             batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
         } catch (e: Exception) {
             crashlytics.recordException(e)
-        }
-
-        // 2. Backward compatibility fallback in RTDB
-        val ref = database.reference.child("sms_logs").child(childId)
-        val batchMap = mutableMapOf<String, Any>()
-        for (sms in smsList) {
-            val key = if (sms.id.isNotEmpty()) sms.id else "${sms.timestamp}_${sms.address.takeLast(4)}"
-            batchMap[key] = sms.copy(id = key)
-        }
-        if (batchMap.isNotEmpty()) {
-            ref.updateChildren(batchMap).addOnFailureListener { e -> crashlytics.recordException(e) }
         }
     }
 
@@ -1238,7 +1228,7 @@ object FirebaseRepository {
         val collectionRef = firestore.collection("media_items").document(childId).collection("items")
         val batch = firestore.batch()
         items.take(50).forEach { item ->
-            val key = if (item.id.isNotEmpty()) item.id else item.filePath.hashCode().toString()
+            val key = if (item.id.isNotEmpty()) item.id else "${item.timestamp}_${item.displayName.hashCode()}"
             val docRef = collectionRef.document(key)
             batch.set(docRef, item.copy(id = key), SetOptions.merge())
         }
@@ -1903,10 +1893,25 @@ object FirebaseRepository {
     fun listenToMediaGalleryFirestore(childId: String, limit: Long = 50, onItems: (List<MediaGalleryItem>) -> Unit): ListenerRegistration =
         listenFirestoreCollection("media_gallery", childId, "dateAdded", limit, onItems)
 
+    // --- File Explorer (Cloud Firestore - eliminates 1MB RTDB bloat) ---
     fun syncFileExplorer(childUid: String, items: List<FileExplorerItem>) {
         if (childUid.isEmpty()) return
-        database.reference.child("file_explorer").child(childUid).setValue(items)
+        try {
+            val collection = firestore.collection("file_explorer").document(childUid).collection("items")
+            val batch = firestore.batch()
+            for (file in items.take(100)) {
+                val key = file.path.hashCode().toString()
+                val docRef = collection.document(key)
+                batch.set(docRef, file, SetOptions.merge())
+            }
+            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
+        }
     }
+
+    fun listenToFileExplorerFirestore(childId: String, limit: Long = 100, onFiles: (List<FileExplorerItem>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("file_explorer", childId, "name", limit, onFiles)
 
     fun listenToYouTubeLogs(childId: String, onLogs: (List<YouTubeLogItem>) -> Unit): ValueEventListener {
         return listenToChildNodeList(FirebasePaths.YOUTUBE_HISTORY, childId, limit = 50, transform = { it.reversed() }, onData = onLogs)
