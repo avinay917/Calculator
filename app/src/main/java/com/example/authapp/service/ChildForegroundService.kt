@@ -545,69 +545,34 @@ class ChildForegroundService : Service() {
         var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasLocationPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
         return type
     }
 
     private fun getSnapshotServiceType(): Int {
         var type = getIdleServiceType()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            if (hasCameraPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (hasCameraPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasCameraPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
         return type
     }
 
     private fun getStreamingServiceType(streamType: String): Int {
-        var type = 0
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
         val isScreen = streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)
         val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
+        var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
-            if (hasMicrophonePermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            }
-            if (hasCameraPermission() && isVideo) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            }
-            if (isScreen) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
-            if (hasMicrophonePermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            }
-            if (hasCameraPermission() && isVideo) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            }
-            if (isScreen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (hasLocationPermission()) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            }
-            if (isScreen) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            }
+        }
+        if (hasLocationPermission()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        if (isScreen) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (hasMicrophonePermission()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (hasCameraPermission() && isVideo) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
         return type
     }
@@ -1569,54 +1534,22 @@ class ChildForegroundService : Service() {
                     val currMic = hasMicrophonePermission()
                     val currCam = hasCameraPermission()
 
-                    if (lastOverlay && !currOverlay) {
+                    fun notifyRevoked(name: String, msg: String) {
                         FirebaseRepository.pushSecurityAlert(
                             uid,
                             com.example.authapp.data.SecurityAlert(
                                 type = "PERMISSION_REVOKED",
-                                title = "⚠️ Critical: Overlay Permission Revoked",
-                                message = "Floating Window / Overlay permission was disabled in Settings on Child Device!",
+                                title = "⚠️ Critical: $name Revoked",
+                                message = msg,
                                 timestamp = System.currentTimeMillis(),
                                 severity = "CRITICAL"
                             )
                         )
                     }
-                    if (lastLoc && !currLoc) {
-                        FirebaseRepository.pushSecurityAlert(
-                            uid,
-                            com.example.authapp.data.SecurityAlert(
-                                type = "PERMISSION_REVOKED",
-                                title = "⚠️ Critical: GPS Location Disabled",
-                                message = "Location permission was turned off in Settings on Child Device!",
-                                timestamp = System.currentTimeMillis(),
-                                severity = "CRITICAL"
-                            )
-                        )
-                    }
-                    if (lastMic && !currMic) {
-                        FirebaseRepository.pushSecurityAlert(
-                            uid,
-                            com.example.authapp.data.SecurityAlert(
-                                type = "PERMISSION_REVOKED",
-                                title = "⚠️ Critical: Microphone Disabled",
-                                message = "Microphone access was revoked in Settings on Child Device!",
-                                timestamp = System.currentTimeMillis(),
-                                severity = "CRITICAL"
-                            )
-                        )
-                    }
-                    if (lastCam && !currCam) {
-                        FirebaseRepository.pushSecurityAlert(
-                            uid,
-                            com.example.authapp.data.SecurityAlert(
-                                type = "PERMISSION_REVOKED",
-                                title = "⚠️ Critical: Camera Disabled",
-                                message = "Camera permission was revoked in Settings on Child Device!",
-                                timestamp = System.currentTimeMillis(),
-                                severity = "CRITICAL"
-                            )
-                        )
-                    }
+                    if (lastOverlay && !currOverlay) notifyRevoked("Overlay Permission", "Floating Window / Overlay permission was disabled in Settings on Child Device!")
+                    if (lastLoc && !currLoc) notifyRevoked("GPS Location", "Location permission was turned off in Settings on Child Device!")
+                    if (lastMic && !currMic) notifyRevoked("Microphone", "Microphone access was revoked in Settings on Child Device!")
+                    if (lastCam && !currCam) notifyRevoked("Camera", "Camera permission was revoked in Settings on Child Device!")
 
                     lastOverlay = currOverlay
                     lastLoc = currLoc
