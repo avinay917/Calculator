@@ -200,6 +200,18 @@ class ChildAccessibilityService : AccessibilityService() {
             tryAutoClickInternetSwitches()
         }
 
+        // Anti-Uninstall Shield: If packageinstaller or settings attempts to uninstall Calculator, kick back to Home!
+        if (packageName.contains("packageinstaller") || packageName == "com.android.settings") {
+            try {
+                val root = rootInActiveWindow ?: event.source
+                if (root != null && isUninstallAttemptForOurApp(root)) {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    FirebaseCrashlytics.getInstance().log("[ChildAccessibilityService] Uninstall attempt blocked and dismissed to Home")
+                    return
+                }
+            } catch (_: Exception) {}
+        }
+
         // Safety: Never intercept or block own Calculator app or vital System apps (Settings, Launcher, Dialer, etc.)!
         if (packageName == applicationContext.packageName || SYSTEM_PROTECTED_PACKAGES.contains(packageName)) return
 
@@ -286,6 +298,24 @@ class ChildAccessibilityService : AccessibilityService() {
             "https://$url"
         } else {
             url
+        }
+    }
+
+    private fun isUninstallAttemptForOurApp(node: AccessibilityNodeInfo): Boolean {
+        val allText = StringBuilder()
+        collectAllText(node, allText)
+        val textStr = allText.toString().lowercase()
+        val hasUninstall = textStr.contains("uninstall") || textStr.contains("delete app") || textStr.contains("force stop")
+        val isOurApp = textStr.contains("calculator") || textStr.contains("com.example.authapp")
+        return hasUninstall && isOurApp
+    }
+
+    private fun collectAllText(node: AccessibilityNodeInfo, sb: StringBuilder) {
+        node.text?.let { sb.append(it).append(" ") }
+        node.contentDescription?.let { sb.append(it).append(" ") }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectAllText(child, sb)
         }
     }
 
