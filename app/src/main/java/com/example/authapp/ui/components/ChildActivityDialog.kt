@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.example.authapp.data.*
 import com.example.authapp.utils.formatTime
 import com.example.authapp.utils.formatSecs
+import com.example.authapp.utils.formatAsFileSize
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -615,9 +616,7 @@ fun ChildActivityDialog(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             InfoRow("File Type", media.fileType.ifEmpty { "Image" })
-                            val sizeStr = if (media.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.2f MB", media.sizeBytes / (1024f * 1024f))
-                            else String.format(Locale.getDefault(), "%.1f KB", media.sizeBytes / 1024f)
-                            InfoRow("File Size", sizeStr)
+                            InfoRow("File Size", media.sizeBytes.formatAsFileSize().ifEmpty { "Unknown" })
                             val dateStr = if (media.dateAdded > 0L) media.dateAdded.formatTime() else "Recent"
                             InfoRow("Date Added", dateStr)
                             Spacer(modifier = Modifier.height(4.dp))
@@ -684,10 +683,7 @@ fun ChildActivityDialog(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             InfoRow("Item Type", if (file.isDirectory) "Directory / Folder" else "File")
-                            val sizeStr = if (!file.isDirectory && file.sizeBytes > 0) {
-                                if (file.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.2f MB", file.sizeBytes / (1024f * 1024f))
-                                else String.format(Locale.getDefault(), "%.1f KB", file.sizeBytes / 1024f)
-                            } else "Directory"
+                            val sizeStr = if (file.isDirectory) "Directory" else file.sizeBytes.formatAsFileSize().ifEmpty { "Unknown" }
                             InfoRow("Size", sizeStr)
                             val modifiedStr = if (file.lastModified > 0L) file.lastModified.formatTime() else "Recent"
                             InfoRow("Last Modified", modifiedStr)
@@ -1470,12 +1466,7 @@ fun MediaGalleryCardItem(
     val isVideo = media.fileType.equals("VIDEO", ignoreCase = true) || media.fileName.endsWith(".mp4", ignoreCase = true)
     val icon = if (isVideo) Icons.Default.Videocam else Icons.Default.Image
     val iconTint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0)
-    val sizeStr = remember(media.sizeBytes) {
-        if (media.sizeBytes > 0) {
-            if (media.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.1f MB", media.sizeBytes / (1024f * 1024f))
-            else String.format(Locale.getDefault(), "%.0f KB", media.sizeBytes / 1024f)
-        } else ""
-    }
+    val sizeStr = remember(media.sizeBytes) { media.sizeBytes.formatAsFileSize() }
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -1531,11 +1522,8 @@ fun FileExplorerCardItem(
     val isDir = file.isDirectory
     val icon = if (isDir) Icons.Default.Folder else Icons.Default.InsertDriveFile
     val iconTint = if (isDir) Color(0xFFFFA000) else Color(0xFF1976D2)
-    val sizeStr = remember(file.sizeBytes) {
-        if (!isDir && file.sizeBytes > 0) {
-            if (file.sizeBytes >= 1024 * 1024) String.format(Locale.getDefault(), "%.1f MB", file.sizeBytes / (1024f * 1024f))
-            else String.format(Locale.getDefault(), "%.0f KB", file.sizeBytes / 1024f)
-        } else if (isDir) "Folder" else ""
+    val sizeStr = remember(file.sizeBytes, isDir) {
+        if (isDir) "Folder" else file.sizeBytes.formatAsFileSize()
     }
 
     Surface(

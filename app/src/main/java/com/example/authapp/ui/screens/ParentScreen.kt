@@ -62,7 +62,6 @@ import com.example.authapp.ui.components.ChildAlertsDialog
 import com.example.authapp.ui.components.ChildScheduleDialog
 import com.example.authapp.ui.components.ChildSchedulesView
 import com.example.authapp.ui.components.CloudRecordingsView
-import com.example.authapp.ui.components.LiveStreamDialog
 import com.example.authapp.ui.viewmodel.ParentViewModel
 import com.example.authapp.webrtc.WebRtcManager
 import java.io.File
@@ -70,9 +69,6 @@ import java.io.FileInputStream
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
-
-fun calculateSafeAudioGain(sensitivityPercent: Float): Double =
-    WebRtcManager.calculateSafeAudioGain(sensitivityPercent)
 
 @Composable
 fun ParentScreen(

@@ -46,3 +46,11 @@ object DateTimeUtils {
 
 fun Long.formatTime(): String = DateTimeUtils.formatDateTime(this)
 fun Long.formatSecs(): String = DateTimeUtils.formatDuration(this)
+fun Long.formatAsFileSize(): String {
+    if (this <= 0L) return ""
+    return if (this >= 1024 * 1024) {
+        String.format(Locale.getDefault(), "%.1f MB", this / (1024f * 1024f))
+    } else {
+        String.format(Locale.getDefault(), "%.0f KB", this / 1024f)
+    }
+}
