@@ -93,6 +93,21 @@ service cloud.firestore {
       allow write: if isOwner(childId);
     }
 
+    match /file_explorer/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /youtube_history/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
+    match /media_gallery/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
     // Fallback: deny all other access
     match /{document=**} {
       allow read, write: if false;
