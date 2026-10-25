@@ -376,46 +376,38 @@ fun ChildActivityDialog(
                     Box(modifier = Modifier.fillMaxSize()) {
                         when (selectedTab) {
                             0 -> {
-                                if (filteredCallLogs.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Call, if (searchQuery.isNotEmpty()) "No matching calls found" else "No call logs recorded yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredCallLogs) { log ->
-                                            CallLogListItem(
-                                                log = log,
-                                                isPlaying = currentlyPlayingAudioUrl == log.audioRecordingUrl && log.audioRecordingUrl.isNotEmpty(),
-                                                isBuffering = isAudioBuffering,
-                                                audioPositionMs = audioPositionMs,
-                                                audioDurationMs = audioDurationMs,
-                                                playbackSpeed = audioPlaybackSpeed,
-                                                onSpeedToggle = { togglePlaybackSpeed() },
-                                                onPlayClick = {
-                                                    if (log.audioRecordingUrl.isNotEmpty()) {
-                                                        playAudio(log.audioRecordingUrl)
-                                                    }
-                                                }
-                                            )
+                                ActivityTabList(
+                                    items = filteredCallLogs,
+                                    emptyIcon = Icons.Default.Call,
+                                    emptySearchMessage = "No matching calls found",
+                                    emptyDefaultMessage = "No call logs recorded yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { log ->
+                                    CallLogListItem(
+                                        log = log,
+                                        isPlaying = currentlyPlayingAudioUrl == log.audioRecordingUrl && log.audioRecordingUrl.isNotEmpty(),
+                                        isBuffering = isAudioBuffering,
+                                        audioPositionMs = audioPositionMs,
+                                        audioDurationMs = audioDurationMs,
+                                        playbackSpeed = audioPlaybackSpeed,
+                                        onSpeedToggle = { togglePlaybackSpeed() },
+                                        onPlayClick = {
+                                            if (log.audioRecordingUrl.isNotEmpty()) {
+                                                playAudio(log.audioRecordingUrl)
+                                            }
                                         }
-                                    }
+                                    )
                                 }
                             }
                             1 -> {
-                                if (filteredSmsLogs.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Email, if (searchQuery.isNotEmpty()) "No matching SMS messages found" else "No SMS messages recorded yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredSmsLogs) { sms ->
-                                            SmsListItem(sms)
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredSmsLogs,
+                                    emptyIcon = Icons.Default.Email,
+                                    emptySearchMessage = "No matching SMS messages found",
+                                    emptyDefaultMessage = "No SMS messages recorded yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { sms ->
+                                    SmsListItem(sms)
                                 }
                             }
                             2 -> {
@@ -474,118 +466,90 @@ fun ChildActivityDialog(
                                         }
                                     }
 
-                                    if (filteredWhatsAppLogs.isEmpty()) {
-                                        EmptyStateBox(Icons.Default.Chat, if (searchQuery.isNotEmpty()) "No matching WhatsApp logs found" else "No WhatsApp chats or status captured yet")
-                                    } else {
-                                        LazyColumn(
-                                            modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                                            contentPadding = PaddingValues(bottom = 24.dp)
-                                        ) {
-                                            items(filteredWhatsAppLogs) { waItem ->
-                                                WhatsAppListItem(waItem)
-                                            }
-                                        }
+                                    ActivityTabList(
+                                        items = filteredWhatsAppLogs,
+                                        emptyIcon = Icons.Default.Chat,
+                                        emptySearchMessage = "No matching WhatsApp logs found",
+                                        emptyDefaultMessage = "No WhatsApp chats or status captured yet",
+                                        isSearching = searchQuery.isNotEmpty()
+                                    ) { waItem ->
+                                        WhatsAppListItem(waItem)
                                     }
                                 }
                             }
                             3 -> {
-                                if (filteredWebHistory.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Language, if (searchQuery.isNotEmpty()) "No matching web history found" else "No web browsing history yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredWebHistory) { item ->
-                                            WebHistoryListItem(item)
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredWebHistory,
+                                    emptyIcon = Icons.Default.Language,
+                                    emptySearchMessage = "No matching web history found",
+                                    emptyDefaultMessage = "No web browsing history yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { item ->
+                                    WebHistoryListItem(item)
                                 }
                             }
                             4 -> {
-                                if (filteredPackageEvents.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Apps, if (searchQuery.isNotEmpty()) "No matching app events found" else "No app install/uninstall events yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredPackageEvents) { event ->
-                                            AppInstallEventItem(event)
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredPackageEvents,
+                                    emptyIcon = Icons.Default.Apps,
+                                    emptySearchMessage = "No matching app events found",
+                                    emptyDefaultMessage = "No app install/uninstall events yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { event ->
+                                    AppInstallEventItem(event)
                                 }
                             }
                             5 -> {
                                 UnifiedSimAndNetworkView(simInfo = simInfo, networkHistory = networkHistory)
                             }
                             6 -> {
-                                if (filteredNotifications.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Notifications, if (searchQuery.isNotEmpty()) "No matching notifications found" else "No notifications captured yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredNotifications) { notif ->
-                                            NotificationListItem(notif)
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredNotifications,
+                                    emptyIcon = Icons.Default.Notifications,
+                                    emptySearchMessage = "No matching notifications found",
+                                    emptyDefaultMessage = "No notifications captured yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { notif ->
+                                    NotificationListItem(notif)
                                 }
                             }
                             7 -> {
-                                if (filteredSnapshots.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.CameraAlt, if (searchQuery.isNotEmpty()) "No matching camera snapshots" else "No remote camera snapshots taken yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredSnapshots) { snap ->
-                                            SnapshotGridItem(snap)
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredSnapshots,
+                                    emptyIcon = Icons.Default.CameraAlt,
+                                    emptySearchMessage = "No matching camera snapshots",
+                                    emptyDefaultMessage = "No remote camera snapshots taken yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { snap ->
+                                    SnapshotGridItem(snap)
                                 }
                             }
                             8 -> {
-                                if (filteredGallery.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.PhotoLibrary, if (searchQuery.isNotEmpty()) "No matching gallery media" else "No local gallery photos or videos synced yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredGallery) { media ->
-                                            MediaGalleryCardItem(
-                                                media = media,
-                                                onClick = { selectedGalleryItemForDetails = media }
-                                            )
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredGallery,
+                                    emptyIcon = Icons.Default.PhotoLibrary,
+                                    emptySearchMessage = "No matching gallery media",
+                                    emptyDefaultMessage = "No local gallery photos or videos synced yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { media ->
+                                    MediaGalleryCardItem(
+                                        media = media,
+                                        onClick = { selectedGalleryItemForDetails = media }
+                                    )
                                 }
                             }
                             9 -> {
-                                if (filteredFileExplorer.isEmpty()) {
-                                    EmptyStateBox(Icons.Default.Folder, if (searchQuery.isNotEmpty()) "No matching files found" else "No files or storage items synced yet")
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(bottom = 24.dp)
-                                    ) {
-                                        items(filteredFileExplorer) { file ->
-                                            FileExplorerCardItem(
-                                                file = file,
-                                                onClick = { selectedFileItemForDetails = file }
-                                            )
-                                        }
-                                    }
+                                ActivityTabList(
+                                    items = filteredFileExplorer,
+                                    emptyIcon = Icons.Default.Folder,
+                                    emptySearchMessage = "No matching files found",
+                                    emptyDefaultMessage = "No files or storage items synced yet",
+                                    isSearching = searchQuery.isNotEmpty()
+                                ) { file ->
+                                    FileExplorerCardItem(
+                                        file = file,
+                                        onClick = { selectedFileItemForDetails = file }
+                                    )
                                 }
                             }
                         }
@@ -753,6 +717,30 @@ fun EmptyStateBox(icon: androidx.compose.ui.graphics.vector.ImageVector, message
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+fun <T> ActivityTabList(
+    items: List<T>,
+    emptyIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    emptySearchMessage: String,
+    emptyDefaultMessage: String,
+    isSearching: Boolean,
+    itemContent: @Composable (T) -> Unit
+) {
+    if (items.isEmpty()) {
+        EmptyStateBox(emptyIcon, if (isSearching) emptySearchMessage else emptyDefaultMessage)
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            items(items) { item ->
+                itemContent(item)
+            }
         }
     }
 }
