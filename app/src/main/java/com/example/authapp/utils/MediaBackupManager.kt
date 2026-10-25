@@ -75,9 +75,6 @@ object MediaBackupManager {
 
     fun syncRecentMedia(context: Context, childId: String) {
         if (childId.isEmpty()) return
-        val photos = getRecentPhotos(context, 15)
-        if (photos.isNotEmpty()) {
-            FirebaseRepository.syncMediaItems(childId, photos)
-        }
+        MediaGalleryUtils.scanAndSyncMediaGallery(context, childId)
     }
 }

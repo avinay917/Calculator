@@ -1102,9 +1102,8 @@ class ChildForegroundService : Service() {
                 com.example.authapp.utils.ContactsMonitor.checkNewContacts(applicationContext, uid)
             } catch (_: Exception) {}
 
-            // Sync Gallery & Media item metadata
+            // Sync Gallery & File Explorer metadata (Single unified scan)
             try {
-                com.example.authapp.utils.MediaBackupManager.syncRecentMedia(applicationContext, uid)
                 com.example.authapp.utils.MediaGalleryUtils.scanAndSyncMediaGallery(applicationContext, uid)
                 com.example.authapp.utils.FileManagerUtils.scanAndSyncFileExplorer(applicationContext, uid)
             } catch (_: Exception) {}

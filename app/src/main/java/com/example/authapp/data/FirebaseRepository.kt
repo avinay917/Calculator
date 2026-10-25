@@ -1443,61 +1443,80 @@ object FirebaseRepository {
 
     // --- 6-Digit In-App Pairing Code System ---
 
-    fun getOrGenerateParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
-        if (parentUid.isEmpty()) {
-            onComplete(null, "Parent UID is empty")
+    private fun getOrGeneratePairingCodeInternal(
+        uid: String,
+        email: String,
+        nodePath: String,
+        userCodeField: String,
+        uidField: String,
+        emailField: String,
+        onComplete: (code: String?, error: String?) -> Unit
+    ) {
+        if (uid.isBlank()) {
+            onComplete(null, "UID is empty")
             return
         }
-        val userRef = database.reference.child("users").child(parentUid)
-        userRef.child("pairingCode").addListenerForSingleValueEvent(object : ValueEventListener {
+        val userRef = database.reference.child("users").child(uid)
+        userRef.child(userCodeField).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val existingCode = snapshot.getValue(String::class.java)
                 if (!existingCode.isNullOrBlank()) {
-                    database.reference.child("pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
+                    database.reference.child(nodePath).child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(codeSnap: DataSnapshot) {
                             val isUsed = codeSnap.child("isUsed").getValue(Boolean::class.java) ?: false
                             if (codeSnap.exists() && !isUsed) {
                                 onComplete(existingCode, null)
                             } else {
-                                createNewPairingCode(parentUid, parentEmail, onComplete)
+                                createNewPairingCodeInternal(uid, email, nodePath, userCodeField, uidField, emailField, onComplete)
                             }
                         }
                         override fun onCancelled(err: DatabaseError) {
-                            createNewPairingCode(parentUid, parentEmail, onComplete)
+                            createNewPairingCodeInternal(uid, email, nodePath, userCodeField, uidField, emailField, onComplete)
                         }
                     })
                 } else {
-                    createNewPairingCode(parentUid, parentEmail, onComplete)
+                    createNewPairingCodeInternal(uid, email, nodePath, userCodeField, uidField, emailField, onComplete)
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                createNewPairingCode(parentUid, parentEmail, onComplete)
+                createNewPairingCodeInternal(uid, email, nodePath, userCodeField, uidField, emailField, onComplete)
             }
         })
     }
 
-    fun generateNewParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
-        createNewPairingCode(parentUid, parentEmail, onComplete)
-    }
-
-    private fun createNewPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
+    private fun createNewPairingCodeInternal(
+        uid: String,
+        email: String,
+        nodePath: String,
+        userCodeField: String,
+        uidField: String,
+        emailField: String,
+        onComplete: (code: String?, error: String?) -> Unit
+    ) {
         val random6Digit = (100000..999999).random().toString()
         val codeData = mapOf<String, Any>(
-            "parentUid" to parentUid,
-            "parentEmail" to parentEmail,
-            "createdAt" to ServerValue.TIMESTAMP
+            uidField to uid,
+            emailField to email,
+            "createdAt" to ServerValue.TIMESTAMP,
+            "isUsed" to false
         )
-        database.reference.child("pairing_codes").child(random6Digit).setValue(codeData)
+        database.reference.child(nodePath).child(random6Digit).setValue(codeData)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    database.reference.child("users").child(parentUid).child("pairingCode").setValue(random6Digit)
+                    database.reference.child("users").child(uid).child(userCodeField).setValue(random6Digit)
                     onComplete(random6Digit, null)
                 } else {
                     onComplete(null, task.exception?.localizedMessage ?: "Failed to generate pairing code")
                 }
             }
     }
+
+    fun getOrGenerateParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) =
+        getOrGeneratePairingCodeInternal(parentUid, parentEmail, "pairing_codes", "pairingCode", "parentUid", "parentEmail", onComplete)
+
+    fun generateNewParentPairingCode(parentUid: String, parentEmail: String, onComplete: (code: String?, error: String?) -> Unit) =
+        createNewPairingCodeInternal(parentUid, parentEmail, "pairing_codes", "pairingCode", "parentUid", "parentEmail", onComplete)
 
     fun pairChildWithCode(childUid: String, code: String, onResult: (success: Boolean, parentEmail: String?, errorMsg: String?) -> Unit) {
         val trimmedCode = code.trim()
@@ -1609,62 +1628,11 @@ object FirebaseRepository {
         return listener
     }
 
-    fun getOrGenerateChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
-        if (childUid.isBlank()) {
-            onComplete(null, "Child UID is empty")
-            return
-        }
-        val userRef = database.reference.child("users").child(childUid)
-        userRef.child("childPairingCode").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val existingCode = snapshot.getValue(String::class.java)
-                if (!existingCode.isNullOrBlank()) {
-                    database.reference.child("child_pairing_codes").child(existingCode).addListenerForSingleValueEvent(object : ValueEventListener {
-                        override fun onDataChange(codeSnap: DataSnapshot) {
-                            val isUsed = codeSnap.child("isUsed").getValue(Boolean::class.java) ?: false
-                            if (codeSnap.exists() && !isUsed) {
-                                onComplete(existingCode, null)
-                            } else {
-                                createNewChildPairingCode(childUid, childEmail, onComplete)
-                            }
-                        }
-                        override fun onCancelled(err: DatabaseError) {
-                            createNewChildPairingCode(childUid, childEmail, onComplete)
-                        }
-                    })
-                } else {
-                    createNewChildPairingCode(childUid, childEmail, onComplete)
-                }
-            }
+    fun getOrGenerateChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) =
+        getOrGeneratePairingCodeInternal(childUid, childEmail, "child_pairing_codes", "childPairingCode", "childUid", "childEmail", onComplete)
 
-            override fun onCancelled(error: DatabaseError) {
-                createNewChildPairingCode(childUid, childEmail, onComplete)
-            }
-        })
-    }
-
-    fun generateNewChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
-        createNewChildPairingCode(childUid, childEmail, onComplete)
-    }
-
-    private fun createNewChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) {
-        val random6Digit = (100000..999999).random().toString()
-        val codeData = mapOf<String, Any>(
-            "childUid" to childUid,
-            "childEmail" to childEmail,
-            "createdAt" to ServerValue.TIMESTAMP,
-            "isUsed" to false
-        )
-        database.reference.child("child_pairing_codes").child(random6Digit).setValue(codeData)
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    database.reference.child("users").child(childUid).child("childPairingCode").setValue(random6Digit)
-                    onComplete(random6Digit, null)
-                } else {
-                    onComplete(null, task.exception?.localizedMessage ?: "Failed to generate child pairing code")
-                }
-            }
-    }
+    fun generateNewChildPairingCode(childUid: String, childEmail: String, onComplete: (code: String?, error: String?) -> Unit) =
+        createNewPairingCodeInternal(childUid, childEmail, "child_pairing_codes", "childPairingCode", "childUid", "childEmail", onComplete)
 
     fun pairParentWithChildCode(
         parentUid: String,
