@@ -38,46 +38,11 @@ fun ChildScheduleDialog(
     var captureType by remember { mutableStateOf("audio") }
     var labelInput by remember { mutableStateOf("Study Time") }
 
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = "${childUser.name.ifEmpty { "Child" }} • Auto-Record Schedules",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "Silent Scheduled Audio & Video Recordings (No Sound)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
-                }
-            ) { innerPadding ->
+    AppFullScreenDialog(
+        title = "${childUser.name.ifEmpty { "Child" }} • Auto-Record Schedules",
+        subtitle = "Silent Scheduled Audio & Video Recordings (No Sound)",
+        onDismiss = onDismiss
+    ) { innerPadding ->
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -288,8 +253,6 @@ fun ChildScheduleDialog(
                         }
                     }
                 }
-            }
-        }
     }
 }
 

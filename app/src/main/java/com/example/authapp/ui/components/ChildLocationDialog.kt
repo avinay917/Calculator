@@ -52,58 +52,24 @@ fun ChildLocationDialog(
         }
     }
 
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = "${childUser.name.ifEmpty { "Child" }} • Live GPS Map",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = if (childLocation != null) "GPS Tracking Active" else "Locating Device...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (childLocation != null) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        actions = {
-                            IconButton(
-                                onClick = onRefreshLocation,
-                                enabled = !isRefreshingLocation
-                            ) {
-                                if (isRefreshingLocation) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh GPS")
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
+    AppFullScreenDialog(
+        title = "${childUser.name.ifEmpty { "Child" }} • Live GPS Map",
+        subtitle = if (childLocation != null) "GPS Tracking Active" else "Locating Device...",
+        subtitleColor = if (childLocation != null) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+        onDismiss = onDismiss,
+        actions = {
+            IconButton(
+                onClick = onRefreshLocation,
+                enabled = !isRefreshingLocation
+            ) {
+                if (isRefreshingLocation) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh GPS")
                 }
-            ) { innerPadding ->
+            }
+        }
+    ) { innerPadding ->
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -383,5 +349,4 @@ fun ChildLocationDialog(
                 }
             }
         }
-    }
-}
+
