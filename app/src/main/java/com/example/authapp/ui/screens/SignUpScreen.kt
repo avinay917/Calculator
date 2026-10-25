@@ -408,13 +408,3 @@ fun SignUpScreen(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun SignUpScreenPreview() {
-    AuthAppTheme {
-        SignUpScreen(
-            onSignUpSuccess = {},
-            onNavigateToSignIn = {}
-        )
-    }
-}

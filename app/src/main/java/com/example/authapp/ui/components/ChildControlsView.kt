@@ -213,52 +213,27 @@ fun ChildControlsView(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Flashlight Button
-                            FilledTonalButton(
-                                onClick = onToggleTorch,
-                                modifier = Modifier.weight(1f),
-                                colors = if (isTorchActive) {
-                                    ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFFFB300), contentColor = Color.Black)
-                                } else {
-                                    ButtonDefaults.filledTonalButtonColors()
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isTorchActive) Icons.Default.FlashlightOn else Icons.Default.FlashlightOff,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isTorchActive) "Torch ON" else "Torch OFF",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-
-                            // Emergency Siren Button
-                            FilledTonalButton(
-                                onClick = onToggleSiren,
-                                modifier = Modifier.weight(1f),
-                                colors = if (isSirenActive) {
-                                    ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = Color.White)
-                                } else {
-                                    ButtonDefaults.filledTonalButtonColors()
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isSirenActive) Icons.Default.VolumeUp else Icons.Default.Emergency,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isSirenActive) "Stop Siren" else "Play Siren",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
+                            listOf(
+                                Triple(isTorchActive, onToggleTorch, (if (isTorchActive) Icons.Default.FlashlightOn else Icons.Default.FlashlightOff) to (if (isTorchActive) "Torch ON" else "Torch OFF")),
+                                Triple(isSirenActive, onToggleSiren, (if (isSirenActive) Icons.Default.VolumeUp else Icons.Default.Emergency) to (if (isSirenActive) "Stop Siren" else "Play Siren"))
+                            ).forEach { (isActive, onClick, iconLabel) ->
+                                val (icon, label) = iconLabel
+                                val isSiren = label.contains("Siren")
+                                val colors = if (isActive) {
+                                    if (isSiren) ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = Color.White)
+                                    else ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFFFB300), contentColor = Color.Black)
+                                } else ButtonDefaults.filledTonalButtonColors()
+                                FilledTonalButton(
+                                    onClick = onClick,
+                                    modifier = Modifier.weight(1f),
+                                    colors = colors,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                ) {
+                                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                                }
                             }
                         }
                     }

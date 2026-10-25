@@ -973,36 +973,6 @@ object FirebaseRepository {
     fun listenToSnapshots(childId: String, onSnapshots: (List<SnapshotInfo>) -> Unit): ValueEventListener =
         listenToChildNodeList("snapshots", childId, limit = 50, transform = { it.sortedByDescending { s -> s.timestamp } }, onData = onSnapshots)
 
-    // --- Reactive Clean Architecture Flow Extensions (Best Practice) ---
-    fun listenToChildUsersFlow(): Flow<List<User>> = callbackFlow {
-        val listener = listenToChildUsers { trySend(it) }
-        awaitClose { removeValueListener("users", listener) }
-    }
-
-    fun listenToDeviceHealthFlow(childId: String): Flow<DeviceHealth?> = callbackFlow {
-        val listener = listenToDeviceHealth(childId) { trySend(it) }
-        awaitClose { removeValueListener("device_health/$childId", listener) }
-    }
-
-    fun listenToSecurityAlertsFlow(childId: String): Flow<List<SecurityAlert>> = callbackFlow {
-        val listener = listenToSecurityAlerts(childId) { trySend(it) }
-        awaitClose { removeValueListener("alerts/$childId", listener) }
-    }
-
-    fun listenToCallLogsFlow(childId: String): Flow<List<CallLogItem>> = callbackFlow {
-        val listener = listenToCallLogs(childId) { trySend(it) }
-        awaitClose { removeValueListener("call_logs/$childId", listener) }
-    }
-
-    fun listenToNotificationsFlow(childId: String): Flow<List<NotificationItem>> = callbackFlow {
-        val listener = listenToNotifications(childId) { trySend(it) }
-        awaitClose { removeValueListener("notifications/$childId", listener) }
-    }
-
-    fun listenToRecordingSchedulesFlow(childId: String): Flow<List<RecordingSchedule>> = callbackFlow {
-        val listener = listenToRecordingSchedules(childId) { trySend(it) }
-        awaitClose { removeValueListener("schedules/$childId", listener) }
-    }
 
     // --- Parental Controls & App Usage Tracking (Cloud Firestore - eliminates RTDB bloat) ---
     fun syncAppUsage(childId: String, appUsageList: List<AppUsageInfo>) {
@@ -1678,36 +1648,6 @@ object FirebaseRepository {
     fun listenToClipboardLogs(childId: String, onLogs: (List<ClipboardLogItem>) -> Unit): ValueEventListener =
         listenToChildNodeList(FirebasePaths.CLIPBOARD_LOGS, childId, limit = 100, transform = { it.sortedByDescending { c -> c.timestamp } }, onLogs)
 
-    // --- Firebase Remote Config Feature Flags ---
-    fun fetchRemoteConfig(onConfigFetched: (Map<String, Boolean>) -> Unit = {}) {
-        try {
-            val remoteConfig = com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
-            val configSettings = com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings.Builder()
-                .setMinimumFetchIntervalInSeconds(3600)
-                .build()
-            remoteConfig.setConfigSettingsAsync(configSettings)
-            remoteConfig.setDefaultsAsync(
-                mapOf(
-                    "enable_whatsapp_monitoring" to true,
-                    "enable_sms_commands" to true,
-                    "enable_live_video" to true,
-                    "enable_offline_gps_cache" to true
-                )
-            )
-            remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
-                val config = mapOf(
-                    "enable_whatsapp_monitoring" to remoteConfig.getBoolean("enable_whatsapp_monitoring"),
-                    "enable_sms_commands" to remoteConfig.getBoolean("enable_sms_commands"),
-                    "enable_live_video" to remoteConfig.getBoolean("enable_live_video"),
-                    "enable_offline_gps_cache" to remoteConfig.getBoolean("enable_offline_gps_cache")
-                )
-                onConfigFetched(config)
-            }
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
-            onConfigFetched(emptyMap())
-        }
-    }
 
     // --- OTA App Update Management ---
     fun publishAppUpdate(

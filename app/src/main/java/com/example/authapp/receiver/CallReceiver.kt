@@ -33,16 +33,6 @@ class CallReceiver : BroadcastReceiver() {
             }
             return callRecorder ?: error("CallRecorder initialization failed")
         }
-
-        @JvmStatic
-        fun resetStateForTesting() {
-            callRecorder = null
-            lastState = TelephonyManager.EXTRA_STATE_IDLE
-            incomingNumber = ""
-            isIncoming = false
-            callStartTime = 0L
-            lastLoggedSystemCallId = ""
-        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {

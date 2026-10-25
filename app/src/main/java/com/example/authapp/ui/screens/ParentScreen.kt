@@ -689,56 +689,51 @@ fun ParentScreen(
                 }
             } else if (uiState.selectedTab == 1) {
                 val selectedChild = uiState.selectedChildForControls ?: uiState.childUsers.firstOrNull()
-                val activeUsage = if (selectedChild != null) uiState.appUsageMap[selectedChild.uid] ?: emptyList() else emptyList()
-                val activeSettings = if (selectedChild != null) uiState.parentControlsMap[selectedChild.uid] else null
-
+                val targetChildId = selectedChild?.uid ?: ""
                 ChildControlsView(
                     childUsers = uiState.childUsers,
                     selectedChild = selectedChild,
-                    onSelectChild = { viewModel.setSelectedChildForControls(it) },
-                    appUsageList = activeUsage,
-                    parentControls = activeSettings,
-                    isTorchActive = if (selectedChild != null) uiState.isTorchActiveMap[selectedChild.uid] == true else false,
-                    isSirenActive = if (selectedChild != null) uiState.isSirenActiveMap[selectedChild.uid] == true else false,
+                    onSelectChild = viewModel::setSelectedChildForControls,
+                    appUsageList = uiState.appUsageMap[targetChildId] ?: emptyList(),
+                    parentControls = uiState.parentControlsMap[targetChildId],
+                    isTorchActive = uiState.isTorchActiveMap[targetChildId] == true,
+                    isSirenActive = uiState.isSirenActiveMap[targetChildId] == true,
                     onToggleTorch = {
-                        if (selectedChild != null) {
-                            val cur = uiState.isTorchActiveMap[selectedChild.uid] == true
-                            viewModel.toggleTorch(selectedChild.uid, cur)
+                        if (targetChildId.isNotEmpty()) {
+                            val cur = uiState.isTorchActiveMap[targetChildId] == true
+                            viewModel.toggleTorch(targetChildId, cur)
                             context.toast(if (!cur) "Turning Torch ON..." else "Turning Torch OFF...")
                         }
                     },
                     onToggleSiren = {
-                        if (selectedChild != null) {
-                            val cur = uiState.isSirenActiveMap[selectedChild.uid] == true
-                            viewModel.triggerSiren(selectedChild.uid, cur)
+                        if (targetChildId.isNotEmpty()) {
+                            val cur = uiState.isSirenActiveMap[targetChildId] == true
+                            viewModel.triggerSiren(targetChildId, cur)
                             context.toast(if (!cur) "Triggering Emergency Siren..." else "Stopping Siren...")
                         }
                     },
                     onToggleAppBlock = { pkg, isBlocked ->
-                        if (selectedChild != null) {
-                            viewModel.toggleAppBlock(selectedChild.uid, pkg, isBlocked)
-                            val action = if (isBlocked) "Unlocked" else "Locked"
-                            context.toast("App $action successfully")
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.toggleAppBlock(targetChildId, pkg, isBlocked)
+                            context.toast("App ${if (isBlocked) "Unlocked" else "Locked"} successfully")
                         }
                     },
                     onToggleStudyMode = { isActive, durationMins ->
-                        if (selectedChild != null) {
-                            viewModel.toggleStudyMode(selectedChild.uid, isActive, durationMins)
-                            val stateText = if (isActive) "Deactivated" else "Activated"
-                            context.toast("Study Mode $stateText")
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.toggleStudyMode(targetChildId, isActive, durationMins)
+                            context.toast("Study Mode ${if (isActive) "Deactivated" else "Activated"}")
                         }
                     },
                     onLaunchApp = { pkg ->
-                        if (selectedChild != null) {
-                            viewModel.launchRemoteApp(selectedChild.uid, pkg)
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.launchRemoteApp(targetChildId, pkg)
                             context.toast("Opening app on child device...")
                         }
                     },
                     onCloseApp = { pkg ->
-                        if (selectedChild != null) {
-                            viewModel.closeRemoteApp(selectedChild.uid, pkg)
-                            val msg = if (pkg.isEmpty()) "Returning child device to Home..." else "Closing app on child device..."
-                            context.toast(msg)
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.closeRemoteApp(targetChildId, pkg)
+                            context.toast(if (pkg.isEmpty()) "Returning child device to Home..." else "Closing app on child device...")
                         }
                     },
                     modifier = Modifier.fillMaxSize()

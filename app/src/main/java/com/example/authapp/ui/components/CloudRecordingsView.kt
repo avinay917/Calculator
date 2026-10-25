@@ -109,50 +109,26 @@ fun CloudRecordingsView(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Filter Chips Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(
-                selected = currentFilter == "ALL",
-                onClick = { onFilterChange("ALL") },
-                label = { Text("All (${recordings.size})", style = MaterialTheme.typography.labelSmall) }
-            )
-            val callCount = recordings.count { it.streamType.equals("call", ignoreCase = true) }
-            FilterChip(
-                selected = currentFilter == "CALL",
-                onClick = { onFilterChange("CALL") },
-                label = { Text("Calls ($callCount)", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
-            val schedCount = recordings.count {
-                it.streamType.equals("scheduled", ignoreCase = true) || it.localFilePath.contains("scheduled", ignoreCase = true)
+            val callCount = remember(recordings) { recordings.count { it.streamType.equals("call", ignoreCase = true) } }
+            val schedCount = remember(recordings) { recordings.count { it.streamType.equals("scheduled", ignoreCase = true) || it.localFilePath.contains("scheduled", ignoreCase = true) } }
+            val liveCount = remember(recordings) { recordings.count { !it.streamType.equals("call", ignoreCase = true) && !it.streamType.equals("scheduled", ignoreCase = true) && !it.localFilePath.contains("scheduled", ignoreCase = true) && !it.streamType.contains("photo", ignoreCase = true) } }
+            listOf(
+                Triple("ALL", "All (${recordings.size})", null),
+                Triple("CALL", "Calls ($callCount)", Icons.Default.Call),
+                Triple("SCHEDULED", "Scheduled ($schedCount)", Icons.Default.Schedule),
+                Triple("LIVE", "Live ($liveCount)", Icons.Default.FiberManualRecord)
+            ).forEach { (key, label, icon) ->
+                FilterChip(
+                    selected = currentFilter == key,
+                    onClick = { onFilterChange(key) },
+                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = icon?.let { { Icon(it, contentDescription = null, modifier = Modifier.size(14.dp), tint = if (key == "LIVE") Color.Red else MaterialTheme.colorScheme.primary) } }
+                )
             }
-            FilterChip(
-                selected = currentFilter == "SCHEDULED",
-                onClick = { onFilterChange("SCHEDULED") },
-                label = { Text("Scheduled ($schedCount)", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-            )
-            val liveCount = recordings.count {
-                !it.streamType.equals("call", ignoreCase = true) &&
-                    !it.streamType.equals("scheduled", ignoreCase = true) &&
-                    !it.localFilePath.contains("scheduled", ignoreCase = true) &&
-                    !it.streamType.contains("photo", ignoreCase = true)
-            }
-            FilterChip(
-                selected = currentFilter == "LIVE",
-                onClick = { onFilterChange("LIVE") },
-                label = { Text("Live ($liveCount)", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.FiberManualRecord, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Red)
-                }
-            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))

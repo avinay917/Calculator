@@ -333,6 +333,29 @@ fun ChildScreen(
         val allSpecialGranted = hasOverlayPermission && isBatteryOptimizationIgnored && hasNotificationListenerPermission && hasExactAlarmPermission && hasUsageAccessPermission && hasAccessibilityPermission
         val allCoreGranted = hasStage1Permissions && hasCallPermissions
 
+        @Composable
+        fun RenderSpecialPermissions() {
+            SpecialPermissionsCard(
+                hasNotificationListener = hasNotificationListenerPermission,
+                hasAccessibility = hasAccessibilityPermission,
+                hasOverlay = hasOverlayPermission,
+                hasUsageAccess = hasUsageAccessPermission,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                hasExactAlarm = hasExactAlarmPermission,
+                onOpenNotificationListener = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) {} },
+                onOpenAccessibility = { try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {} },
+                onOpenOverlay = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) try { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) {} },
+                onOpenUsageAccess = { try { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) {} },
+                onOpenBatteryOptimization = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try { context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))) }
+                        catch (_: Exception) { try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {} }
+                    }
+                },
+                onOpenExactAlarm = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) try { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) {} }
+            )
+        }
+
         if (linkedParentId.isEmpty()) {
             // STATE A: NOT LINKED YET - Focus on Pairing & Setup
             Card(
@@ -484,49 +507,7 @@ fun ChildScreen(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            SpecialPermissionsCard(
-                hasNotificationListener = hasNotificationListenerPermission,
-                hasAccessibility = hasAccessibilityPermission,
-                hasOverlay = hasOverlayPermission,
-                hasUsageAccess = hasUsageAccessPermission,
-                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                hasExactAlarm = hasExactAlarmPermission,
-                onOpenNotificationListener = {
-                    try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenAccessibility = {
-                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenOverlay = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-                },
-                onOpenUsageAccess = {
-                    try { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenBatteryOptimization = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
-                        }
-                    }
-                },
-                onOpenExactAlarm = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-                }
-            )
+            RenderSpecialPermissions()
             Spacer(modifier = Modifier.height(14.dp))
         } else {
             // STATE B: LINKED & PROTECTED - Clean Minimal Dashboard (Only 2 Cards!)
@@ -577,49 +558,7 @@ fun ChildScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // Card: Live System Permissions Status (Always accessible in Linked state too)
-            SpecialPermissionsCard(
-                hasNotificationListener = hasNotificationListenerPermission,
-                hasAccessibility = hasAccessibilityPermission,
-                hasOverlay = hasOverlayPermission,
-                hasUsageAccess = hasUsageAccessPermission,
-                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                hasExactAlarm = hasExactAlarmPermission,
-                onOpenNotificationListener = {
-                    try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenAccessibility = {
-                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenOverlay = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-                },
-                onOpenUsageAccess = {
-                    try { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) {}
-                },
-                onOpenBatteryOptimization = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
-                        }
-                    }
-                },
-                onOpenExactAlarm = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-                }
-            )
+            RenderSpecialPermissions()
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -866,14 +805,6 @@ fun ChildScreen(
                 }
             )
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ChildScreenPreview() {
-    AuthAppTheme {
-        ChildScreen(email = "child@example.com", onSignOut = {})
     }
 }
 
