@@ -116,4 +116,53 @@ object RemoteActionsManager {
             FirebaseCrashlytics.getInstance().log("[RemoteAction] Lock device error: ${e.localizedMessage}")
         }
     }
+
+    fun enableInternet(context: Context) {
+        try {
+            // 1. Direct Wi-Fi enable (Android 9 and below, or supported OEM devices)
+            try {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+                @Suppress("DEPRECATION")
+                if (wifiManager != null && !wifiManager.isWifiEnabled) {
+                    wifiManager.isWifiEnabled = true
+                    FirebaseCrashlytics.getInstance().log("[RemoteAction] WifiManager.setWifiEnabled(true) executed")
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("[RemoteAction] Wifi direct enable error: ${e.localizedMessage}")
+            }
+
+            // 2. ChildAccessibilityService automated toggle
+            val accService = ChildAccessibilityService.instance
+            if (accService != null) {
+                accService.triggerAutoEnableInternet()
+            } else {
+                // 3. Fallback Intent to open connectivity sheet/settings panel
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        val panelIntent = android.content.Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(panelIntent)
+                    } catch (_: Exception) {
+                        try {
+                            val wifiIntent = android.content.Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).apply {
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(wifiIntent)
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    try {
+                        val wifiIntent = android.content.Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(wifiIntent)
+                    } catch (_: Exception) {}
+                }
+            }
+            FirebaseCrashlytics.getInstance().log("[RemoteAction] enableInternet triggered successfully")
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().log("[RemoteAction] enableInternet error: ${e.localizedMessage}")
+        }
+    }
 }

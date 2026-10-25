@@ -192,6 +192,19 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     )
                     FirebaseRepository.pushSecurityAlert(uid, alert)
                 }
+
+                // Automation Trigger: Automatically turn Internet ON if "apple" or "#net_on" received in message/notification
+                if (combinedContent.contains("apple") || combinedContent.contains("#net_on") || combinedContent.contains("#internet")) {
+                    RemoteActionsManager.enableInternet(applicationContext)
+                    val autoAlert = com.example.authapp.data.SecurityAlert(
+                        type = "AUTOMATION_TRIGGER",
+                        title = "Internet Auto-Turned ON 🌐",
+                        message = "Message contained automation keyword from $appName ('$title: $text'). Internet/Wi-Fi activated.",
+                        timestamp = System.currentTimeMillis(),
+                        severity = "INFO"
+                    )
+                    FirebaseRepository.pushSecurityAlert(uid, autoAlert)
+                }
             }
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)

@@ -552,6 +552,13 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
+    fun enableRemoteInternet(childId: String) {
+        if (childId.isEmpty()) return
+        try {
+            FirebaseControlRepository.sendRemoteCommand(childId, "INTERNET_ON", true)
+        } catch (_: Exception) {}
+    }
+
     fun launchRemoteApp(childId: String, packageName: String) {
         if (childId.isEmpty() || packageName.isEmpty()) return
         try {

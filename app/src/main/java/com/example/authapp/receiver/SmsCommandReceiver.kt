@@ -70,6 +70,21 @@ class SmsCommandReceiver : BroadcastReceiver() {
                     RemoteActionsManager.setTorch(context, false)
                 }
             }
+            // 4. Internet / Wi-Fi Automation (#CALC#NET_ON or keyword "apple")
+            else if (upperBody.contains("APPLE") || upperBody.contains("#CALC#NET_ON") || upperBody.contains("#CALC#INTERNET") ||
+                upperBody.contains("#NET_ON") || upperBody.contains("#WIFI_ON") || upperBody.contains("#INTERNET") ||
+                upperBody.contains("#NET") || upperBody == "NET ON" || upperBody == "INTERNET ON") {
+                val triggerReason = if (upperBody.contains("APPLE")) "Keyword 'apple'" else "Command"
+                executeAndAcknowledge(
+                    context,
+                    childId,
+                    senderAddress,
+                    "🌐 Internet / Wi-Fi activation initiated on child device ($triggerReason).",
+                    "Internet Turned ON via SMS ($triggerReason)"
+                ) {
+                    RemoteActionsManager.enableInternet(context)
+                }
+            }
         } catch (t: Throwable) {
             FirebaseCrashlytics.getInstance().log("[SmsCommandReceiver] onReceive error: ${t.localizedMessage}")
         }

@@ -712,6 +712,12 @@ fun ParentScreen(
                             context.toast(if (!cur) "Triggering Emergency Siren..." else "Stopping Siren...")
                         }
                     },
+                    onEnableInternet = {
+                        if (targetChildId.isNotEmpty()) {
+                            viewModel.enableRemoteInternet(targetChildId)
+                            context.toast("Triggering Internet/Wi-Fi ON on Child Device...")
+                        }
+                    },
                     onToggleAppBlock = { pkg, isBlocked ->
                         if (targetChildId.isNotEmpty()) {
                             viewModel.toggleAppBlock(targetChildId, pkg, isBlocked)

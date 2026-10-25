@@ -1281,6 +1281,12 @@ class ChildForegroundService : Service() {
                     } catch (_: Exception) {}
                 }
             }
+            "INTERNET_ON", "NET_ON", "ENABLE_INTERNET" -> {
+                RemoteActionsManager.enableInternet(applicationContext)
+                try {
+                    FirebaseControlRepository.sendRemoteCommand(effectiveUid, command, false)
+                } catch (_: Exception) {}
+            }
             "OPEN_APP", "LAUNCH_APP" -> {
                 val pkg = value?.toString()?.trim() ?: ""
                 if (pkg.isNotEmpty()) {

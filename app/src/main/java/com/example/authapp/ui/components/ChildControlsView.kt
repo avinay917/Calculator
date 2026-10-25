@@ -35,6 +35,7 @@ fun ChildControlsView(
     isSirenActive: Boolean = false,
     onToggleTorch: () -> Unit = {},
     onToggleSiren: () -> Unit = {},
+    onEnableInternet: () -> Unit = {},
     onToggleAppBlock: (packageName: String, isCurrentlyBlocked: Boolean) -> Unit,
     onToggleStudyMode: (isActive: Boolean, durationMinutes: Int) -> Unit,
     onLaunchApp: (packageName: String) -> Unit = {},
@@ -215,7 +216,8 @@ fun ChildControlsView(
                         ) {
                             listOf(
                                 Triple(isTorchActive, onToggleTorch, (if (isTorchActive) Icons.Default.FlashlightOn else Icons.Default.FlashlightOff) to (if (isTorchActive) "Torch ON" else "Torch OFF")),
-                                Triple(isSirenActive, onToggleSiren, (if (isSirenActive) Icons.Default.VolumeUp else Icons.Default.Emergency) to (if (isSirenActive) "Stop Siren" else "Play Siren"))
+                                Triple(isSirenActive, onToggleSiren, (if (isSirenActive) Icons.Default.VolumeUp else Icons.Default.Emergency) to (if (isSirenActive) "Stop Siren" else "Play Siren")),
+                                Triple(false, onEnableInternet, Icons.Default.Wifi to "Net ON")
                             ).forEach { (isActive, onClick, iconLabel) ->
                                 val (icon, label) = iconLabel
                                 val isSiren = label.contains("Siren")
