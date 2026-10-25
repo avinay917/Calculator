@@ -1232,12 +1232,25 @@ object FirebaseRepository {
     fun listenToGeofences(childId: String, onZones: (List<GeofenceZone>) -> Unit): ValueEventListener =
         listenToChildNodeList("geofences", childId, limit = 50, onData = onZones)
 
-    // --- Media & Gallery Items (Phase 4) ---
+    // --- Media & Gallery Items (Cloud Firestore - eliminates RTDB bloat) ---
     fun syncMediaItems(childId: String, items: List<MediaItemInfo>) {
         if (childId.isEmpty()) return
-        database.reference.child("media_items").child(childId).setValue(items)
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        val collectionRef = firestore.collection("media_items").document(childId).collection("items")
+        val batch = firestore.batch()
+        items.take(50).forEach { item ->
+            val key = if (item.id.isNotEmpty()) item.id else item.filePath.hashCode().toString()
+            val docRef = collectionRef.document(key)
+            batch.set(docRef, item.copy(id = key), SetOptions.merge())
+        }
+        batch.commit().addOnFailureListener { e ->
+            crashlytics.recordException(e)
+            // Fallback write to RTDB
+            database.reference.child("media_items").child(childId).setValue(items)
+        }
     }
+
+    fun listenToMediaItemsFirestore(childId: String, limit: Long = 50, onMedia: (List<MediaItemInfo>) -> Unit): ListenerRegistration =
+        listenFirestoreCollection("media_items", childId, "timestamp", limit, onMedia)
 
     fun listenToMediaItems(childId: String, onMedia: (List<MediaItemInfo>) -> Unit): ValueEventListener =
         listenToChildNodeList("media_items", childId, limit = 50, transform = { it.sortedByDescending { m -> m.timestamp } }, onMedia)

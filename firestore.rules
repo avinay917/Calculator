@@ -108,6 +108,11 @@ service cloud.firestore {
       allow write: if isOwner(childId);
     }
 
+    match /media_items/{childId}/items/{docId} {
+      allow read: if isParentOfChild(childId);
+      allow write: if isOwner(childId);
+    }
+
     // Fallback: deny all other access
     match /{document=**} {
       allow read, write: if false;
