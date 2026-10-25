@@ -22,8 +22,8 @@ android {
     }
 
     lint {
-        abortOnError = true
-        checkReleaseBuilds = true
+        abortOnError = false
+        checkReleaseBuilds = false
         disable += setOf("UnusedResources", "MissingTranslation")
     }
 
@@ -54,11 +54,6 @@ android {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
-    }
-
-    lint {
-      abortOnError = false
-      checkReleaseBuilds = false
     }
 }
 
