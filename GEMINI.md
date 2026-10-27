@@ -118,9 +118,18 @@
 
 ---
 
-## 8. FIREBASE EVOLUTION & PROACTIVE SUGGESTIONS PROTOCOL
-1. **PROACTIVE FIREBASE SUGGESTIONS**: In explanations, provide practical, step-by-step suggestions on how to improve Firebase integration (e.g., Remote Config feature flags, Database Indexing rules, Security Rules hardening, FCM topic broadcasts, Storage rules).
-2. **STAGGERED & SAFE ROLLOUTS**: Recommend OTA updates via `/app_update` with `isForceUpdate: false` by default so existing users can update smoothly without disruption.
+## 8. MANDATORY FIREBASE COST OPTIMIZATION & PROACTIVE SUGGESTIONS PROTOCOL
+1. **ZERO-WASTE EGRESS & REGIONAL COLLOCATION**:
+   - Always collocate Cloud Functions in the same region as the database (`functions.region("asia-southeast1")`) to eliminate Google Cloud cross-region network egress bills.
+   - All Realtime Database listeners (Web & Android) MUST enforce `.limitToLast(25)` or `.limitToLast(50)`. NEVER attach unbounded listeners on logs or message collections.
+   - Always detach listeners in Android ViewModel `onCleared()`, dialog dismissal, and web `useEffect()` cleanups. Pause listeners when browser tab is hidden.
+2. **STORAGE FREE-TIER RETENTION & COMPRESSION**:
+   - Enforce 7-day retention cleanup for audio/snapshot files to stay strictly under the 5GB Firebase free tier.
+   - Compress images (JPEG quality 75%) and audio (AMR-WB / AAC voice bitrate) before storage upload.
+3. **PROACTIVE FIREBASE SUGGESTIONS**:
+   - In every response, actively analyze and suggest Firebase cost-reduction steps, indexing rules (`.indexOn`), and security rule hardening.
+4. **STAGGERED & SAFE ROLLOUTS**:
+   - Recommend OTA updates via `/app_update` with `isForceUpdate: false` by default so existing users can update smoothly without disruption.
 
 ---
 
