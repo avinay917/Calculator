@@ -18,14 +18,15 @@ object WebRtcBroadcasterVideoHelper {
         appContext: Context,
         eglBaseContext: EglBase.Context,
         factory: PeerConnectionFactory?,
-        cameraEventsHandler: CameraVideoCapturer.CameraEventsHandler
+        cameraEventsHandler: CameraVideoCapturer.CameraEventsHandler,
+        preferFront: Boolean = false
     ): CameraCaptureResult? {
         var capturer: VideoCapturer? = null
         for (attempt in 1..3) {
-            capturer = WebRtcCameraHelper.createVideoCapturer(appContext, preferFront = true, cameraEventsHandler)
-                ?: WebRtcCameraHelper.createVideoCapturer(appContext, preferFront = false, cameraEventsHandler)
+            capturer = WebRtcCameraHelper.createVideoCapturer(appContext, preferFront = preferFront, cameraEventsHandler)
+                ?: WebRtcCameraHelper.createVideoCapturer(appContext, preferFront = !preferFront, cameraEventsHandler)
             if (capturer != null) break
-            try { Thread.sleep(250L) } catch (_: InterruptedException) {}
+            try { Thread.sleep(150L) } catch (_: InterruptedException) {}
         }
         if (capturer == null) {
             AppHealthTelemetry.logDiagnostic(appContext, "LIVE_VIDEO", "FAILED", "No camera capturer could be created")

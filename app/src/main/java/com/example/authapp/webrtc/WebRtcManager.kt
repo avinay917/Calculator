@@ -63,7 +63,8 @@ class WebRtcManager(
         onIceCandidate: (IceCandidate) -> Unit,
         onSdpCreated: (SessionDescription) -> Unit,
         onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {},
-        mediaProjectionData: android.content.Intent? = null
+        mediaProjectionData: android.content.Intent? = null,
+        preferFront: Boolean = false
     ) {
         val result = WebRtcBroadcasterSession.startStream(
             appContext = appContext,
@@ -76,6 +77,7 @@ class WebRtcManager(
             onSdpCreated = onSdpCreated,
             onRemoteTrackAdded = onRemoteTrackAdded,
             mediaProjectionData = mediaProjectionData,
+            preferFront = preferFront,
             isStoppedChecker = { isStopped }
         ) ?: return
 

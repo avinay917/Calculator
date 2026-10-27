@@ -32,6 +32,7 @@ object WebRtcBroadcasterSession {
         onSdpCreated: (SessionDescription) -> Unit,
         onRemoteTrackAdded: (MediaStreamTrack) -> Unit = {},
         mediaProjectionData: Intent? = null,
+        preferFront: Boolean = false,
         isStoppedChecker: () -> Boolean
     ): BroadcasterStreamResult? {
         if (isStoppedChecker() || factory == null) return null
@@ -107,7 +108,7 @@ object WebRtcBroadcasterSession {
                 override fun onFirstFrameAvailable() {}
                 override fun onCameraClosed() {}
             }
-            val res = WebRtcBroadcasterVideoHelper.startCameraCapture(appContext, eglBaseContext, factory, cameraEventsHandler)
+            val res = WebRtcBroadcasterVideoHelper.startCameraCapture(appContext, eglBaseContext, factory, cameraEventsHandler, preferFront = preferFront)
             if (res != null) {
                 videoCapturer = res.capturer
                 surfaceTextureHelper = res.surfaceTextureHelper

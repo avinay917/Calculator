@@ -165,7 +165,8 @@ class ChildStreamRequestListener(
                         }
                         context.startActivity(promptIntent)
                     } else {
-                        if (streamType.equals("video", ignoreCase = true)) {
+                        val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
+                        if (isVideo) {
                             overlayManager.ensureOverlayWindow()
                         }
                         try {

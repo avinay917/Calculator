@@ -160,11 +160,12 @@ class ChildForegroundService : Service() {
                 }
                 scheduledStopRunnable?.let { mainHandler.postDelayed(it, maxMinutes * 60 * 1000L) }
 
-                if (streamType.equals("video", ignoreCase = true)) {
+                val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
+                if (isVideo) {
                     overlayManager.ensureOverlayWindow()
                 }
                 val serviceType = notificationHelper.getStreamingServiceType(streamType)
-                val st = if (streamType.equals("video", ignoreCase = true)) "STREAMING_VIDEO" else "STREAMING_AUDIO"
+                val st = if (isVideo) "STREAMING_VIDEO" else "STREAMING_AUDIO"
                 setServiceState(st, "Active Remote Stream ($streamType)", serviceType)
 
                 if (streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)) {

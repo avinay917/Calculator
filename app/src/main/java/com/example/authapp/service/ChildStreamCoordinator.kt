@@ -116,7 +116,8 @@ class ChildStreamCoordinator(private val context: Context) {
             }
         }
 
-        if (streamType.equals("video", ignoreCase = true)) {
+        val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
+        if (isVideo) {
             onEnsureOverlay()
         }
 
@@ -134,10 +135,14 @@ class ChildStreamCoordinator(private val context: Context) {
             FirebaseRepository.fetchIceServers { iceServers ->
                 FirebaseCrashlytics.getInstance().log("[ChildService] Starting WebRTC stream ($streamType) with ${iceServers.size} ICE servers for session: $sessionId")
 
+                // Start directly with Rear camera (preferFront = false) matching Parent and Web portal defaults
+                // This eliminates the camera open -> stop -> restart flicker!
+                val preferFrontInitial = false
                 webRtcManager?.startStream(
                     streamType = streamType,
                     iceServers = iceServers,
                     mediaProjectionData = projectionData,
+                    preferFront = preferFrontInitial,
                     onIceCandidate = { candidate ->
                         candidateBatcher?.addCandidate(candidate)
                     },
@@ -162,9 +167,19 @@ class ChildStreamCoordinator(private val context: Context) {
                     webRtcManager?.addRemoteCandidate(sdpMid, sdpMLineIndex, sdp)
                 }
 
+                var currentFacing = if (preferFrontInitial) "front" else "rear"
                 cameraFacingListener = FirebaseRepository.listenToCameraFacingMode(sessionId) { facingMode ->
-                    FirebaseCrashlytics.getInstance().log("[ChildService] Camera switch requested: mode=$facingMode")
-                    webRtcManager?.switchCameraMode(facingMode)
+                    val normalized = when (facingMode.lowercase()) {
+                        "front" -> "front"
+                        "ultrawide", "ultra_wide", "wide", "0.5x" -> "ultrawide"
+                        else -> "rear"
+                    }
+                    // Only invoke camera hardware switch if parent actually requested a DIFFERENT mode
+                    if (normalized != currentFacing) {
+                        currentFacing = normalized
+                        FirebaseCrashlytics.getInstance().log("[ChildService] Camera switch requested: $facingMode")
+                        webRtcManager?.switchCameraMode(normalized)
+                    }
                 }
             }
         } catch (t: Throwable) {

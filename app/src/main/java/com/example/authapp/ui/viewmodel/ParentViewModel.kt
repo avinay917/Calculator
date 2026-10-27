@@ -36,7 +36,7 @@ class ParentViewModel : ViewModel() {
 
     // --- Stream & WebRTC Controls ---
     fun startStream(child: User, streamType: String) {
-        val typeNormalized = if (streamType.equals("video", ignoreCase = true)) "Video" else "Audio"
+        val typeNormalized = if (streamType.contains("video", ignoreCase = true)) "Video" else "Audio"
         try {
             FirebaseRepository.requestStream(
                 childId = child.uid,
@@ -49,7 +49,7 @@ class ParentViewModel : ViewModel() {
                             activeChildId = child.uid,
                             activeChildName = child.name.ifEmpty { "Child Device" },
                             streamStatusText = "Connecting to child device...",
-                            isFrontCamera = true
+                            isFrontCamera = false
                         )
                     }
                 },
