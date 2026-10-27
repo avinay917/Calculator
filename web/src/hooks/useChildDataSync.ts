@@ -62,7 +62,10 @@ export function useChildDataSync(
         setActiveChildId("");
       }
     });
-    return () => off(usersQuery, "value", unsub);
+
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
   }, [user]);
 
   // 2. Listen to Active Child's Realtime Telemetry
@@ -194,24 +197,24 @@ export function useChildDataSync(
     });
 
     return () => {
-      off(ref(rtdb, `whatsapp_logs/${activeChildId}`), "value", unsubWa);
-      off(ref(rtdb, `call_logs/${activeChildId}`), "value", unsubCall);
-      off(ref(rtdb, `sms_logs/${activeChildId}`), "value", unsubSms);
-      off(ref(rtdb, `web_history/${activeChildId}`), "value", unsubWeb);
-      off(ref(rtdb, `package_events/${activeChildId}`), "value", unsubPkg);
-      off(simRef, "value", unsubSim);
-      off(clipQuery, "value", unsubClip);
-      off(recQuery, "value", unsubRec);
-      off(locRef, "value", unsubLoc);
-      off(snapQuery, "value", unsubSnap);
-      off(snapReqRef, "value", unsubSnapReq);
-      off(torchRef, "value", unsubTorch);
-      off(sirenRef, "value", unsubSiren);
-      off(filesQuery, "value", unsubFiles);
-      off(schedRef, "value", unsubSched);
-      off(appsRef, "value", unsubApps);
-      off(controlsRef, "value", unsubControls);
-      off(alertsQuery, "value", unsubAlerts);
+      if (typeof unsubWa === "function") unsubWa();
+      if (typeof unsubCall === "function") unsubCall();
+      if (typeof unsubSms === "function") unsubSms();
+      if (typeof unsubWeb === "function") unsubWeb();
+      if (typeof unsubPkg === "function") unsubPkg();
+      if (typeof unsubSim === "function") unsubSim();
+      if (typeof unsubClip === "function") unsubClip();
+      if (typeof unsubRec === "function") unsubRec();
+      if (typeof unsubLoc === "function") unsubLoc();
+      if (typeof unsubSnap === "function") unsubSnap();
+      if (typeof unsubSnapReq === "function") unsubSnapReq();
+      if (typeof unsubTorch === "function") unsubTorch();
+      if (typeof unsubSiren === "function") unsubSiren();
+      if (typeof unsubFiles === "function") unsubFiles();
+      if (typeof unsubSched === "function") unsubSched();
+      if (typeof unsubApps === "function") unsubApps();
+      if (typeof unsubControls === "function") unsubControls();
+      if (typeof unsubAlerts === "function") unsubAlerts();
     };
   }, [activeChildId]);
 

@@ -3,6 +3,7 @@ const admin = require("firebase-admin");
 
 const DB_INSTANCE = "apnasatthilko-default-rtdb";
 const DB_URL = "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatabase.app";
+const REGION = "asia-southeast1";
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -65,6 +66,7 @@ const defaultRuntime = {
  * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
  */
 exports.onStreamRequested = functions
+  .region(REGION)
   .runWith(defaultRuntime)
   .database
   .instance(DB_INSTANCE)
@@ -158,6 +160,7 @@ exports.onStreamRequested = functions
  * Triggers on /streams/{targetUid}/snapshotRequest
  */
 exports.onSnapshotRequested = functions
+  .region(REGION)
   .runWith(defaultRuntime)
   .database
   .instance(DB_INSTANCE)
@@ -196,6 +199,7 @@ exports.onSnapshotRequested = functions
  * Triggers on /commands/{targetUid}/{command}
  */
 exports.onCommandSent = functions
+  .region(REGION)
   .runWith(defaultRuntime)
   .database
   .instance(DB_INSTANCE)
@@ -255,6 +259,7 @@ exports.onCommandSent = functions
  * Sends High-Priority FCM Push Alert to the Parent phone immediately.
  */
 exports.onSecurityAlertCreated = functions
+  .region(REGION)
   .runWith(defaultRuntime)
   .database
   .instance(DB_INSTANCE)
@@ -327,6 +332,7 @@ exports.onSecurityAlertCreated = functions
  * and keeps Realtime Database pruned, fast, and 100% within free limits.
  */
 exports.cleanupOldData = functions
+  .region("us-central1")
   .runWith({ memory: "256MB", timeoutSeconds: 300, minInstances: 0 })
   .pubsub
   .schedule("0 2 * * *")
@@ -380,9 +386,9 @@ exports.cleanupOldData = functions
       console.error("Failed to remove lingering RTDB nodes:", err);
     }
 
-    // 4. Prune other RTDB history nodes older than 30 days
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-    const cutoffTime = Date.now() - THIRTY_DAYS_MS;
+    // 4. Prune other RTDB history nodes older than 7 days (protects 1GB RTDB free-tier quota)
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - SEVEN_DAYS_MS;
     const db = admin.database();
 
     const nodesToPrune = [

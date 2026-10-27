@@ -66,12 +66,17 @@ object FirebaseRepoHelpers {
         item: T
     ) {
         if (childId.isEmpty()) return
-        FirebaseFirestore.getInstance().collection(collectionName).document(childId)
-            .collection("items").document(itemKey)
-            .set(item, SetOptions.merge())
-            .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
-
+        // 1. RTDB is the primary real-time store consumed by Parent App & Web Portal
         FirebaseDatabase.getInstance().reference.child(rtdbPath).child(childId).child(itemKey).setValue(item)
             .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
+
+        // 2. Only mirror to Firestore if this collection is actually consumed by Firestore listeners (notifications, media_gallery)
+        // This eliminates 70%+ redundant billable Firestore write operations for calls, SMS, web history, and network logs
+        if (collectionName == "notifications" || collectionName == "media_gallery") {
+            FirebaseFirestore.getInstance().collection(collectionName).document(childId)
+                .collection("items").document(itemKey)
+                .set(item, SetOptions.merge())
+                .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
+        }
     }
 }
