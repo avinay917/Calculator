@@ -1,25 +1,18 @@
 package com.example.authapp.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.authapp.data.AppUsageInfo
 import com.example.authapp.data.ParentControlSettings
 import com.example.authapp.data.User
@@ -73,33 +66,24 @@ fun ChildControlsView(
 
     val activeChild = selectedChild ?: childUsers.first()
     val isStudyModeActive = parentControls?.isStudyModeActive == true
-    val totalScreenTimeMinutes = appUsageList.sumOf { it.totalTimeInForegroundMinutes }
-    val totalHours = totalScreenTimeMinutes / 60
-    val totalMins = totalScreenTimeMinutes % 60
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Child Device Selector (Chips)
         if (childUsers.size > 1) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 items(childUsers) { child ->
-                    val isSelected = child.uid == activeChild.uid
                     FilterChip(
-                        selected = isSelected,
+                        selected = child.uid == activeChild.uid,
                         onClick = { onSelectChild(child) },
                         label = { Text(child.name.ifEmpty { "Child Device" }) },
                         leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Smartphone,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -112,336 +96,34 @@ fun ChildControlsView(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // Card 1: Remote Device Freeze / Study Mode
             item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isStudyModeActive) Color(0xFFFFF3E0) else MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isStudyModeActive) Color(0xFFFF9800) else MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isStudyModeActive) Icons.Default.Lock else Icons.Default.School,
-                                    contentDescription = null,
-                                    tint = if (isStudyModeActive) Color.White else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Study Mode / Device Freeze",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Text(
-                                    text = if (isStudyModeActive) "🔒 Phone Screen Frozen for Studies" else "Freezes screen & blocks all non-essential apps",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isStudyModeActive) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = isStudyModeActive,
-                                onCheckedChange = { onToggleStudyMode(isStudyModeActive, 0) }
-                            )
-                        }
-
-                        AnimatedVisibility(visible = !isStudyModeActive) {
-                            Column(modifier = Modifier.padding(top = 12.dp)) {
-                                Text(
-                                    text = "Quick Freeze Duration:",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    listOf(15 to "15 min", 30 to "30 min", 60 to "1 hr", 120 to "2 hr").forEach { (mins, label) ->
-                                        OutlinedButton(
-                                            onClick = { onToggleStudyMode(false, mins) },
-                                            modifier = Modifier.weight(1f),
-                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Text(label, style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                ChildControlsStudyModeCard(
+                    isStudyModeActive = isStudyModeActive,
+                    onToggleStudyMode = onToggleStudyMode
+                )
             }
 
-            // Remote Hardware Controls: Flashlight & Siren (Features 5 & 6)
             item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.FlashlightOn,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Remote Hardware Controls",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            listOf(
-                                Triple(isTorchActive, onToggleTorch, (if (isTorchActive) Icons.Default.FlashlightOn else Icons.Default.FlashlightOff) to (if (isTorchActive) "Torch ON" else "Torch OFF")),
-                                Triple(isSirenActive, onToggleSiren, (if (isSirenActive) Icons.Default.VolumeUp else Icons.Default.Emergency) to (if (isSirenActive) "Stop Siren" else "Play Siren")),
-                                Triple(false, onEnableInternet, Icons.Default.Wifi to "Net ON")
-                            ).forEach { (isActive, onClick, iconLabel) ->
-                                val (icon, label) = iconLabel
-                                val isSiren = label.contains("Siren")
-                                val colors = if (isActive) {
-                                    if (isSiren) ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = Color.White)
-                                    else ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFFFB300), contentColor = Color.Black)
-                                } else ButtonDefaults.filledTonalButtonColors()
-                                FilledTonalButton(
-                                    onClick = onClick,
-                                    modifier = Modifier.weight(1f),
-                                    colors = colors,
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                                ) {
-                                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                                }
-                            }
-                        }
-                    }
-                }
+                ChildControlsHardwareCard(
+                    isTorchActive = isTorchActive,
+                    isSirenActive = isSirenActive,
+                    onToggleTorch = onToggleTorch,
+                    onToggleSiren = onToggleSiren,
+                    onEnableInternet = onEnableInternet
+                )
             }
 
-            // Card 1.5: 6-Digit Uninstall PIN Protection
             item {
-                var isEditingPin by remember { mutableStateOf(false) }
-                val currentPin = parentControls?.uninstallPin?.takeIf { it.length == 6 } ?: "123456"
-                var pinInput by remember { mutableStateOf(currentPin) }
-
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "Uninstall PIN Protection",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Text(
-                                    text = "6-digit code required to uninstall app",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        if (!isEditingPin) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Current PIN:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = currentPin,
-                                        style = MaterialTheme.typography.titleLarge.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 4.sp
-                                        ),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        pinInput = currentPin
-                                        isEditingPin = true
-                                    },
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Change PIN")
-                                }
-                            }
-                        } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = pinInput,
-                                    onValueChange = {
-                                        if (it.length <= 6 && it.all { c -> c.isDigit() }) {
-                                            pinInput = it
-                                        }
-                                    },
-                                    label = { Text("6-Digit PIN") },
-                                    singleLine = true,
-                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Button(
-                                    onClick = {
-                                        if (pinInput.length == 6) {
-                                            onSetUninstallPin(pinInput)
-                                            isEditingPin = false
-                                        }
-                                    },
-                                    enabled = pinInput.length == 6,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("Save")
-                                }
-                                TextButton(onClick = { isEditingPin = false }) {
-                                    Text("Cancel")
-                                }
-                            }
-                        }
-                    }
-                }
+                ChildControlsPinCard(
+                    parentControls = parentControls,
+                    onSetUninstallPin = onSetUninstallPin
+                )
             }
 
-            // Card 2: Today's Total Screen Time & Usage
             item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Timer,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Today's Screen Time",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = if (totalHours > 0) "${totalHours}h ${totalMins}m" else "${totalMins} mins",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        if (appUsageList.isEmpty()) {
-                            Text(
-                                text = "App usage syncs automatically when child opens apps.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            val maxUsage = appUsageList.maxOfOrNull { it.totalTimeInForegroundMinutes }?.coerceAtLeast(1L) ?: 1L
-                            appUsageList.take(5).forEach { app ->
-                                val progress = (app.totalTimeInForegroundMinutes.toFloat() / maxUsage.toFloat()).coerceIn(0f, 1f)
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = app.appName.ifEmpty { app.packageName.substringAfterLast(".") },
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        val appH = app.totalTimeInForegroundMinutes / 60
-                                        val appM = app.totalTimeInForegroundMinutes % 60
-                                        Text(
-                                            text = if (appH > 0) "${appH}h ${appM}m" else "${appM}m",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    LinearProgressIndicator(
-                                        progress = { progress },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
-                                        color = if (app.isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.surface
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                ChildControlsScreenTimeCard(appUsageList = appUsageList)
             }
 
-            // Card 3: App Lock & Blocker Management
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -449,12 +131,7 @@ fun ChildControlsView(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AppBlocking,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Default.AppBlocking, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "App Controls & Lock (${appUsageList.size})",
@@ -468,16 +145,9 @@ fun ChildControlsView(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Go Home",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Text(text = "Go Home", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -489,10 +159,7 @@ fun ChildControlsView(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                             Text(
                                 text = "Installed apps will appear here as they are used on child phone.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -503,103 +170,13 @@ fun ChildControlsView(
                 }
             } else {
                 items(appUsageList) { app ->
-                    val isBlocked = parentControls?.blockedPackages?.get(app.packageName) == true ||
-                            parentControls?.blockedPackages?.get(app.packageName.replace(".", "_")) == true ||
-                            app.isBlocked
-
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isBlocked) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isBlocked) Color(0xFFC62828) else MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isBlocked) Icons.Default.Lock else Icons.Default.Apps,
-                                    contentDescription = null,
-                                    tint = if (isBlocked) Color.White else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = app.appName.ifEmpty { app.packageName.substringAfterLast(".") },
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = if (isBlocked) "🔴 Blocked by Parent" else "Used ${app.totalTimeInForegroundMinutes} mins today",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isBlocked) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            // 1. Remote Launch Button
-                            IconButton(
-                                onClick = { onLaunchApp(app.packageName) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Open App Remotely",
-                                    tint = Color(0xFF2E7D32),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // 2. Remote Close Button
-                            IconButton(
-                                onClick = { onCloseApp(app.packageName) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "Close App Remotely",
-                                    tint = Color(0xFFE65100),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(2.dp))
-
-                            FilledTonalButton(
-                                onClick = { onToggleAppBlock(app.packageName, isBlocked) },
-                                colors = if (isBlocked) {
-                                    ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFC62828), contentColor = Color.White)
-                                } else {
-                                    ButtonDefaults.filledTonalButtonColors()
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isBlocked) Icons.Default.LockOpen else Icons.Default.Lock,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (isBlocked) "Unlock" else "Lock",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        }
-                    }
+                    ChildControlsAppLockItem(
+                        app = app,
+                        parentControls = parentControls,
+                        onToggleAppBlock = onToggleAppBlock,
+                        onLaunchApp = onLaunchApp,
+                        onCloseApp = onCloseApp
+                    )
                 }
             }
         }

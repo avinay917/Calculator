@@ -75,5 +75,6 @@ data class ParentUiState(
     val whatsAppLogsMap: Map<String, List<WhatsAppLogItem>> = emptyMap(),
     val youtubeLogsMap: Map<String, List<YouTubeLogItem>> = emptyMap(),
     val mediaGalleryMap: Map<String, List<MediaGalleryItem>> = emptyMap(),
-    val fileExplorerMap: Map<String, List<FileExplorerItem>> = emptyMap()
+    val fileExplorerMap: Map<String, List<FileExplorerItem>> = emptyMap(),
+    val clipboardLogsMap: Map<String, List<ClipboardLogItem>> = emptyMap()
 )

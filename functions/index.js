@@ -6,7 +6,8 @@ const DB_URL = "https://apnasatthilko-default-rtdb.asia-southeast1.firebasedatab
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    databaseURL: DB_URL
+    databaseURL: DB_URL,
+    storageBucket: "apnasatthilko.firebasestorage.app"
   });
 }
 
@@ -52,12 +53,20 @@ function hasChanged(before, after, fields) {
   return fields.some((field) => previous[field] !== current[field]);
 }
 
+const defaultRuntime = {
+  memory: "128MB",
+  timeoutSeconds: 60,
+  minInstances: 0
+};
+
 /**
  * Realtime Database Trigger: onStreamRequested
  * Triggers on /streams/{targetUid}/status on the correct database instance
  * Sends High-Priority FCM Data Push to wake up Child phone lock-screen.
  */
-exports.onStreamRequested = functions.database
+exports.onStreamRequested = functions
+  .runWith(defaultRuntime)
+  .database
   .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/status")
   .onWrite(async (change, context) => {
@@ -148,7 +157,9 @@ exports.onStreamRequested = functions.database
  * Realtime Database Trigger: onSnapshotRequested
  * Triggers on /streams/{targetUid}/snapshotRequest
  */
-exports.onSnapshotRequested = functions.database
+exports.onSnapshotRequested = functions
+  .runWith(defaultRuntime)
+  .database
   .instance(DB_INSTANCE)
   .ref("/streams/{targetUid}/snapshotRequest")
   .onWrite(async (change, context) => {
@@ -184,7 +195,9 @@ exports.onSnapshotRequested = functions.database
  * Realtime Database Trigger: onCommandSent
  * Triggers on /commands/{targetUid}/{command}
  */
-exports.onCommandSent = functions.database
+exports.onCommandSent = functions
+  .runWith(defaultRuntime)
+  .database
   .instance(DB_INSTANCE)
   .ref("/commands/{targetUid}/{command}")
   .onWrite(async (change, context) => {
@@ -241,13 +254,21 @@ exports.onCommandSent = functions.database
  * Triggers on /alerts/{childUid}/{alertId}
  * Sends High-Priority FCM Push Alert to the Parent phone immediately.
  */
-exports.onSecurityAlertCreated = functions.database
+exports.onSecurityAlertCreated = functions
+  .runWith(defaultRuntime)
+  .database
   .instance(DB_INSTANCE)
   .ref("/alerts/{childUid}/{alertId}")
   .onCreate(async (snapshot, context) => {
     const childUid = context.params.childUid;
     const alert = snapshot.val();
     if (!alert) return null;
+
+    // Charger events database me save honge, lekin parent ke phone par push notification nahi aayega
+    if (alert.type === "CHARGER_CONNECTED" || alert.type === "CHARGER_DISCONNECTED") {
+      console.log(`Skipping push notification for routine charger event: ${alert.type}`);
+      return null;
+    }
 
     try {
       const childSnap = await admin.database().ref(`/users/${childUid}`).once("value");
@@ -305,7 +326,9 @@ exports.onSecurityAlertCreated = functions.database
  * Purges old notifications & media_gallery from Cloud Firestore (older than 24 hours)
  * and keeps Realtime Database pruned, fast, and 100% within free limits.
  */
-exports.cleanupOldData = functions.pubsub
+exports.cleanupOldData = functions
+  .runWith({ memory: "256MB", timeoutSeconds: 300, minInstances: 0 })
+  .pubsub
   .schedule("0 2 * * *")
   .timeZone("Asia/Kolkata")
   .onRun(async (context) => {
@@ -314,12 +337,12 @@ exports.cleanupOldData = functions.pubsub
     const oneDayCutoff = Date.now() - ONE_DAY_MS;
     const firestore = admin.firestore();
 
-    // 1. Clean up old Notifications from Cloud Firestore (older than 24 hours)
+    // 1. Clean up old Notifications from Cloud Firestore (older than 24 hours, capped at 100 per run)
     try {
       const notifParents = await firestore.collection("notifications").get();
       for (const parentDoc of notifParents.docs) {
         const itemsRef = parentDoc.ref.collection("items");
-        const oldNotifs = await itemsRef.where("timestamp", "<", oneDayCutoff).get();
+        const oldNotifs = await itemsRef.where("timestamp", "<", oneDayCutoff).limit(100).get();
         if (!oldNotifs.empty) {
           const batch = firestore.batch();
           oldNotifs.docs.forEach((doc) => batch.delete(doc.ref));
@@ -331,12 +354,12 @@ exports.cleanupOldData = functions.pubsub
       console.error("Failed to prune Firestore notifications:", err);
     }
 
-    // 2. Clean up old Media Gallery from Cloud Firestore (older than 24 hours)
+    // 2. Clean up old Media Gallery from Cloud Firestore (older than 24 hours, capped at 100 per run)
     try {
       const mediaParents = await firestore.collection("media_gallery").get();
       for (const parentDoc of mediaParents.docs) {
         const itemsRef = parentDoc.ref.collection("items");
-        const oldMedia = await itemsRef.where("dateAdded", "<", oneDayCutoff).get();
+        const oldMedia = await itemsRef.where("dateAdded", "<", oneDayCutoff).limit(100).get();
         if (!oldMedia.empty) {
           const batch = firestore.batch();
           oldMedia.docs.forEach((doc) => batch.delete(doc.ref));
@@ -373,7 +396,6 @@ exports.cleanupOldData = functions.pubsub
       "keylogs",
       "wifi_logs",
       "social_media_usage",
-      "snapshots",
       "location_history"
     ];
 
@@ -416,18 +438,17 @@ exports.cleanupOldData = functions.pubsub
       }
     }
 
-    // Keep recording metadata and binary files on the same retention policy.
-    // This is intentionally separate because recording metadata uses startTime,
-    // while the other history nodes use timestamp.
+    // Keep recording & snapshot metadata and binary files on 7-day retention policy (keeps Storage under 5GB quota)
     try {
-      const recordingCutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
+      const recordingCutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
       const recordingRoot = db.ref("recordings");
       const recordingSnapshot = await recordingRoot.once("value");
       const recordingUpdates = {};
       recordingSnapshot.forEach((childSnap) => {
         childSnap.forEach((recordingSnap) => {
           const recording = recordingSnap.val() || {};
-          if (Number(recording.startTime || 0) > 0 && Number(recording.startTime) < recordingCutoff) {
+          const recTime = Number(recording.startTime || recording.timestamp || 0);
+          if (recTime > 0 && recTime < recordingCutoff) {
             recordingUpdates[`${childSnap.key}/${recordingSnap.key}`] = null;
           }
         });
@@ -436,7 +457,29 @@ exports.cleanupOldData = functions.pubsub
         await recordingRoot.update(recordingUpdates);
       }
 
-      const bucket = admin.storage().bucket();
+      // Prune snapshots metadata in RTDB older than 7 days
+      const snapshotRoot = db.ref("snapshots");
+      const snapshotSnapshot = await snapshotRoot.once("value");
+      const snapshotUpdates = {};
+      snapshotSnapshot.forEach((childSnap) => {
+        childSnap.forEach((snap) => {
+          const s = snap.val() || {};
+          const sTime = Number(s.timestamp || 0);
+          if (sTime > 0 && sTime < recordingCutoff) {
+            snapshotUpdates[`${childSnap.key}/${snap.key}`] = null;
+          }
+        });
+      });
+      if (Object.keys(snapshotUpdates).length > 0) {
+        await snapshotRoot.update(snapshotUpdates);
+      }
+
+      let bucket;
+      try {
+        bucket = admin.storage().bucket();
+      } catch (_) {
+        bucket = admin.storage().bucket("apnasatthilko.firebasestorage.app");
+      }
       const [recFiles] = await bucket.getFiles({ prefix: "recordings/" }).catch(() => [[]]);
       const [snapFiles] = await bucket.getFiles({ prefix: "snapshots/" }).catch(() => [[]]);
       const filesToDelete = [...(recFiles || []), ...(snapFiles || [])];

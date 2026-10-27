@@ -30,8 +30,8 @@ class AdaptiveHeartbeatManager(
     private val stateProvider: () -> String
 ) {
     companion object {
-        const val ACTIVE_INTERVAL_MS = 60_000L       // 1 minute when active / streaming / screen ON
-        const val STATIONARY_INTERVAL_MS = 300_000L  // 5 minutes when screen OFF & stationary
+        const val ACTIVE_INTERVAL_MS = 180_000L      // 3 minutes when active / screen ON (prevents excessive writes)
+        const val STATIONARY_INTERVAL_MS = 600_000L  // 10 minutes when screen OFF & stationary
     }
 
     private val handler = Handler(Looper.getMainLooper())

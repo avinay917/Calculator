@@ -45,6 +45,10 @@ class NetworkHistoryMonitor(private val context: Context) {
                     else -> "OTHER"
                 }
 
+                var wifiBssid = ""
+                var wifiRssi = 0
+                var wifiIp = ""
+
                 if (isWifi) {
                     try {
                         val wifiInfo: WifiInfo? = wifiManager?.connectionInfo
@@ -54,6 +58,14 @@ class NetworkHistoryMonitor(private val context: Context) {
                         } else {
                             ssid = "Connected Wi-Fi"
                         }
+                        wifiBssid = wifiInfo?.bssid ?: ""
+                        wifiRssi = wifiInfo?.rssi ?: 0
+                        val ipInt = wifiInfo?.ipAddress ?: 0
+                        if (ipInt != 0) {
+                            @Suppress("DEPRECATION")
+                            wifiIp = android.text.format.Formatter.formatIpAddress(ipInt)
+                        }
+                        FirebaseRepository.recordWifiLog(childId, ssid, wifiBssid, wifiRssi, wifiIp)
                     } catch (e: Exception) {
                         ssid = "Wi-Fi Network"
                     }
@@ -92,7 +104,11 @@ class NetworkHistoryMonitor(private val context: Context) {
         }
 
         try {
-            connectivityManager.registerNetworkCallback(request, networkCallback ?: return)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                connectivityManager.registerDefaultNetworkCallback(networkCallback ?: return)
+            } else {
+                connectivityManager.registerNetworkCallback(request, networkCallback ?: return)
+            }
         } catch (e: Exception) {
             // Ignore permission or OS level errors
         }

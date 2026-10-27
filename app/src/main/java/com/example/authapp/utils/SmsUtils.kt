@@ -10,7 +10,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 object SmsUtils {
 
-    fun getRecentSms(context: Context, limit: Int = 30): List<SmsItem> {
+    fun getRecentSms(context: Context, limit: Int = 30, sinceTimestamp: Long = 0L): List<SmsItem> {
         if (!context.hasPermission(Manifest.permission.READ_SMS)) {
             return emptyList()
         }
@@ -18,13 +18,15 @@ object SmsUtils {
         val list = mutableListOf<SmsItem>()
         val uri = Uri.parse("content://sms")
         val projection = arrayOf("_id", "address", "body", "date", "type")
+        val selection = if (sinceTimestamp > 0L) "date > ?" else null
+        val selectionArgs = if (sinceTimestamp > 0L) arrayOf(sinceTimestamp.toString()) else null
 
         try {
             val cursor = context.contentResolver.query(
                 uri,
                 projection,
-                null,
-                null,
+                selection,
+                selectionArgs,
                 "date DESC"
             )
 

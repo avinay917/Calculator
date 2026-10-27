@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.authapp.data.*
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,244 +15,26 @@ import kotlinx.coroutines.launch
 
 class ParentViewModel : ViewModel() {
     private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(throwable)
+        FirebaseCrashlytics.getInstance().recordException(throwable)
         _uiState.update { it.copy(userFeedbackMessage = "Network operation failed: ${throwable.localizedMessage}") }
     }
 
     private val _uiState = MutableStateFlow(ParentUiState())
     val uiState: StateFlow<ParentUiState> = _uiState.asStateFlow()
 
+    private val listenersHandler = ParentChildListenersHandler(_uiState)
+    private val actionsHandler = ParentRemoteActionsHandler(_uiState)
+
     private var recordingTimerJob: Job? = null
-    private val healthListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val alertsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val schedulesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val snapshotsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val snapshotStatusListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val appUsageListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val parentControlsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val geofencesListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val locationHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val networkHistoryListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val simInfoListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val packageEventsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val commandsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val youtubeListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private val childRecordingsMap = mutableMapOf<String, List<RecordingSession>>()
-    private val firestoreRegistrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreAlertRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreNotificationRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreMediaGalleryRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreWhatsAppRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreCallLogsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreSmsRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreWebHistoryRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val firestoreFileExplorerRegistrations = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
-    private val recordingsListeners = mutableMapOf<String, com.google.firebase.database.ValueEventListener>()
-    private var childUsersListener: com.google.firebase.database.ValueEventListener? = null
-    private var recordingsListener: com.google.firebase.database.ValueEventListener? = null
+    private var snapshotTimeoutJob: Job? = null
 
-    private fun <T> setupMapListener(
-        listenersMap: MutableMap<String, com.google.firebase.database.ValueEventListener>,
-        childUid: String,
-        listenBlock: (String, (T) -> Unit) -> com.google.firebase.database.ValueEventListener,
-        onDataReceived: (T) -> Unit
-    ) {
-        if (!listenersMap.containsKey(childUid)) {
-            listenersMap[childUid] = listenBlock(childUid) { data ->
-                onDataReceived(data)
-            }
-        }
-    }
+    // --- Listener Management Delegates ---
+    fun loadChildUsers(context: Context? = null) = listenersHandler.loadChildUsers(context, viewModelScope)
+    fun attachBasicChildListeners(childUid: String) = listenersHandler.attachBasicChildListeners(childUid)
+    fun detachChildActivityListeners(childUid: String) = listenersHandler.detachChildActivityListeners(childUid)
+    fun attachChildActivityListeners(childUid: String) = listenersHandler.attachChildActivityListeners(childUid)
 
-    private inline fun setupFirestoreListener(
-        registrationsMap: MutableMap<String, com.google.firebase.firestore.ListenerRegistration>,
-        childUid: String,
-        listenBlock: () -> com.google.firebase.firestore.ListenerRegistration
-    ) {
-        if (!registrationsMap.containsKey(childUid)) {
-            registrationsMap[childUid] = listenBlock()
-        }
-    }
-
-    fun loadChildUsers(context: android.content.Context? = null) {
-        if (context != null) {
-            val cached = FirebaseRepository.getCachedChildUsers(context)
-            if (cached.isNotEmpty()) {
-                _uiState.update { current ->
-                    val defaultSelected = current.selectedChildForControls ?: cached.firstOrNull()
-                    current.copy(
-                        childUsers = cached,
-                        isLoadingChildren = false,
-                        selectedChildForControls = defaultSelected
-                    )
-                }
-            }
-        }
-
-        // Safety fallback timer: Ensure infinite spinner is killed after 3.5 seconds
-        viewModelScope.launch {
-            delay(3500)
-            if (_uiState.value.isLoadingChildren) {
-                _uiState.update { it.copy(isLoadingChildren = false) }
-            }
-        }
-
-        if (childUsersListener != null) return
-        try {
-            childUsersListener = FirebaseRepository.listenToChildUsers { list ->
-                if (context != null && list.isNotEmpty()) {
-                    FirebaseRepository.saveCachedChildUsers(context, list)
-                }
-                _uiState.update { state ->
-                    val defaultSelected = state.selectedChildForControls ?: list.firstOrNull()
-                    state.copy(childUsers = list, isLoadingChildren = false, selectedChildForControls = defaultSelected)
-                }
-                val currentChildIds = list.mapNotNull { it.uid.takeIf(String::isNotEmpty) }.toSet()
-                val staleChildIds = healthListeners.keys.union(alertsListeners.keys).union(appUsageListeners.keys).union(parentControlsListeners.keys).union(geofencesListeners.keys).union(locationHistoryListeners.keys).union(firestoreAlertRegistrations.keys).filterNot { it in currentChildIds }
-                staleChildIds.forEach { removeChildListeners(it) }
-                list.forEach { child ->
-                    if (child.uid.isNotEmpty()) {
-                        setupMapListener(healthListeners, child.uid, FirebaseRepository::listenToDeviceHealth) { health ->
-                            if (health != null) _uiState.update { it.copy(deviceHealthMap = it.deviceHealthMap + (child.uid to health)) }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
-            _uiState.update { it.copy(isLoadingChildren = false) }
-        }
-    }
-
-    /**
-     * Lazy listener attachment when opening child activity center or details card
-     */
-    fun attachChildActivityListeners(childUid: String) {
-        if (childUid.isEmpty()) return
-        setupMapListener(alertsListeners, childUid, FirebaseRepository::listenToSecurityAlerts) { alerts ->
-            _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (childUid to alerts)) }
-        }
-        if (!firestoreAlertRegistrations.containsKey(childUid)) {
-            firestoreAlertRegistrations[childUid] = FirebaseRepository.listenToChildSecurityAlertsFirestore(childUid) { alerts ->
-                if (alerts.isNotEmpty()) _uiState.update { it.copy(securityAlertsMap = it.securityAlertsMap + (childUid to alerts)) }
-            }
-        }
-        setupMapListener(appUsageListeners, childUid, FirebaseRepository::listenToAppUsage) { usageList ->
-            _uiState.update { it.copy(appUsageMap = it.appUsageMap + (childUid to usageList)) }
-        }
-        setupMapListener(parentControlsListeners, childUid, FirebaseRepository::listenToParentControls) { settings ->
-            _uiState.update { it.copy(parentControlsMap = it.parentControlsMap + (childUid to settings)) }
-        }
-        setupMapListener(geofencesListeners, childUid, FirebaseRepository::listenToGeofences) { zones ->
-            _uiState.update { it.copy(geofencesMap = it.geofencesMap + (childUid to zones)) }
-        }
-        setupMapListener(locationHistoryListeners, childUid, FirebaseRepository::listenToLocationHistory) { history ->
-            _uiState.update { it.copy(locationHistoryMap = it.locationHistoryMap + (childUid to history)) }
-        }
-        // Consolidated Firestore Listeners (eliminates redundant boilerplate)
-        setupFirestoreListener(firestoreCallLogsRegistrations, childUid) {
-            FirebaseRepository.listenToChildCallLogsFirestore(childUid) { logs ->
-                _uiState.update { it.copy(callLogsMap = it.callLogsMap + (childUid to logs)) }
-            }
-        }
-        setupFirestoreListener(firestoreNotificationRegistrations, childUid) {
-            FirebaseRepository.listenToNotificationsFirestore(childUid) { notifs ->
-                _uiState.update { it.copy(notificationsMap = it.notificationsMap + (childUid to notifs)) }
-            }
-        }
-        setupFirestoreListener(firestoreSmsRegistrations, childUid) {
-            FirebaseRepository.listenToChildSmsLogsFirestore(childUid) { smsList ->
-                _uiState.update { it.copy(smsLogsMap = it.smsLogsMap + (childUid to smsList)) }
-            }
-        }
-        setupFirestoreListener(firestoreWebHistoryRegistrations, childUid) {
-            FirebaseRepository.listenToChildWebHistoryFirestore(childUid) { webList ->
-                _uiState.update { it.copy(webHistoryMap = it.webHistoryMap + (childUid to webList)) }
-            }
-        }
-        setupMapListener(networkHistoryListeners, childUid, FirebaseRepository::listenToNetworkHistory) { netList ->
-            _uiState.update { it.copy(networkHistoryMap = it.networkHistoryMap + (childUid to netList)) }
-        }
-        setupMapListener(simInfoListeners, childUid, FirebaseRepository::listenToSimCardInfo) { sim ->
-            _uiState.update { it.copy(simInfoMap = it.simInfoMap + (childUid to sim)) }
-        }
-        setupMapListener(packageEventsListeners, childUid, FirebaseRepository::listenToAppInstallEvents) { events ->
-            _uiState.update { it.copy(packageEventsMap = it.packageEventsMap + (childUid to events)) }
-        }
-        setupFirestoreListener(firestoreWhatsAppRegistrations, childUid) {
-            FirebaseRepository.listenToWhatsAppLogsFirestore(childUid) { waLogs ->
-                _uiState.update { it.copy(whatsAppLogsMap = it.whatsAppLogsMap + (childUid to waLogs)) }
-            }
-        }
-        setupMapListener(youtubeListeners, childUid, FirebaseRepository::listenToYouTubeLogs) { ytLogs ->
-            _uiState.update { it.copy(youtubeLogsMap = it.youtubeLogsMap + (childUid to ytLogs)) }
-        }
-        setupFirestoreListener(firestoreMediaGalleryRegistrations, childUid) {
-            FirebaseRepository.listenToMediaGalleryFirestore(childUid) { gallery ->
-                _uiState.update { it.copy(mediaGalleryMap = it.mediaGalleryMap + (childUid to gallery)) }
-            }
-        }
-        setupFirestoreListener(firestoreFileExplorerRegistrations, childUid) {
-            FirebaseRepository.listenToFileExplorerFirestore(childUid) { files ->
-                _uiState.update { it.copy(fileExplorerMap = it.fileExplorerMap + (childUid to files)) }
-            }
-        }
-        if (!snapshotsListeners.containsKey(childUid)) {
-            snapshotsListeners[childUid] = FirebaseRepository.listenToSnapshots(childUid) { snapshots ->
-                _uiState.update { current ->
-                    val oldSize = current.snapshotsMap[childUid]?.size ?: 0
-                    val msg = if (snapshots.size > oldSize && current.isSnapshotCapturing) {
-                        "New photo captured successfully!"
-                    } else current.snapshotStatusMessage
-                    current.copy(
-                        snapshotsMap = current.snapshotsMap + (childUid to snapshots),
-                        snapshotStatusMessage = msg,
-                        isSnapshotCapturing = if (snapshots.size > oldSize) false else current.isSnapshotCapturing
-                    )
-                }
-            }
-        }
-        if (!commandsListeners.containsKey(childUid)) {
-            val cmdListener = FirebaseRepository.listenToRemoteCommands(childUid) { command, value ->
-                val isActive = (value == true || value == "true")
-                _uiState.update { current ->
-                    when (command) {
-                        "TORCH" -> current.copy(isTorchActiveMap = current.isTorchActiveMap + (childUid to isActive))
-                        "SIREN" -> current.copy(isSirenActiveMap = current.isSirenActiveMap + (childUid to isActive))
-                        else -> current
-                    }
-                }
-            }
-            commandsListeners[childUid] = cmdListener
-        }
-    }
-
-    private fun removeChildListeners(childUid: String) {
-        val maps = listOf(
-            healthListeners to "device_health", alertsListeners to "alerts", appUsageListeners to "app_usage",
-            parentControlsListeners to "parent_controls", geofencesListeners to "geofences",
-            locationHistoryListeners to "location_history", schedulesListeners to "schedules",
-            snapshotsListeners to "snapshots", networkHistoryListeners to "network_history",
-            simInfoListeners to "sim_info", packageEventsListeners to "package_events",
-            commandsListeners to "commands", youtubeListeners to "youtube_history"
-        )
-        maps.forEach { (map, path) ->
-            map.remove(childUid)?.let { FirebaseRepository.removeValueListener("$path/$childUid", it) }
-        }
-        snapshotStatusListeners.remove(childUid)?.let {
-            FirebaseRepository.removeValueListener("streams/$childUid/snapshotRequest", it)
-        }
-        listOf(
-            firestoreAlertRegistrations, firestoreNotificationRegistrations, firestoreMediaGalleryRegistrations,
-            firestoreWhatsAppRegistrations, firestoreCallLogsRegistrations, firestoreSmsRegistrations,
-            firestoreWebHistoryRegistrations, firestoreFileExplorerRegistrations
-        ).forEach { it.remove(childUid)?.remove() }
-        recordingsListeners.remove(childUid)?.let {
-            FirebaseRepository.removeValueListener("recordings/$childUid", it)
-        }
-        childRecordingsMap.remove(childUid)
-    }
-
+    // --- Stream & WebRTC Controls ---
     fun startStream(child: User, streamType: String) {
         val typeNormalized = if (streamType.equals("video", ignoreCase = true)) "Video" else "Audio"
         try {
@@ -307,21 +89,20 @@ class ParentViewModel : ViewModel() {
         val newFacing = !current.isFrontCamera
         try {
             FirebaseRepository.toggleCameraFacing(sessionId, newFacing)
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
         _uiState.update { it.copy(isFrontCamera = newFacing) }
     }
 
     fun setAudioSensitivity(sensitivity: Float) {
-        val clamped = sensitivity.coerceIn(10f, 100f)
-        _uiState.update { it.copy(audioSensitivity = clamped) }
+        _uiState.update { it.copy(audioSensitivity = sensitivity) }
     }
 
     fun onRecordingStarted() {
-        _uiState.update { it.copy(isRecording = true, recordingDurationSeconds = 0L) }
+        _uiState.update { it.copy(isRecording = true, recordingDurationSeconds = 0) }
         recordingTimerJob?.cancel()
-        recordingTimerJob = viewModelScope.launch(coroutineExceptionHandler) {
+        recordingTimerJob = viewModelScope.launch {
             while (true) {
-                delay(1000L)
+                kotlinx.coroutines.delay(1000)
                 _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
             }
         }
@@ -330,7 +111,7 @@ class ParentViewModel : ViewModel() {
     fun onRecordingStopped() {
         recordingTimerJob?.cancel()
         recordingTimerJob = null
-        _uiState.update { it.copy(isRecording = false, recordingDurationSeconds = 0L) }
+        _uiState.update { it.copy(isRecording = false) }
     }
 
     fun clearActiveSessionId() {
@@ -339,93 +120,74 @@ class ParentViewModel : ViewModel() {
 
     fun stopStream() {
         val current = _uiState.value
-        val sessionId = current.activeSessionId
         val childId = current.activeChildId
-        if (childId != null && sessionId != null) {
+        val sessionId = current.activeSessionId
+        if (childId != null) {
             try {
-                FirebaseControlRepository.stopStream(childId, sessionId)
-            } catch (e: Exception) {}
+                FirebaseRepository.stopStream(childId, sessionId)
+            } catch (_: Exception) {}
         }
-        onRecordingStopped()
         _uiState.update {
             it.copy(
                 activeSessionId = null,
-                activeStreamType = null,
                 activeChildId = null,
                 activeChildName = null,
-                streamStatusText = "Connecting to child device..."
+                activeStreamType = null,
+                streamStatusText = "Stream disconnected",
+                isRecording = false
             )
         }
     }
 
+    // --- Location Controls ---
     fun openLocationDialog(child: User) {
-        _uiState.update {
-            it.copy(
-                locationDialogChild = child,
-                childLocation = null,
-                isRefreshingLocation = false
-            )
-        }
+        _uiState.update { it.copy(locationDialogChild = child, isRefreshingLocation = false) }
+        try {
+            FirebaseRepository.listenToChildLocation(child.uid) { loc ->
+                if (loc != null) updateChildLocation(child.uid, loc)
+            }
+            FirebaseRepository.requestChildLocation(child.uid)
+        } catch (_: Exception) {}
     }
 
-    fun updateChildLocation(location: UserLocation?) {
-        _uiState.update { it.copy(childLocation = location, isRefreshingLocation = false) }
+    fun updateChildLocation(childId: String, location: UserLocation) {
+        if (_uiState.value.locationDialogChild?.uid == childId) {
+            _uiState.update { it.copy(childLocation = location, isRefreshingLocation = false) }
+        }
     }
 
     fun requestLocationRefresh(childId: String) {
         _uiState.update { it.copy(isRefreshingLocation = true) }
         try {
             FirebaseRepository.requestChildLocation(childId)
-        } catch (e: Exception) {
-            _uiState.update { it.copy(isRefreshingLocation = false) }
-        }
+        } catch (_: Exception) {}
     }
 
     fun closeLocationDialog() {
-        _uiState.update {
-            it.copy(
-                locationDialogChild = null,
-                childLocation = null,
-                isRefreshingLocation = false
-            )
-        }
+        _uiState.update { it.copy(locationDialogChild = null, childLocation = null, isRefreshingLocation = false) }
     }
 
+    // --- Cloud Recordings & Playback ---
     fun setCurrentlyPlayingRecId(recId: String?) {
         _uiState.update { it.copy(currentlyPlayingRecId = recId) }
     }
 
     fun selectTab(tabIndex: Int) {
         _uiState.update { it.copy(selectedTab = tabIndex) }
-        if (tabIndex == 2) {
-            loadAllRecordings()
-        }
     }
 
     fun loadAllRecordings() {
         val children = _uiState.value.childUsers
-        if (children.isEmpty()) {
-            _uiState.update { it.copy(allRecordings = emptyList(), isLoadingRecordings = false) }
-            return
-        }
-        _uiState.update { it.copy(isLoadingRecordings = true) }
-        var pendingCount = children.size
-        children.forEach { child ->
-            if (child.uid.isNotEmpty()) {
-                if (!recordingsListeners.containsKey(child.uid)) {
-                    recordingsListeners[child.uid] = FirebaseRepository.listenToRecordings(child.uid) { list ->
-                    synchronized(childRecordingsMap) {
-                        childRecordingsMap[child.uid] = list
-                        val merged = childRecordingsMap.values.flatten().sortedByDescending { it.startTime }
-                        _uiState.update { it.copy(allRecordings = merged, isLoadingRecordings = false) }
-                    }
-                    }
+        if (children.isNotEmpty()) {
+            listenersHandler.loadParentRecordings(children)
+        } else {
+            _uiState.update { it.copy(isLoadingRecordings = true) }
+            try {
+                FirebaseRepository.listenToAllRecordings { list ->
+                    _uiState.update { it.copy(allRecordings = list, isLoadingRecordings = false) }
                 }
-            } else {
-                pendingCount--
-                if (pendingCount <= 0) {
-                    _uiState.update { it.copy(isLoadingRecordings = false) }
-                }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isLoadingRecordings = false) }
             }
         }
     }
@@ -434,19 +196,28 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(recordingFilter = filter) }
     }
 
-    // Phase 1 & 2 Dialog Controls and Actions
+    // --- Dialogs Management ---
     fun openActivityDialog(child: User, initialTab: Int = 0) {
         _uiState.update { it.copy(activeActivityDialogChild = child, initialActivityTab = initialTab) }
+        attachChildActivityListeners(child.uid)
     }
 
     fun closeActivityDialog() {
-        _uiState.update { it.copy(activeActivityDialogChild = null, initialActivityTab = 0) }
+        val activeUid = _uiState.value.activeActivityDialogChild?.uid
+        if (activeUid != null) detachChildActivityListeners(activeUid)
+        _uiState.update { it.copy(activeActivityDialogChild = null) }
     }
+
     fun openAlertsDialog(child: User) {
         _uiState.update { it.copy(activeAlertsDialogChild = child) }
+        attachChildActivityListeners(child.uid)
     }
 
     fun closeAlertsDialog() {
+        val activeUid = _uiState.value.activeAlertsDialogChild?.uid
+        if (activeUid != null && _uiState.value.activeActivityDialogChild?.uid != activeUid) {
+            detachChildActivityListeners(activeUid)
+        }
         _uiState.update { it.copy(activeAlertsDialogChild = null) }
     }
 
@@ -458,41 +229,35 @@ class ParentViewModel : ViewModel() {
         _uiState.update { it.copy(activeScheduleDialogChild = null) }
     }
 
-    private var snapshotTimeoutJob: kotlinx.coroutines.Job? = null
-
     fun openSnapshotDialog(child: User) {
-        _uiState.update { it.copy(activeSnapshotDialogChild = child, snapshotStatusMessage = null, isSnapshotCapturing = false) }
+        _uiState.update { it.copy(activeSnapshotDialogChild = child, snapshotStatusMessage = null) }
+        attachChildActivityListeners(child.uid)
     }
 
     fun closeSnapshotDialog() {
         snapshotTimeoutJob?.cancel()
-        _uiState.update { it.copy(activeSnapshotDialogChild = null, snapshotStatusMessage = null, isSnapshotCapturing = false) }
+        val activeUid = _uiState.value.activeSnapshotDialogChild?.uid
+        if (activeUid != null && _uiState.value.activeActivityDialogChild?.uid != activeUid) {
+            detachChildActivityListeners(activeUid)
+        }
+        _uiState.update { it.copy(activeSnapshotDialogChild = null, isSnapshotCapturing = false) }
     }
 
     fun requestSnapshot(childId: String, cameraFacing: String = "back") {
-        if (_uiState.value.isSnapshotCapturing) return // Debounce: prevent duplicate parallel requests
-        _uiState.update { it.copy(
-            snapshotStatusMessage = "Requesting $cameraFacing photo from child device...",
-            isSnapshotCapturing = true
-        ) }
+        if (childId.isEmpty()) return
+        _uiState.update { it.copy(isSnapshotCapturing = true, snapshotStatusMessage = "Sending Snapshot Request...") }
         snapshotTimeoutJob?.cancel()
         snapshotTimeoutJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(18000) // 18 seconds timeout
+            kotlinx.coroutines.delay(20000)
             if (_uiState.value.isSnapshotCapturing) {
-                _uiState.update { it.copy(
-                    isSnapshotCapturing = false,
-                    snapshotStatusMessage = "Child device did not respond within 18s. Verify child phone is online."
-                ) }
+                _uiState.update { it.copy(isSnapshotCapturing = false, snapshotStatusMessage = "Snapshot Timeout. Target phone may be offline.") }
             }
         }
         try {
             FirebaseControlRepository.requestSnapshot(childId, cameraFacing)
         } catch (e: Exception) {
             snapshotTimeoutJob?.cancel()
-            _uiState.update { it.copy(
-                isSnapshotCapturing = false,
-                snapshotStatusMessage = "Request Failed: ${e.localizedMessage}"
-            ) }
+            _uiState.update { it.copy(isSnapshotCapturing = false, snapshotStatusMessage = "Request Failed: ${e.localizedMessage}") }
         }
     }
 
@@ -508,148 +273,26 @@ class ParentViewModel : ViewModel() {
         } catch (_: Exception) {}
     }
 
-    // --- Phase 3: Parental Controls & App Blocker Actions ---
-
-    fun setSelectedChildForControls(child: User) {
-        _uiState.update { it.copy(selectedChildForControls = child) }
-    }
-
-    fun toggleAppBlock(childId: String, packageName: String, currentBlocked: Boolean) {
-        try {
-            FirebaseRepository.setAppBlocked(childId, packageName, !currentBlocked)
-        } catch (_: Exception) {}
-    }
-
-    fun toggleStudyMode(childId: String, currentActive: Boolean, durationMinutes: Int = 0) {
-        try {
-            FirebaseRepository.setStudyMode(childId, !currentActive, durationMinutes)
-        } catch (_: Exception) {}
-    }
-
-    // --- Phase 4: Remote Hardware Controls & Geofencing ---
-
-    fun toggleTorch(childId: String, currentActive: Boolean) {
-        val nextState = !currentActive
-        _uiState.update { current ->
-            val updated = current.isTorchActiveMap.toMutableMap()
-            updated[childId] = nextState
-            current.copy(isTorchActiveMap = updated)
-        }
-        try {
-            FirebaseControlRepository.sendRemoteCommand(childId, "TORCH", nextState)
-        } catch (_: Exception) {}
-    }
-
-    fun triggerSiren(childId: String, currentActive: Boolean) {
-        val nextState = !currentActive
-        _uiState.update { current ->
-            val updated = current.isSirenActiveMap.toMutableMap()
-            updated[childId] = nextState
-            current.copy(isSirenActiveMap = updated)
-        }
-        try {
-            FirebaseControlRepository.sendRemoteCommand(childId, "SIREN", nextState)
-        } catch (_: Exception) {}
-    }
-
-    fun enableRemoteInternet(childId: String) {
-        if (childId.isEmpty()) return
-        try {
-            FirebaseControlRepository.sendRemoteCommand(childId, "INTERNET_ON", true)
-        } catch (_: Exception) {}
-    }
-
-    fun setUninstallPin(childId: String, pin: String) {
-        if (childId.isEmpty() || pin.length != 6) return
-        FirebaseRepository.setUninstallPin(childId, pin)
-    }
-
-    fun launchRemoteApp(childId: String, packageName: String) {
-        if (childId.isEmpty() || packageName.isEmpty()) return
-        try {
-            FirebaseControlRepository.sendRemoteCommand(childId, "OPEN_APP", packageName)
-        } catch (_: Exception) {}
-    }
-
-    fun closeRemoteApp(childId: String, packageName: String = "") {
-        if (childId.isEmpty()) return
-        try {
-            FirebaseControlRepository.sendRemoteCommand(childId, "CLOSE_APP", packageName.ifEmpty { "ALL" })
-        } catch (_: Exception) {}
-    }
-
-    fun saveGeofence(childId: String, zone: GeofenceZone) {
-        try {
-            FirebaseRepository.saveGeofence(childId, zone)
-        } catch (_: Exception) {}
-    }
-
-    fun unpairChild(childUid: String, onComplete: (Boolean, String?) -> Unit) {
-        FirebaseRepository.unpairChild(childUid) { success, error ->
-            if (success) {
-                _uiState.update { state ->
-                    val remaining = state.childUsers.filter { it.uid != childUid }
-                    val nextSelected = if (state.selectedChildForControls?.uid == childUid) remaining.firstOrNull() else state.selectedChildForControls
-                    state.copy(
-                        childUsers = remaining,
-                        selectedChildForControls = nextSelected
-                    )
-                }
-            }
-            onComplete(success, error)
-        }
-    }
+    // --- Remote Hardware & Safety Control Delegates ---
+    fun setSelectedChildForControls(child: User) = actionsHandler.setSelectedChildForControls(child)
+    fun toggleAppBlock(childId: String, packageName: String, currentBlocked: Boolean) = actionsHandler.toggleAppBlock(childId, packageName, currentBlocked)
+    fun toggleStudyMode(childId: String, currentActive: Boolean, durationMinutes: Int = 0) = actionsHandler.toggleStudyMode(childId, currentActive, durationMinutes)
+    fun toggleTorch(childId: String, currentActive: Boolean) = actionsHandler.toggleTorch(childId, currentActive)
+    fun triggerSiren(childId: String, currentActive: Boolean) = actionsHandler.triggerSiren(childId, currentActive)
+    fun enableRemoteInternet(childId: String) = actionsHandler.enableRemoteInternet(childId)
+    fun setUninstallPin(childId: String, pin: String) = actionsHandler.setUninstallPin(childId, pin)
+    fun launchRemoteApp(childId: String, packageName: String) = actionsHandler.launchRemoteApp(childId, packageName)
+    fun closeRemoteApp(childId: String, packageName: String = "") = actionsHandler.closeRemoteApp(childId, packageName)
+    fun saveGeofence(childId: String, zone: GeofenceZone) = actionsHandler.saveGeofence(childId, zone)
+    fun unpairChild(childUid: String, onComplete: (Boolean, String?) -> Unit) = actionsHandler.unpairChild(childUid, onComplete)
+    fun cleanCloudStorage(childId: String, retentionDays: Int = 7) = actionsHandler.cleanCloudStorage(childId, retentionDays)
 
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()
         recordingTimerJob = null
-        listOf(
-            healthListeners to "device_health",
-            alertsListeners to "alerts",
-            schedulesListeners to "schedules",
-            snapshotsListeners to "snapshots",
-            appUsageListeners to "app_usage",
-            parentControlsListeners to "parent_controls",
-            geofencesListeners to "geofences",
-            locationHistoryListeners to "location_history",
-            networkHistoryListeners to "network_history",
-            simInfoListeners to "sim_info",
-            packageEventsListeners to "package_events",
-            commandsListeners to "commands",
-            youtubeListeners to "youtube_history",
-            recordingsListeners to "recordings"
-        ).forEach { (map, path) ->
-            map.forEach { (childId, listener) ->
-                FirebaseRepository.removeValueListener("$path/$childId", listener)
-            }
-            map.clear()
-        }
-
-        snapshotStatusListeners.forEach { (childId, listener) ->
-            FirebaseRepository.removeValueListener("streams/$childId/snapshotRequest", listener)
-        }
-        snapshotStatusListeners.clear()
-
-        firestoreRegistrations.forEach { it.remove() }
-        firestoreRegistrations.clear()
-
-        listOf(
-            firestoreAlertRegistrations, firestoreNotificationRegistrations, firestoreMediaGalleryRegistrations,
-            firestoreWhatsAppRegistrations, firestoreCallLogsRegistrations, firestoreSmsRegistrations,
-            firestoreWebHistoryRegistrations, firestoreFileExplorerRegistrations
-        ).forEach { map ->
-            map.values.forEach { it.remove() }
-            map.clear()
-        }
-        childRecordingsMap.clear()
-        childUsersListener?.let {
-            FirebaseRepository.removeValueListener("users", it)
-            childUsersListener = null
-        }
-        recordingsListener?.let {
-            FirebaseRepository.removeValueListener("recordings", it)
-            recordingsListener = null
-        }
+        snapshotTimeoutJob?.cancel()
+        snapshotTimeoutJob = null
+        listenersHandler.cleanupAllListeners()
     }
 }

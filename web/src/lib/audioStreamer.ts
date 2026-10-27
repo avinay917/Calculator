@@ -89,7 +89,7 @@ export class AudioStreamReceiver {
     source.buffer = audioBuffer;
 
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = 1.0;
+    gainNode.gain.value = 3.0;
 
     source.connect(gainNode);
     gainNode.connect(this.audioContext.destination);

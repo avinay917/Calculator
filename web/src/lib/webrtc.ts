@@ -1,5 +1,5 @@
 import { rtdb } from "./firebase";
-import { ref, set, onValue, push, off } from "firebase/database";
+import { ref, set, get, onValue, push, off } from "firebase/database";
 
 const ICE_SERVERS: RTCIceServer[] = [
   // 1. PRIMARY: Free Google & Twilio STUN Servers (Direct P2P First - ZERO Cost / 0 Bandwidth)
@@ -46,7 +46,7 @@ export class WebRtcReceiver {
   private gainNode: GainNode | null = null;
   private highpassFilter: BiquadFilterNode | null = null;
   private speechFilter: BiquadFilterNode | null = null;
-  private currentGainMultiplier = 1.0;
+  private currentGainMultiplier = 3.5;
   private isClarityFilterActive = true;
 
   constructor(
@@ -63,9 +63,28 @@ export class WebRtcReceiver {
     this.isRemoteDescriptionSet = false;
     this.remoteStream = new MediaStream();
 
+    let dynamicIceServers = ICE_SERVERS;
+    try {
+      const iceSnap = await get(ref(rtdb, "ice_servers"));
+      if (iceSnap.exists()) {
+        const fetchedList: RTCIceServer[] = [];
+        iceSnap.forEach((child) => {
+          const val = child.val();
+          const urls = val.url || val.urls || val.uri;
+          if (urls) {
+            const item: RTCIceServer = { urls };
+            if (val.username) item.username = val.username;
+            if (val.credential || val.password) item.credential = val.credential || val.password;
+            fetchedList.push(item);
+          }
+        });
+        if (fetchedList.length > 0) dynamicIceServers = fetchedList;
+      }
+    } catch (_e) {}
+
     try {
       this.peerConnection = new RTCPeerConnection({
-        iceServers: ICE_SERVERS,
+        iceServers: dynamicIceServers,
         iceCandidatePoolSize: 2,
       });
 
@@ -153,11 +172,13 @@ export class WebRtcReceiver {
             this.pendingCandidates = [];
 
             const answer = await this.peerConnection.createAnswer();
-            await this.peerConnection.setLocalDescription(answer);
+            const sdpWithBandwidth = applySdpBandwidthLimits(answer.sdp || "", 550, 32);
+            const finalAnswer = new RTCSessionDescription({ type: "answer", sdp: sdpWithBandwidth });
+            await this.peerConnection.setLocalDescription(finalAnswer);
 
-            console.log("Sending SDP answer to child...");
+            console.log("Sending SDP answer with bandwidth limits (550k/32k) to child...");
             // Send SDP Answer to child
-            await set(ref(rtdb, `signaling/${this.sessionId}/sdpAnswer`), answer.sdp);
+            await set(ref(rtdb, `signaling/${this.sessionId}/sdpAnswer`), finalAnswer.sdp);
           } catch (e: any) {
             console.error("SDP negotiation failed:", e);
             this.onError("SDP negotiation failed: " + (e?.message || e));
@@ -323,4 +344,20 @@ export class WebRtcReceiver {
     this.childUid = "";
   }
 }
+
+function applySdpBandwidthLimits(sdp: string, videoKbps: number = 550, audioKbps: number = 32): string {
+  let modified = sdp;
+  if (modified.includes("m=video")) {
+    modified = modified.replace(/m=video[^\r\n]*/, (match) => {
+      return `${match}\r\nb=AS:${videoKbps}\r\nb=TIAS:${videoKbps * 1000}`;
+    });
+  }
+  if (modified.includes("m=audio")) {
+    modified = modified.replace(/m=audio[^\r\n]*/, (match) => {
+      return `${match}\r\nb=AS:${audioKbps}\r\nb=TIAS:${audioKbps * 1000}`;
+    });
+  }
+  return modified;
+}
+
 

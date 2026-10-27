@@ -31,7 +31,7 @@ class AmbientAudioStreamer(private val context: Context) {
     private val isStreaming = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val sampleRate = 16000
+    private val sampleRate = 8000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 

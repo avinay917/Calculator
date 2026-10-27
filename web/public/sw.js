@@ -50,10 +50,34 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Cache-First strategy for Next.js immutable static assets, fonts, and images (Zero Hosting Bandwidth)
+  const isStaticAsset = url.pathname.startsWith("/_next/static/") ||
+    url.pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|woff2|css|js)$/);
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // Network-First strategy with cache fallback for HTML pages
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone response to cache if successful
         if (response && response.status === 200 && response.type === "basic") {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {

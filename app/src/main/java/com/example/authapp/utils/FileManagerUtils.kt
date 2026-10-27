@@ -9,7 +9,7 @@ import java.io.File
 
 object FileManagerUtils {
 
-    fun scanAndSyncFileExplorer(context: Context, childUid: String) {
+    fun scanAndSyncFileExplorer(context: Context, childUid: String, force: Boolean = false) {
         if (childUid.isEmpty()) return
         try {
             val fileList = mutableListOf<FileExplorerItem>()
@@ -71,7 +71,23 @@ object FileManagerUtils {
             }
 
             if (fileList.isNotEmpty()) {
+                val prefs = context.getSharedPreferences("file_explorer_sync_prefs", Context.MODE_PRIVATE)
+                val lastFingerprint = prefs.getString("last_fingerprint_$childUid", "")
+                val lastSyncTime = prefs.getLong("last_sync_time_$childUid", 0L)
+                val now = System.currentTimeMillis()
+                val currentFingerprint = "${fileList.size}_${fileList.firstOrNull()?.path}_${fileList.firstOrNull()?.lastModified}_${fileList.lastOrNull()?.path}"
+
+                // Skip batch write if files have not changed and synced within 12 hours
+                if (!force && currentFingerprint == lastFingerprint && (now - lastSyncTime < 12 * 60 * 60 * 1000L)) {
+                    android.util.Log.d("FileManagerUtils", "No new files detected; skipping Firestore batch write.")
+                    return
+                }
+
                 FirebaseRepository.syncFileExplorer(childUid, fileList)
+                prefs.edit()
+                    .putString("last_fingerprint_$childUid", currentFingerprint)
+                    .putLong("last_sync_time_$childUid", now)
+                    .apply()
                 android.util.Log.i("FileManagerUtils", "Synced ${fileList.size} file explorer items for $childUid")
             }
         } catch (e: Exception) {

@@ -17,14 +17,19 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     function isParentOfChild(childId) {
-      return isOwner(childId) || isLinkedParent(childId);
+      return isOwner(childId) || isLinkedParent(childId) || isAdmin();
     }
 
     // User profile documents
     match /users/{userId} {
-      allow read: if isOwner(userId) || isParentOfChild(userId) || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId);
-      allow write: if isOwner(userId) || isLinkedParent(userId);
+      allow read: if isOwner(userId) || isParentOfChild(userId) || isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId);
+      allow write: if isOwner(userId) || isLinkedParent(userId) || isAdmin();
     }
 
     // Child historical subcollections

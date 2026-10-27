@@ -12,6 +12,28 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 class ChildNotificationListenerService : NotificationListenerService() {
     private val recentNotificationCache = android.util.LruCache<String, Long>(50)
 
+    @Volatile
+    private var isConnected = false
+
+    override fun onListenerConnected() {
+        if (isConnected) return
+        isConnected = true
+        try {
+            super.onListenerConnected()
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
+    override fun onListenerDisconnected() {
+        isConnected = false
+        try {
+            super.onListenerDisconnected()
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
@@ -27,6 +49,11 @@ class ChildNotificationListenerService : NotificationListenerService() {
 
             // Skip empty notifications
             if (title.isEmpty() && text.isEmpty()) return
+
+            // Ignore continuous ongoing notifications (music, download progress, charging, pedometers)
+            if (sbn.isOngoing && !packageName.contains("whatsapp", ignoreCase = true)) {
+                return
+            }
 
             val pm = packageManager
             val appName = try {
@@ -47,7 +74,7 @@ class ChildNotificationListenerService : NotificationListenerService() {
                 recentNotificationCache.put(notifKey, now)
             }
 
-            // Filter out system progress, backup updates, and noisy background check notifications
+            // Filter out system progress, backup updates, promotional marketing ads, and noisy notifications
             val lowerTitle = title.lowercase()
             val lowerText = text.lowercase()
             val isIgnoredProgress = lowerTitle.contains("backup in progress") ||
@@ -61,7 +88,16 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     lowerText.contains("checking for new messages") ||
                     lowerText.contains("tap for more info") ||
                     lowerText.matches(Regex(".*\\(\\d+%.*")) || // e.g. (3%), (85%)
-                    lowerText.matches(Regex(".*\\d+(\\.\\d+)?\\s*(gb|mb)\\s*of\\s*\\d+(\\.\\d+)?\\s*(gb|mb).*")) // e.g. 1.2 GB of 2.3 GB
+                    lowerText.matches(Regex(".*\\d+(\\.\\d+)?\\s*(gb|mb)\\s*of\\s*\\d+(\\.\\d+)?\\s*(gb|mb).*")) ||
+                    // Filter noisy marketing promos / ads to protect Firestore quota
+                    lowerText.contains("% off") ||
+                    lowerTitle.contains("% off") ||
+                    lowerText.contains("use code") ||
+                    lowerText.contains("cashback") ||
+                    lowerText.contains("flash sale") ||
+                    lowerTitle.contains("flash sale") ||
+                    lowerText.contains("spin the wheel") ||
+                    packageName == "com.android.providers.downloads"
 
             if (isIgnoredProgress) {
                 return

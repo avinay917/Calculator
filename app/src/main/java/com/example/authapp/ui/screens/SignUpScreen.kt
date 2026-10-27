@@ -1,24 +1,13 @@
 package com.example.authapp.ui.screens
 
-import android.widget.Toast
-import com.example.authapp.utils.longToast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,15 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.authapp.theme.AuthAppTheme
+import com.example.authapp.analytics.AppAnalytics
+import com.example.authapp.data.FirebaseRepository
+import com.example.authapp.utils.longToast
 
 @Composable
 fun SignUpScreen(
@@ -57,7 +43,6 @@ fun SignUpScreen(
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
     var termsError by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
     var isLoading by remember { mutableStateOf(false) }
 
     fun validateAndSubmit() {
@@ -106,20 +91,20 @@ fun SignUpScreen(
 
         if (isValid) {
             isLoading = true
-            com.example.authapp.analytics.AppAnalytics.logButtonClick("sign_up", "SignUpScreen")
-            com.example.authapp.data.FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
+            AppAnalytics.logButtonClick("sign_up", "SignUpScreen")
+            FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
                 isLoading = false
                 if (success) {
-                    context.longToast("Account created successfully! Please Sign In to continue.")
-                    com.example.authapp.analytics.AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
+                    context.longToast("Account created successfully! Welcome aboard.")
+                    AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
                     onSignUpSuccess(email)
                 } else {
-                    errorMessage = errorMsg ?: "Registration failed"
-                    com.example.authapp.analytics.AppAnalytics.logActionFailure("sign_up", "SignUpScreen", errorMsg ?: "Registration failed")
+                    errorMessage = errorMsg ?: "Sign Up failed. Please try again."
+                    AppAnalytics.logActionFailure("sign_up", "SignUpScreen", errorMsg ?: "Sign Up failed")
                 }
             }
         } else {
-            errorMessage = "Please fix errors below to continue"
+            errorMessage = "Please fill all required fields correctly"
         }
     }
 
@@ -131,25 +116,24 @@ fun SignUpScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Logo Header Icon
+        // App Icon
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(72.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.PersonAdd,
-                contentDescription = "Sign Up Icon",
-                tint = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(40.dp)
+                contentDescription = "Sign Up Logo",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
             )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Title and Subtitle
         Text(
             text = "Create Account",
             style = MaterialTheme.typography.headlineMedium.copy(
@@ -170,200 +154,53 @@ fun SignUpScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Error Banner
-        AnimatedVisibility(
-            visible = errorMessage != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            errorMessage?.let { msg ->
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = msg,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-
-        // Full Name Field
-        OutlinedTextField(
-            value = fullName,
-            onValueChange = {
+        SignUpFormInputs(
+            fullName = fullName,
+            onFullNameChange = {
                 fullName = it
                 if (fullNameError != null) fullNameError = null
             },
-            label = { Text("Full Name") },
-            placeholder = { Text("John Doe") },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Person, contentDescription = "Person Icon")
-            },
-            isError = fullNameError != null,
-            supportingText = {
-                fullNameError?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Text,
-                imeAction = ImeAction.Next
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Email Address Field
-        OutlinedTextField(
-            value = email,
-            onValueChange = {
+            fullNameError = fullNameError,
+            email = email,
+            onEmailChange = {
                 email = it
                 if (emailError != null) emailError = null
             },
-            label = { Text("Email Address") },
-            placeholder = { Text("example@mail.com") },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Email, contentDescription = "Email Icon")
-            },
-            isError = emailError != null,
-            supportingText = {
-                emailError?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Password Field
-        OutlinedTextField(
-            value = password,
-            onValueChange = {
+            emailError = emailError,
+            password = password,
+            onPasswordChange = {
                 password = it
                 if (passwordError != null) passwordError = null
             },
-            label = { Text("Password") },
-            placeholder = { Text("Minimum 6 characters") },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Lock, contentDescription = "Lock Icon")
-            },
-            trailingIcon = {
-                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                    Icon(
-                        imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = if (isPasswordVisible) "Hide Password" else "Show Password"
-                    )
-                }
-            },
-            visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            isError = passwordError != null,
-            supportingText = {
-                passwordError?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Next
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Confirm Password Field
-        OutlinedTextField(
-            value = confirmPassword,
-            onValueChange = {
+            passwordError = passwordError,
+            confirmPassword = confirmPassword,
+            onConfirmPasswordChange = {
                 confirmPassword = it
                 if (confirmPasswordError != null) confirmPasswordError = null
             },
-            label = { Text("Confirm Password") },
-            placeholder = { Text("Re-enter password") },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Lock, contentDescription = "Lock Icon")
+            confirmPasswordError = confirmPasswordError,
+            isPasswordVisible = isPasswordVisible,
+            onTogglePasswordVisibility = { isPasswordVisible = !isPasswordVisible },
+            isConfirmPasswordVisible = isConfirmPasswordVisible,
+            onToggleConfirmPasswordVisibility = { isConfirmPasswordVisible = !isConfirmPasswordVisible },
+            agreeToTerms = agreeToTerms,
+            onAgreeToTermsChange = {
+                agreeToTerms = it
+                if (termsError != null) termsError = null
             },
-            trailingIcon = {
-                IconButton(onClick = { isConfirmPasswordVisible = !isConfirmPasswordVisible }) {
-                    Icon(
-                        imageVector = if (isConfirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = if (isConfirmPasswordVisible) "Hide Password" else "Show Password"
-                    )
-                }
-            },
-            visualTransformation = if (isConfirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            isError = confirmPasswordError != null,
-            supportingText = {
-                confirmPasswordError?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            termsError = termsError,
+            errorMessage = errorMessage
         )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Terms & Conditions Checkbox
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = agreeToTerms,
-                onCheckedChange = {
-                    agreeToTerms = it
-                    if (termsError != null) termsError = null
-                }
-            )
-            Text(
-                text = "I agree to the Terms & Privacy Policy",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-        termsError?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp)
-            )
-        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Sign Up Button
         Button(
             onClick = { validateAndSubmit() },
             enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
+            shape = RoundedCornerShape(16.dp)
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -372,17 +209,12 @@ fun SignUpScreen(
                     strokeWidth = 2.5.dp
                 )
             } else {
-                Text(
-                    text = "Sign Up",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "Sign Up", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Already have an account? Sign In
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
@@ -407,4 +239,3 @@ fun SignUpScreen(
         }
     }
 }
-

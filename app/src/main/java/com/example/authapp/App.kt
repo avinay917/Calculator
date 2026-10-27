@@ -42,6 +42,20 @@ class App : Application() {
             val rtdb = FirebaseDatabase.getInstance()
             rtdb.setPersistenceEnabled(true)
             rtdb.reference.child("app_update").keepSynced(true)
+
+            // Configure Firestore offline persistent disk cache (100 MB)
+            try {
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                    .setLocalCacheSettings(
+                        com.google.firebase.firestore.PersistentCacheSettings.newBuilder()
+                            .setSizeBytes(104857600L) // 100 MB cache
+                            .build()
+                    )
+                    .build()
+                firestore.firestoreSettings = settings
+            } catch (_: Exception) {}
+
             com.example.authapp.config.RemoteConfigManager.init(this)
             Logger.i(Constants.Logging.TAG_APP, "Firebase initialized with persistence enabled and RemoteConfig initialized")
         } catch (e: Exception) {

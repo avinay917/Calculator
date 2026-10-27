@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 object CallLogSyncManager {
     private const val PREFS = "call_log_sync"
     private const val LAST_SYNC = "last_sync_at"
+    private const val LAST_CALL_DATE = "last_call_date"
     private const val SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000L
     private const val MAX_ITEMS = 50
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -27,6 +28,7 @@ object CallLogSyncManager {
 
         scope.launch {
             try {
+                val lastCallDate = prefs.getLong(LAST_CALL_DATE, 0L)
                 val items = mutableListOf<CallLogItem>()
                 context.contentResolver.query(
                     CallLog.Calls.CONTENT_URI,
@@ -60,7 +62,12 @@ object CallLogSyncManager {
                         )
                     }
                 }
-                items.forEach { FirebaseRepository.logSingleCallLog(childId, it) }
+                val newItems = if (lastCallDate > 0L) items.filter { it.timestamp > lastCallDate } else items.take(20)
+                if (newItems.isNotEmpty()) {
+                    newItems.forEach { FirebaseRepository.logSingleCallLog(childId, it) }
+                    val maxTimestamp = newItems.maxOfOrNull { it.timestamp } ?: lastCallDate
+                    prefs.edit().putLong(LAST_CALL_DATE, maxTimestamp).apply()
+                }
             } catch (error: Exception) {
                 com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(error)
             }

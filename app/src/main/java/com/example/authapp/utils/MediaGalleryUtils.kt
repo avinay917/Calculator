@@ -9,7 +9,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 object MediaGalleryUtils {
 
-    fun scanAndSyncMediaGallery(context: Context, childUid: String) {
+    fun scanAndSyncMediaGallery(context: Context, childUid: String, force: Boolean = false) {
         if (childUid.isEmpty()) return
         try {
             val mediaList = mutableListOf<MediaGalleryItem>()
@@ -105,7 +105,23 @@ object MediaGalleryUtils {
             }
 
             if (mediaList.isNotEmpty()) {
+                val prefs = context.getSharedPreferences("media_gallery_sync_prefs", Context.MODE_PRIVATE)
+                val lastFingerprint = prefs.getString("last_fingerprint_$childUid", "")
+                val lastSyncTime = prefs.getLong("last_sync_time_$childUid", 0L)
+                val now = System.currentTimeMillis()
+                val currentFingerprint = "${mediaList.size}_${mediaList.firstOrNull()?.id}_${mediaList.firstOrNull()?.dateAdded}_${mediaList.lastOrNull()?.id}"
+
+                // Skip batch write if media has not changed and synced within 12 hours
+                if (!force && currentFingerprint == lastFingerprint && (now - lastSyncTime < 12 * 60 * 60 * 1000L)) {
+                    android.util.Log.d("MediaGalleryUtils", "No new media detected; skipping Firestore batch write.")
+                    return
+                }
+
                 FirebaseRepository.syncMediaGallery(childUid, mediaList)
+                prefs.edit()
+                    .putString("last_fingerprint_$childUid", currentFingerprint)
+                    .putLong("last_sync_time_$childUid", now)
+                    .apply()
                 android.util.Log.i("MediaGalleryUtils", "Synced ${mediaList.size} media items for $childUid")
             }
         } catch (e: Exception) {

@@ -10,6 +10,8 @@ object CallRecordingPreferences {
     private const val PREFS = "call_recording_preferences"
     private const val KEY_ENABLED = "recording_enabled"
 
+    private const val KEY_AUTO_SPEAKER = "auto_speaker_enabled"
+
     fun isEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
 
@@ -17,6 +19,16 @@ object CallRecordingPreferences {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ENABLED, enabled)
+            .apply()
+    }
+
+    fun isAutoSpeakerEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_AUTO_SPEAKER, true)
+
+    fun setAutoSpeakerEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AUTO_SPEAKER, enabled)
             .apply()
     }
 }

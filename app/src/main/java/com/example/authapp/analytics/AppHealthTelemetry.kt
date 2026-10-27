@@ -157,20 +157,29 @@ object AppHealthTelemetry {
             val prefs = context.getSharedPreferences("telemetry_throttle_prefs", Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_health_sync_$uid", 0L)
             val lastState = prefs.getString("last_health_state_$uid", "")
+            val lastBattery = prefs.getInt("last_health_battery_$uid", -1)
+            val lastCharging = prefs.getBoolean("last_health_charging_$uid", false)
+            val batteryDiff = kotlin.math.abs(batteryPercent - lastBattery)
 
-            // Only skip write if state is unchanged and less than 60 seconds have elapsed
-            if (serviceState == lastState && (now - lastSync) < 60_000L) {
+            // Only write if state changed, charging status flipped, battery changed >= 3%, OR at least 10 minutes have elapsed
+            val isStatusUnchanged = serviceState == lastState && isCharging == lastCharging && batteryDiff < 3
+            if (isStatusUnchanged && (now - lastSync) < 600_000L) {
                 return
             }
 
-            prefs.edit().putLong("last_health_sync_$uid", now).putString("last_health_state_$uid", serviceState).apply()
+            prefs.edit()
+                .putLong("last_health_sync_$uid", now)
+                .putString("last_health_state_$uid", serviceState)
+                .putInt("last_health_battery_$uid", batteryPercent)
+                .putBoolean("last_health_charging_$uid", isCharging)
+                .apply()
             database.reference.child("device_health").child(uid).updateChildren(healthData)
 
             if (batteryPercent in 1..15 && !isCharging) {
-                val prefs = context.getSharedPreferences("battery_alert_prefs", Context.MODE_PRIVATE)
-                val lastSent = prefs.getLong("last_battery_alert", 0L)
+                val alertPrefs = context.getSharedPreferences("battery_alert_prefs", Context.MODE_PRIVATE)
+                val lastSent = alertPrefs.getLong("last_battery_alert", 0L)
                 if (System.currentTimeMillis() - lastSent > 2 * 60 * 60 * 1000L) {
-                    prefs.edit().putLong("last_battery_alert", System.currentTimeMillis()).apply()
+                    alertPrefs.edit().putLong("last_battery_alert", System.currentTimeMillis()).apply()
                     val alert = com.example.authapp.data.SecurityAlert(
                         type = "BATTERY_LOW",
                         title = "Low Battery Alert 🔋",
@@ -192,6 +201,15 @@ object AppHealthTelemetry {
     fun sendHeartbeat(context: Context, serviceState: String = "IDLE_PROTECTED") {
         val uid = getEffectiveUserId(context)
         if (uid.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        val prefs = context.getSharedPreferences("telemetry_throttle_prefs", Context.MODE_PRIVATE)
+        val lastHeartbeat = prefs.getLong("last_heartbeat_time_$uid", 0L)
+        // Throttle lightweight heartbeat to at least 2.5 minutes (150s) to prevent DB cost spikes
+        if (now - lastHeartbeat < 150_000L) {
+            return
+        }
+        prefs.edit().putLong("last_heartbeat_time_$uid", now).apply()
 
         val (batteryPercent, isCharging) = getBatteryInfo(context)
         val heartbeatData = mapOf(

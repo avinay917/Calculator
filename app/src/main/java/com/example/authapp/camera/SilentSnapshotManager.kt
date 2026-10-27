@@ -148,8 +148,8 @@ class SilentSnapshotManager(private val context: Context) {
                                     val outFile = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.$ext")
                                     val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                                     if (bitmap != null) {
-                                        // Downscale to max 1280x720 while maintaining aspect ratio
-                                        val maxDim = 1280
+                                        // Downscale to max 1080p while maintaining aspect ratio
+                                        val maxDim = 1080
                                         val width = bitmap.width
                                         val height = bitmap.height
                                         val (newWidth, newHeight) = if (width > maxDim || height > maxDim) {
@@ -168,7 +168,7 @@ class SilentSnapshotManager(private val context: Context) {
                                             android.graphics.Bitmap.CompressFormat.JPEG
                                         }
                                         FileOutputStream(outFile).use { fos ->
-                                            scaledBitmap.compress(format, 80, fos)
+                                            scaledBitmap.compress(format, 68, fos)
                                         }
                                         if (scaledBitmap != bitmap) {
                                             scaledBitmap.recycle()

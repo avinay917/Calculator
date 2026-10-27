@@ -1,87 +1,24 @@
 package com.example.authapp.ui.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.data.SnapshotInfo
 import com.example.authapp.data.User
 import com.example.authapp.utils.formatTime
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.URL
-
-@Composable
-fun RemoteImage(
-    url: String,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
-) {
-    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(url) { mutableStateOf(true) }
-    var isError by remember(url) { mutableStateOf(false) }
-
-    LaunchedEffect(url) {
-        withContext(Dispatchers.IO) {
-            try {
-                val input = URL(url).openStream()
-                val bmp = BitmapFactory.decodeStream(input)
-                withContext(Dispatchers.Main) {
-                    bitmap = bmp
-                    isLoading = false
-                }
-            } catch (_: Exception) {
-                withContext(Dispatchers.Main) {
-                    isError = true
-                    isLoading = false
-                }
-            }
-        }
-    }
-
-    if (isLoading) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-        }
-    } else if (bitmap != null) {
-        Image(
-            bitmap = bitmap!!.asImageBitmap(),
-            contentDescription = "Snapshot",
-            contentScale = contentScale,
-            modifier = modifier
-        )
-    } else {
-        Box(
-            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.BrokenImage, contentDescription = "Error loading image", tint = MaterialTheme.colorScheme.outline)
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,270 +37,112 @@ fun ChildSnapshotDialog(
         subtitle = "Silent Remote Photos (${snapshots.size} captured)",
         onDismiss = onDismiss
     ) { innerPadding ->
-                Column(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            // Action Buttons Card & Status Alert
+            ChildSnapshotCaptureCard(
+                isCapturing = isCapturing,
+                statusMessage = statusMessage,
+                onRequestSnapshot = onRequestSnapshot
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Captured Gallery (${snapshots.size})",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (snapshots.isEmpty()) {
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp)
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    var activeFacing by remember { mutableStateOf<String?>(null) }
-                    LaunchedEffect(isCapturing) {
-                        if (!isCapturing) {
-                            activeFacing = null
-                        }
-                    }
-
-                    // Action Cards to trigger snapshot
-                    Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Take Silent Photo Now",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Instantly capture environment without preview on child's screen",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
-                                    onClick = {
-                                        activeFacing = "back"
-                                        onRequestSnapshot("back")
-                                    },
-                                    enabled = !isCapturing,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    if (isCapturing && activeFacing == "back") {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Capturing...", style = MaterialTheme.typography.labelSmall)
-                                    } else {
-                                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Rear Camera")
-                                    }
-                                }
-                                FilledTonalButton(
-                                    onClick = {
-                                        activeFacing = "front"
-                                        onRequestSnapshot("front")
-                                    },
-                                    enabled = !isCapturing,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    if (isCapturing && activeFacing == "front") {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Capturing...", style = MaterialTheme.typography.labelSmall)
-                                    } else {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Front Selfie")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (!statusMessage.isNullOrEmpty()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.CameraAlt,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
-                        val isError = statusMessage.contains("Failed", ignoreCase = true) ||
-                                      statusMessage.contains("Error", ignoreCase = true) ||
-                                      statusMessage.contains("not respond", ignoreCase = true)
-                        val isSuccess = statusMessage.contains("successfully", ignoreCase = true) ||
-                                        statusMessage.contains("received", ignoreCase = true)
-
-                        val containerColor = when {
-                            isError -> MaterialTheme.colorScheme.errorContainer
-                            isSuccess -> androidx.compose.ui.graphics.Color(0xFFE8F5E9)
-                            else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                        }
-                        val contentColor = when {
-                            isError -> MaterialTheme.colorScheme.onErrorContainer
-                            isSuccess -> androidx.compose.ui.graphics.Color(0xFF2E7D32)
-                            else -> MaterialTheme.colorScheme.primary
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = containerColor,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                if (isCapturing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = contentColor
-                                    )
-                                } else if (isSuccess) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = contentColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                } else if (isError) {
-                                    Icon(
-                                        imageVector = Icons.Default.ErrorOutline,
-                                        contentDescription = null,
-                                        tint = contentColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = statusMessage,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = contentColor
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Captured Gallery (${snapshots.size})",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (snapshots.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.CameraAlt,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "No snapshots captured yet.\nTap 'Rear Camera' or 'Front Selfie' above to take a photo.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentPadding = PaddingValues(bottom = 24.dp)
-                        ) {
-                            items(snapshots) { snap ->
-                                val timeStr = remember(snap.timestamp) { snap.timestamp.formatTime() }
-                                Card(
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .clickable { selectedSnapshot = snap }
-                                ) {
-                                    Column(modifier = Modifier.padding(6.dp)) {
-                                        RemoteImage(
-                                            url = snap.downloadUrl,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(140.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                        )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = MaterialTheme.colorScheme.surface
-                                            ) {
-                                                Text(
-                                                    text = if (snap.cameraFacing == "front") "Front" else "Rear",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                            Text(
-                                                text = timeStr,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Text(
+                            text = "No snapshots captured yet.\nTap 'Rear Camera' or 'Front Selfie' above to take a photo.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
-            }
-
-    // Fullscreen Image Preview Zoom Dialog
-    selectedSnapshot?.let { snap ->
-        Dialog(
-            onDismissRequest = { selectedSnapshot = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-        ) {
-            Surface(
-                color = Color.Black,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    RemoteImage(
-                        url = snap.downloadUrl,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    IconButton(
-                        onClick = { selectedSnapshot = null },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .statusBarsPadding()
-                            .padding(16.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(snapshots) { snap ->
+                        val timeStr = remember(snap.timestamp) { snap.timestamp.formatTime() }
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.clickable { selectedSnapshot = snap }
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp)) {
+                                RemoteImage(
+                                    url = snap.downloadUrl,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(140.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Text(
+                                            text = if (snap.cameraFacing == "front") "Front" else "Rear",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = timeStr,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    // Fullscreen Image Preview Zoom Dialog
+    ChildSnapshotZoomDialog(
+        snapshot = selectedSnapshot,
+        onDismiss = { selectedSnapshot = null }
+    )
 }

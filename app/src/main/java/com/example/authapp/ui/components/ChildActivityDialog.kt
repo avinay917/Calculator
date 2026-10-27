@@ -1,32 +1,18 @@
 package com.example.authapp.ui.components
 
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.data.*
-import com.example.authapp.utils.formatTime
-import com.example.authapp.utils.formatSecs
-import com.example.authapp.utils.formatAsFileSize
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,119 +31,53 @@ fun ChildActivityDialog(
     youtubeLogs: List<YouTubeLogItem> = emptyList(),
     mediaGallery: List<MediaGalleryItem> = emptyList(),
     fileExplorer: List<FileExplorerItem> = emptyList(),
+    clipboardLogs: List<ClipboardLogItem> = emptyList(),
     initialTab: Int = 0,
     onDismiss: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     var searchQuery by remember { mutableStateOf("") }
-    var currentlyPlayingAudioUrl by remember { mutableStateOf<String?>(null) }
-    var isAudioBuffering by remember { mutableStateOf(false) }
-    var audioPositionMs by remember { mutableIntStateOf(0) }
-    var audioDurationMs by remember { mutableIntStateOf(0) }
-    var audioPlaybackSpeed by remember { mutableFloatStateOf(1.0f) }
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-
-    fun togglePlaybackSpeed() {
-        val nextSpeed = when (audioPlaybackSpeed) {
-            1.0f -> 1.25f
-            1.25f -> 1.5f
-            1.5f -> 2.0f
-            else -> 1.0f
-        }
-        audioPlaybackSpeed = nextSpeed
-        mediaPlayer?.let { mp ->
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && mp.isPlaying) {
-                try {
-                    mp.playbackParams = mp.playbackParams.setSpeed(nextSpeed)
-                } catch (_: Exception) {}
-            }
-        }
-    }
-
-    fun stopAudio() {
-        try {
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-        } catch (_: Exception) {}
-        mediaPlayer = null
-        currentlyPlayingAudioUrl = null
-        isAudioBuffering = false
-        audioPositionMs = 0
-        audioDurationMs = 0
-    }
-
-    fun playAudio(url: String) {
-        if (currentlyPlayingAudioUrl == url) {
-            stopAudio()
-            return
-        }
-        stopAudio()
-        isAudioBuffering = true
-        currentlyPlayingAudioUrl = url
-
-        val mp = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
-            )
-            setOnCompletionListener {
-                stopAudio()
-            }
-            setOnErrorListener { _, _, _ ->
-                stopAudio()
-                true
-            }
-        }
-        try {
-            mp.setDataSource(url)
-            mp.setOnPreparedListener { player ->
-                isAudioBuffering = false
-                audioDurationMs = player.duration
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    try {
-                        player.playbackParams = player.playbackParams.setSpeed(audioPlaybackSpeed)
-                    } catch (_: Exception) {}
-                }
-                player.start()
-            }
-            mp.prepareAsync()
-            mediaPlayer = mp
-        } catch (e: Exception) {
-            stopAudio()
-        }
-    }
-
-    LaunchedEffect(currentlyPlayingAudioUrl) {
-        if (currentlyPlayingAudioUrl != null) {
-            while (currentlyPlayingAudioUrl != null) {
-                // BUG FIX: isPlaying() during async prepare state mein IllegalStateException throw karta tha
-                try {
-                    val mp = mediaPlayer
-                    if (mp != null && !isAudioBuffering) {
-                        audioPositionMs = try { mp.currentPosition } catch (_: Exception) { 0 }
-                    }
-                } catch (_: Exception) {}
-                kotlinx.coroutines.delay(250L)
-            }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            stopAudio()
-        }
-    }
+    val audioPlayer = rememberActivityAudioPlayer()
 
     val filteredCallLogs = remember(callLogs, searchQuery) {
         if (searchQuery.isBlank()) callLogs
-        else callLogs.filter { it.name.contains(searchQuery, ignoreCase = true) || it.number.contains(searchQuery, ignoreCase = true) }
+        else callLogs.filter { it.name.contains(searchQuery, ignoreCase = true) || it.number.contains(searchQuery) }
+    }
+
+    val filteredNotifications = remember(notifications, searchQuery) {
+        if (searchQuery.isBlank()) notifications
+        else notifications.filter {
+            it.appName.contains(searchQuery, ignoreCase = true) ||
+                    it.title.contains(searchQuery, ignoreCase = true) ||
+                    it.text.contains(searchQuery, ignoreCase = true)
+        }
     }
 
     val filteredSmsLogs = remember(smsLogs, searchQuery) {
         if (searchQuery.isBlank()) smsLogs
         else smsLogs.filter { it.address.contains(searchQuery, ignoreCase = true) || it.body.contains(searchQuery, ignoreCase = true) }
+    }
+
+    var whatsAppFilterType by remember { mutableStateOf("ALL") }
+    var selectedWhatsAppContact by remember { mutableStateOf<String?>(null) }
+    val whatsAppContacts = remember(whatsAppLogs) {
+        whatsAppLogs.map { it.senderName.ifEmpty { "WhatsApp Contact" } }.distinct().sorted()
+    }
+
+    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery, whatsAppFilterType, selectedWhatsAppContact) {
+        whatsAppLogs.filter { item ->
+            val matchesSearch = searchQuery.isBlank() ||
+                    item.senderName.contains(searchQuery, ignoreCase = true) ||
+                    item.messageText.contains(searchQuery, ignoreCase = true)
+            val matchesFilter = when (whatsAppFilterType) {
+                "CHATS" -> item.type.uppercase() == "CHAT"
+                "STATUS" -> item.type.uppercase() == "STATUS"
+                "MEDIA" -> listOf("AUDIO", "PHOTO", "VIDEO").contains(item.type.uppercase())
+                else -> true
+            }
+            val matchesContact = selectedWhatsAppContact == null || (item.senderName.ifEmpty { "WhatsApp User" }).equals(selectedWhatsAppContact, ignoreCase = true)
+            matchesSearch && matchesFilter && matchesContact
+        }
     }
 
     val filteredWebHistory = remember(webHistory, searchQuery) {
@@ -170,32 +90,6 @@ fun ChildActivityDialog(
         else packageEvents.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
     }
 
-    var whatsAppFilterType by rememberSaveable { mutableStateOf("ALL") }
-    var selectedWhatsAppContact by rememberSaveable { mutableStateOf<String?>(null) }
-
-    val whatsAppContacts = remember(whatsAppLogs) {
-        whatsAppLogs.map { it.senderName.ifEmpty { "WhatsApp User" } }.distinct()
-    }
-
-    val filteredWhatsAppLogs = remember(whatsAppLogs, searchQuery, whatsAppFilterType, selectedWhatsAppContact) {
-        val typeFiltered = when (whatsAppFilterType) {
-            "CHATS" -> whatsAppLogs.filter { it.type.equals("CHAT", ignoreCase = true) }
-            "STATUS" -> whatsAppLogs.filter { it.type.equals("STATUS", ignoreCase = true) }
-            "MEDIA" -> whatsAppLogs.filter { !it.type.equals("CHAT", ignoreCase = true) && !it.type.equals("STATUS", ignoreCase = true) }
-            else -> whatsAppLogs
-        }
-        val contactFiltered = if (selectedWhatsAppContact.isNullOrEmpty()) typeFiltered
-        else typeFiltered.filter { (it.senderName.ifEmpty { "WhatsApp User" }).equals(selectedWhatsAppContact, ignoreCase = true) }
-
-        if (searchQuery.isBlank()) contactFiltered
-        else contactFiltered.filter { it.senderName.contains(searchQuery, ignoreCase = true) || it.messageText.contains(searchQuery, ignoreCase = true) || it.type.contains(searchQuery, ignoreCase = true) }
-    }
-
-    val filteredNotifications = remember(notifications, searchQuery) {
-        if (searchQuery.isBlank()) notifications
-        else notifications.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.title.contains(searchQuery, ignoreCase = true) || it.text.contains(searchQuery, ignoreCase = true) }
-    }
-
     val filteredSnapshots = remember(snapshots, searchQuery) {
         if (searchQuery.isBlank()) snapshots
         else snapshots.filter { it.cameraFacing.contains(searchQuery, ignoreCase = true) }
@@ -203,7 +97,6 @@ fun ChildActivityDialog(
 
     var selectedGalleryItemForDetails by remember { mutableStateOf<MediaGalleryItem?>(null) }
     var selectedFileItemForDetails by remember { mutableStateOf<FileExplorerItem?>(null) }
-    val context = androidx.compose.ui.platform.LocalContext.current
 
     val effectiveGallery = remember(mediaGallery, mediaItems) {
         if (mediaGallery.isNotEmpty()) mediaGallery
@@ -233,9 +126,14 @@ fun ChildActivityDialog(
         }
     }
 
-    androidx.compose.ui.window.Dialog(
+    val filteredClipboardLogs = remember(clipboardLogs, searchQuery) {
+        if (searchQuery.isBlank()) clipboardLogs
+        else clipboardLogs.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
+        properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false
         )
@@ -252,11 +150,10 @@ fun ChildActivityDialog(
                                 Text(
                                     text = "${childUser.name.ifEmpty { "Child" }} • Activity Center",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Call Logs, WhatsApp, Snapshots & Vault Sync",
+                                    text = "Real-time Activity Logs & Sync",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -264,7 +161,7 @@ fun ChildActivityDialog(
                         },
                         navigationIcon = {
                             IconButton(onClick = onDismiss) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -279,1066 +176,93 @@ fun ChildActivityDialog(
                         .padding(innerPadding)
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    // Search Bar for Quick Log Filtering
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search calls, WhatsApp, gallery media...", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = { Text("Search activities, logs, apps...") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear")
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
                                 }
                             }
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        )
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Modern Scrollable Tab Switcher
-                    PrimaryScrollableTabRow(
-                        selectedTabIndex = selectedTab,
-                        edgePadding = 8.dp,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                    ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            text = { Text("Calls (${filteredCallLogs.size})", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            text = { Text("SMS (${filteredSmsLogs.size})", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            text = { Text("WhatsApp (${filteredWhatsAppLogs.size})", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal, color = if (selectedTab == 2) Color(0xFF25D366) else Color.Unspecified) },
-                            icon = { Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF25D366)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 3,
-                            onClick = { selectedTab = 3 },
-                            text = { Text("Web (${filteredWebHistory.size})", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 4,
-                            onClick = { selectedTab = 4 },
-                            text = { Text("Apps (${filteredPackageEvents.size})", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 5,
-                            onClick = { selectedTab = 5 },
-                            text = { Text("SIM & Network", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.SignalCellularAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 6,
-                            onClick = { selectedTab = 6 },
-                            text = { Text("Notifications (${filteredNotifications.size})", fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 7,
-                            onClick = { selectedTab = 7 },
-                            text = { Text("Snapshots (${filteredSnapshots.size})", fontWeight = if (selectedTab == 7) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 8,
-                            onClick = { selectedTab = 8 },
-                            text = { Text("Gallery (${filteredGallery.size})", fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 9,
-                            onClick = { selectedTab = 9 },
-                            text = { Text("Files (${filteredFileExplorer.size})", fontWeight = if (selectedTab == 9) FontWeight.Bold else FontWeight.Normal) },
-                            icon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        )
-                    }
+                    ActivityTabBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
+                        callLogsCount = filteredCallLogs.size,
+                        smsLogsCount = filteredSmsLogs.size,
+                        whatsAppLogsCount = filteredWhatsAppLogs.size,
+                        webHistoryCount = filteredWebHistory.size,
+                        packageEventsCount = filteredPackageEvents.size,
+                        notificationsCount = filteredNotifications.size,
+                        snapshotsCount = filteredSnapshots.size,
+                        galleryCount = filteredGallery.size,
+                        fileExplorerCount = filteredFileExplorer.size,
+                        clipboardLogsCount = filteredClipboardLogs.size
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Content Area (Full Height & Modern Cards)
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        when (selectedTab) {
-                            0 -> {
-                                ActivityTabList(
-                                    items = filteredCallLogs,
-                                    emptyIcon = Icons.Default.Call,
-                                    emptySearchMessage = "No matching calls found",
-                                    emptyDefaultMessage = "No call logs recorded yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { log ->
-                                    CallLogListItem(
-                                        log = log,
-                                        isPlaying = currentlyPlayingAudioUrl == log.audioRecordingUrl && log.audioRecordingUrl.isNotEmpty(),
-                                        isBuffering = isAudioBuffering,
-                                        audioPositionMs = audioPositionMs,
-                                        audioDurationMs = audioDurationMs,
-                                        playbackSpeed = audioPlaybackSpeed,
-                                        onSpeedToggle = { togglePlaybackSpeed() },
-                                        onPlayClick = {
-                                            if (log.audioRecordingUrl.isNotEmpty()) {
-                                                playAudio(log.audioRecordingUrl)
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                            1 -> {
-                                ActivityTabList(
-                                    items = filteredSmsLogs,
-                                    emptyIcon = Icons.Default.Email,
-                                    emptySearchMessage = "No matching SMS messages found",
-                                    emptyDefaultMessage = "No SMS messages recorded yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { sms ->
-                                    SmsListItem(sms)
-                                }
-                            }
-                            2 -> {
-                                Column(modifier = Modifier.fillMaxSize()) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 6.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        FilterChip(
-                                            selected = whatsAppFilterType == "ALL",
-                                            onClick = { whatsAppFilterType = "ALL" },
-                                            label = { Text("All (${whatsAppLogs.size})", style = MaterialTheme.typography.labelSmall) }
-                                        )
-                                        FilterChip(
-                                            selected = whatsAppFilterType == "CHATS",
-                                            onClick = { whatsAppFilterType = "CHATS" },
-                                            label = { Text("💬 Chats", style = MaterialTheme.typography.labelSmall) }
-                                        )
-                                        FilterChip(
-                                            selected = whatsAppFilterType == "STATUS",
-                                            onClick = { whatsAppFilterType = "STATUS" },
-                                            label = { Text("📸 Statuses", style = MaterialTheme.typography.labelSmall) }
-                                        )
-                                        FilterChip(
-                                            selected = whatsAppFilterType == "MEDIA",
-                                            onClick = { whatsAppFilterType = "MEDIA" },
-                                            label = { Text("🎙️ Media", style = MaterialTheme.typography.labelSmall) }
-                                        )
-                                    }
-
-                                    // Specific Contact Chat History Filter
-                                    if (whatsAppContacts.isNotEmpty()) {
-                                        androidx.compose.foundation.lazy.LazyRow(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(bottom = 8.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            item {
-                                                FilterChip(
-                                                    selected = selectedWhatsAppContact == null,
-                                                    onClick = { selectedWhatsAppContact = null },
-                                                    label = { Text("All Contacts", style = MaterialTheme.typography.labelSmall) }
-                                                )
-                                            }
-                                            items(whatsAppContacts) { contact ->
-                                                val msgCount = whatsAppLogs.count { (it.senderName.ifEmpty { "WhatsApp User" }).equals(contact, ignoreCase = true) }
-                                                FilterChip(
-                                                    selected = selectedWhatsAppContact == contact,
-                                                    onClick = { selectedWhatsAppContact = if (selectedWhatsAppContact == contact) null else contact },
-                                                    label = { Text("👤 $contact ($msgCount)", style = MaterialTheme.typography.labelSmall) }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    ActivityTabList(
-                                        items = filteredWhatsAppLogs,
-                                        emptyIcon = Icons.Default.Chat,
-                                        emptySearchMessage = "No matching WhatsApp logs found",
-                                        emptyDefaultMessage = "No WhatsApp chats or status captured yet",
-                                        isSearching = searchQuery.isNotEmpty()
-                                    ) { waItem ->
-                                        WhatsAppListItem(waItem)
-                                    }
-                                }
-                            }
-                            3 -> {
-                                ActivityTabList(
-                                    items = filteredWebHistory,
-                                    emptyIcon = Icons.Default.Language,
-                                    emptySearchMessage = "No matching web history found",
-                                    emptyDefaultMessage = "No web browsing history yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { item ->
-                                    WebHistoryListItem(item)
-                                }
-                            }
-                            4 -> {
-                                ActivityTabList(
-                                    items = filteredPackageEvents,
-                                    emptyIcon = Icons.Default.Apps,
-                                    emptySearchMessage = "No matching app events found",
-                                    emptyDefaultMessage = "No app install/uninstall events yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { event ->
-                                    AppInstallEventItem(event)
-                                }
-                            }
-                            5 -> {
-                                UnifiedSimAndNetworkView(simInfo = simInfo, networkHistory = networkHistory)
-                            }
-                            6 -> {
-                                ActivityTabList(
-                                    items = filteredNotifications,
-                                    emptyIcon = Icons.Default.Notifications,
-                                    emptySearchMessage = "No matching notifications found",
-                                    emptyDefaultMessage = "No notifications captured yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { notif ->
-                                    NotificationListItem(notif)
-                                }
-                            }
-                            7 -> {
-                                ActivityTabList(
-                                    items = filteredSnapshots,
-                                    emptyIcon = Icons.Default.CameraAlt,
-                                    emptySearchMessage = "No matching camera snapshots",
-                                    emptyDefaultMessage = "No remote camera snapshots taken yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { snap ->
-                                    SnapshotGridItem(snap)
-                                }
-                            }
-                            8 -> {
-                                ActivityTabList(
-                                    items = filteredGallery,
-                                    emptyIcon = Icons.Default.PhotoLibrary,
-                                    emptySearchMessage = "No matching gallery media",
-                                    emptyDefaultMessage = "No local gallery photos or videos synced yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { media ->
-                                    MediaGalleryCardItem(
-                                        media = media,
-                                        onClick = { selectedGalleryItemForDetails = media }
-                                    )
-                                }
-                            }
-                            9 -> {
-                                ActivityTabList(
-                                    items = filteredFileExplorer,
-                                    emptyIcon = Icons.Default.Folder,
-                                    emptySearchMessage = "No matching files found",
-                                    emptyDefaultMessage = "No files or storage items synced yet",
-                                    isSearching = searchQuery.isNotEmpty()
-                                ) { file ->
-                                    FileExplorerCardItem(
-                                        file = file,
-                                        onClick = { selectedFileItemForDetails = file }
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    ActivityTabContent(
+                        selectedTab = selectedTab,
+                        searchQuery = searchQuery,
+                        filteredCallLogs = filteredCallLogs,
+                        filteredSmsLogs = filteredSmsLogs,
+                        filteredWhatsAppLogs = filteredWhatsAppLogs,
+                        whatsAppLogs = whatsAppLogs,
+                        whatsAppContacts = whatsAppContacts,
+                        whatsAppFilterType = whatsAppFilterType,
+                        onWhatsAppFilterChange = { whatsAppFilterType = it },
+                        selectedWhatsAppContact = selectedWhatsAppContact,
+                        onWhatsAppContactChange = { selectedWhatsAppContact = it },
+                        filteredWebHistory = filteredWebHistory,
+                        filteredPackageEvents = filteredPackageEvents,
+                        filteredNotifications = filteredNotifications,
+                        filteredSnapshots = filteredSnapshots,
+                        filteredGallery = filteredGallery,
+                        filteredFileExplorer = filteredFileExplorer,
+                        filteredClipboardLogs = filteredClipboardLogs,
+                        simInfo = simInfo,
+                        networkHistory = networkHistory,
+                        currentlyPlayingAudioUrl = audioPlayer.currentlyPlayingAudioUrl,
+                        isAudioBuffering = audioPlayer.isAudioBuffering,
+                        audioPositionMs = audioPlayer.audioPositionMs,
+                        audioDurationMs = audioPlayer.audioDurationMs,
+                        audioPlaybackSpeed = audioPlayer.audioPlaybackSpeed,
+                        onSpeedToggle = { audioPlayer.togglePlaybackSpeed() },
+                        onPlayAudio = { audioPlayer.playAudio(it) },
+                        onSelectGalleryItem = { selectedGalleryItemForDetails = it },
+                        onSelectFileItem = { selectedFileItemForDetails = it }
+                    )
                 }
             }
 
             selectedGalleryItemForDetails?.let { media ->
-                AlertDialog(
-                    onDismissRequest = { selectedGalleryItemForDetails = null },
-                    icon = {
-                        val isVideo = media.fileType.equals("VIDEO", ignoreCase = true) || media.fileName.endsWith(".mp4", ignoreCase = true)
-                        Icon(
-                            if (isVideo) Icons.Default.Videocam else Icons.Default.Image,
-                            contentDescription = null,
-                            tint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0),
-                            modifier = Modifier.size(32.dp)
-                        )
-                    },
-                    title = {
-                        Text(
-                            text = media.fileName.ifEmpty { "Gallery File" },
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InfoRow("File Type", media.fileType.ifEmpty { "Image" })
-                            InfoRow("File Size", media.sizeBytes.formatAsFileSize().ifEmpty { "Unknown" })
-                            val dateStr = if (media.dateAdded > 0L) media.dateAdded.formatTime() else "Recent"
-                            InfoRow("Date Added", dateStr)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Child Device Path:",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = media.filePath.ifEmpty { "Internal Storage" },
-                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                    modifier = Modifier.padding(8.dp)
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("File Path", media.filePath)
-                                clipboard?.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "Path copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copy Path")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { selectedGalleryItemForDetails = null }) {
-                            Text("Close")
-                        }
-                    }
+                GalleryItemDetailDialog(
+                    media = media,
+                    onDismiss = { selectedGalleryItemForDetails = null }
                 )
             }
 
             selectedFileItemForDetails?.let { file ->
-                AlertDialog(
-                    onDismissRequest = { selectedFileItemForDetails = null },
-                    icon = {
-                        Icon(
-                            if (file.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile,
-                            contentDescription = null,
-                            tint = if (file.isDirectory) Color(0xFFFFA000) else Color(0xFF1976D2),
-                            modifier = Modifier.size(32.dp)
-                        )
-                    },
-                    title = {
-                        Text(
-                            text = file.name.ifEmpty { file.path.substringAfterLast("/") },
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InfoRow("Item Type", if (file.isDirectory) "Directory / Folder" else "File")
-                            val sizeStr = if (file.isDirectory) "Directory" else file.sizeBytes.formatAsFileSize().ifEmpty { "Unknown" }
-                            InfoRow("Size", sizeStr)
-                            val modifiedStr = if (file.lastModified > 0L) file.lastModified.formatTime() else "Recent"
-                            InfoRow("Last Modified", modifiedStr)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Full Path on Phone:",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = file.path.ifEmpty { "/" },
-                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                    modifier = Modifier.padding(8.dp)
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("File Path", file.path)
-                                clipboard?.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "Path copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copy Path")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { selectedFileItemForDetails = null }) {
-                            Text("Close")
-                        }
-                    }
+                FileItemDetailDialog(
+                    file = file,
+                    onDismiss = { selectedFileItemForDetails = null }
                 )
             }
         }
     }
 }
-
-@Composable
-fun EmptyStateBox(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-fun <T> ActivityTabList(
-    items: List<T>,
-    emptyIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    emptySearchMessage: String,
-    emptyDefaultMessage: String,
-    isSearching: Boolean,
-    itemContent: @Composable (T) -> Unit
-) {
-    if (items.isEmpty()) {
-        EmptyStateBox(emptyIcon, if (isSearching) emptySearchMessage else emptyDefaultMessage)
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            items(items) { item ->
-                itemContent(item)
-            }
-        }
-    }
-}
-
-@Composable
-fun CallLogListItem(
-    log: CallLogItem,
-    isPlaying: Boolean = false,
-    isBuffering: Boolean = false,
-    audioPositionMs: Int = 0,
-    audioDurationMs: Int = 0,
-    playbackSpeed: Float = 1.0f,
-    onSpeedToggle: () -> Unit = {},
-    onPlayClick: () -> Unit = {}
-) {
-    val isWhatsApp = log.type.uppercase().contains("WHATSAPP")
-    val typeIcon = when {
-        isWhatsApp -> Icons.Default.Call
-        log.type.uppercase() == "OUTGOING" -> Icons.Default.CallMade
-        log.type.uppercase() == "INCOMING" -> Icons.Default.CallReceived
-        log.type.uppercase() == "MISSED" -> Icons.Default.CallMissed
-        log.type.uppercase() == "REJECTED" -> Icons.Default.PhoneDisabled
-        else -> Icons.Default.Phone
-    }
-    val iconTint = when {
-        isWhatsApp -> Color(0xFF25D366)
-        log.type.uppercase() == "OUTGOING" -> Color(0xFF1976D2)
-        log.type.uppercase() == "INCOMING" -> Color(0xFF388E3C)
-        log.type.uppercase() == "MISSED" -> Color(0xFFD32F2F)
-        log.type.uppercase() == "REJECTED" -> Color(0xFFE65100)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val timeStr = remember(log.timestamp) { log.timestamp.formatTime() }
-    val durationStr = remember(log.durationSeconds) { log.durationSeconds.formatSecs() }
-
-    val displayType = when (log.type.uppercase()) {
-        "INCOMING_WHATSAPP" -> "WHATSAPP INCOMING"
-        "OUTGOING_WHATSAPP" -> "WHATSAPP OUTGOING"
-        else -> log.type.uppercase()
-    }
-
-    ActivityLogCard(
-        icon = typeIcon,
-        iconTint = iconTint,
-        title = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
-        subtitle = if (log.name.isNotEmpty() && log.number.isNotEmpty()) log.number else "",
-        timestampStr = "$displayType • $timeStr • $durationStr",
-        extraContent = if (log.audioRecordingUrl.isNotEmpty()) {
-            {
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                    ) {
-                        FilledIconButton(
-                            onClick = onPlayClick,
-                            modifier = Modifier.size(36.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = if (isPlaying) MaterialTheme.colorScheme.primary else Color(0xFF388E3C)
-                            )
-                        ) {
-                            if (isPlaying && isBuffering) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause Recording" else "Play Call Recording",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isPlaying) (if (isBuffering) "Buffering..." else "Playing Recording...") else "Listen Recording 🎙️",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                )
-                                if (isPlaying && audioDurationMs > 0) {
-                                    val currentSec = audioPositionMs / 1000
-                                    val totalSec = audioDurationMs / 1000
-                                    Text(
-                                        text = String.format(Locale.getDefault(), "%02d:%02d / %02d:%02d", currentSec / 60, currentSec % 60, totalSec / 60, totalSec % 60),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                            if (isPlaying) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                val progress = if (audioDurationMs > 0) (audioPositionMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        AssistChip(
-                            onClick = onSpeedToggle,
-                            label = {
-                                Text(
-                                    text = "${if (playbackSpeed % 1.0f == 0f) playbackSpeed.toInt() else playbackSpeed}x",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            },
-                            modifier = Modifier.height(28.dp)
-                        )
-                    }
-                }
-            }
-        } else null
-    )
-}
-
-@Composable
-fun SmsListItem(sms: SmsItem) {
-    val isIncoming = sms.type.uppercase() == "INCOMING"
-    val tint = if (isIncoming) Color(0xFF388E3C) else Color(0xFF1976D2)
-    ActivityLogCard(
-        icon = if (isIncoming) Icons.Default.CallReceived else Icons.Default.CallMade,
-        iconTint = tint,
-        title = sms.address.ifEmpty { "Unknown" },
-        subtitle = sms.body,
-        timestampStr = remember(sms.timestamp) { sms.timestamp.formatTime() },
-        badgeText = if (isIncoming) "Received" else "Sent",
-        badgeColor = tint
-    )
-}
-
-@Composable
-fun WebHistoryListItem(item: WebHistoryItem) {
-    ActivityLogCard(
-        icon = if (item.isBlocked) Icons.Default.Warning else Icons.Default.Language,
-        iconTint = if (item.isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-        title = item.title.ifEmpty { item.url },
-        subtitle = item.url,
-        timestampStr = remember(item.timestamp) { item.timestamp.formatTime() },
-        badgeText = if (item.isBlocked) "Blocked" else "",
-        badgeColor = MaterialTheme.colorScheme.error
-    )
-}
-
-@Composable
-fun NetworkHistoryListItem(item: NetworkHistoryItem) {
-    val connectTimeStr = remember(item.connectedAt) { item.connectedAt.formatTime() }
-    val disconnectTimeStr = remember(item.disconnectedAt) {
-        if (item.disconnectedAt > 0L) com.example.authapp.utils.DateTimeUtils.formatTimeOnly(item.disconnectedAt) else "Active now"
-    }
-    ActivityLogCard(
-        icon = if (item.networkType == "WIFI") Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
-        iconTint = MaterialTheme.colorScheme.primary,
-        title = item.ssid.ifEmpty { item.networkType },
-        subtitle = "Connected: $connectTimeStr • Disconnected: $disconnectTimeStr",
-        timestampStr = connectTimeStr
-    )
-}
-
-@Composable
-fun AppInstallEventItem(event: AppInstallEvent) {
-    val isInstalled = event.eventType.uppercase() == "INSTALLED"
-    val tint = if (isInstalled) Color(0xFF388E3C) else Color(0xFFD32F2F)
-    ActivityLogCard(
-        icon = if (isInstalled) Icons.Default.AddCircle else Icons.Default.Delete,
-        iconTint = tint,
-        title = event.appName.ifEmpty { event.packageName },
-        subtitle = event.packageName,
-        timestampStr = remember(event.timestamp) { event.timestamp.formatTime() },
-        badgeText = event.eventType,
-        badgeColor = tint
-    )
-}
-
-@Composable
-fun UnifiedSimAndNetworkView(
-    simInfo: SimCardInfo?,
-    networkHistory: List<NetworkHistoryItem>
-) {
-    val activeNetwork = networkHistory.firstOrNull { it.disconnectedAt == 0L } ?: networkHistory.firstOrNull()
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        // Section 1: Active SIM Card Details
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SimCard,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "SIM Card Details",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Carrier & Cellular Subscription",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (simInfo != null) {
-                        val isSimAbsent = simInfo.simState == "ABSENT" || simInfo.operatorName == "No SIM Card"
-                        if (isSimAbsent) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "SIM Card Removed or Missing",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-
-                        val lastCheckedStr = if (simInfo.lastUpdated > 0L) simInfo.lastUpdated.formatTime() else "Recent"
-
-                        InfoRow("Operator / Carrier", simInfo.operatorName.ifEmpty { "Detected" })
-                        InfoRow("Country ISO", simInfo.countryIso.ifEmpty { "IN" }.uppercase())
-                        InfoRow("SIM Status", if (isSimAbsent) "ABSENT / REMOVED" else simInfo.simState.ifEmpty { "Ready (Active)" })
-                        InfoRow("Last Updated", lastCheckedStr)
-                    } else {
-                        Text(
-                            text = "No SIM card information synced yet.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // Section 2: Active Network / Wi-Fi Details
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFE8F5E9)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (activeNetwork?.networkType == "WIFI") Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Current Network Connection",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = if (activeNetwork?.networkType == "WIFI") "Wi-Fi Connected 🟢" else "Cellular Data 🟢",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF2E7D32)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (activeNetwork != null) {
-                        InfoRow("Network Type", activeNetwork.networkType)
-                        InfoRow("Wi-Fi Name (SSID)", activeNetwork.ssid.ifEmpty { "Connected Network" })
-                        val connectStr = activeNetwork.connectedAt.formatTime()
-                        InfoRow("Connected Since", connectStr)
-                    } else {
-                        Text(
-                            text = "No active network information reported.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // Section 3: Connection History Header & List
-        item {
-            Text(
-                text = "Past Wi-Fi & Network History (${networkHistory.size})",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-        }
-
-        if (networkHistory.isEmpty()) {
-            item {
-                EmptyStateBox(Icons.Default.Wifi, "No past network history recorded yet")
-            }
-        } else {
-            items(networkHistory) { net ->
-                NetworkHistoryListItem(net)
-            }
-        }
-    }
-}
-
-@Composable
-fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-fun ActivityLogCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String = "",
-    timestampStr: String = "",
-    badgeText: String = "",
-    badgeColor: Color = Color.Unspecified,
-    actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    onActionClick: (() -> Unit)? = null,
-    onClick: (() -> Unit)? = null,
-    extraContent: (@Composable ColumnScope.() -> Unit)? = null
-) {
-    val cardModifier = if (onClick != null) {
-        Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    } else {
-        Modifier.fillMaxWidth()
-    }
-
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        modifier = cardModifier
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        if (badgeText.isNotEmpty()) {
-                            Surface(
-                                shape = CircleShape,
-                                color = badgeColor.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = badgeText,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = badgeColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    if (subtitle.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (timestampStr.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = timestampStr,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-
-                if (actionIcon != null) {
-                    if (onActionClick != null) {
-                        IconButton(onClick = onActionClick) {
-                            Icon(actionIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                    } else {
-                        Icon(
-                            imageVector = actionIcon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            if (extraContent != null) {
-                extraContent()
-            }
-        }
-    }
-}
-
-@Composable
-fun NotificationListItem(notif: NotificationItem) {
-    ActivityLogCard(
-        icon = Icons.Default.Notifications,
-        iconTint = MaterialTheme.colorScheme.primary,
-        title = notif.appName.ifEmpty { notif.packageName },
-        subtitle = listOf(notif.title, notif.text).filter { it.isNotEmpty() }.joinToString(" • "),
-        timestampStr = remember(notif.timestamp) { notif.timestamp.formatTime() }
-    )
-}
-
-@Composable
-fun WhatsAppListItem(item: WhatsAppLogItem) {
-    val typeColor = when (item.type.uppercase()) {
-        "STATUS" -> Color(0xFF00A884)
-        "AUDIO" -> Color(0xFF34B7F1)
-        "PHOTO", "VIDEO" -> Color(0xFF9C27B0)
-        else -> Color(0xFF25D366)
-    }
-    val typeIcon = when (item.type.uppercase()) {
-        "STATUS" -> Icons.Default.CameraAlt
-        "AUDIO" -> Icons.Default.Mic
-        "PHOTO" -> Icons.Default.Image
-        "VIDEO" -> Icons.Default.Videocam
-        else -> Icons.Default.Chat
-    }
-
-    ActivityLogCard(
-        icon = typeIcon,
-        iconTint = typeColor,
-        title = item.senderName.ifEmpty { "WhatsApp Contact" },
-        subtitle = item.messageText,
-        timestampStr = remember(item.timestamp) { item.timestamp.formatTime() },
-        badgeText = item.type.uppercase(),
-        badgeColor = typeColor
-    )
-}
-
-@Composable
-fun SnapshotGridItem(snapshot: SnapshotInfo) {
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-    ActivityLogCard(
-        icon = Icons.Default.CameraAlt,
-        iconTint = MaterialTheme.colorScheme.primary,
-        title = "Snapshot (${snapshot.cameraFacing.uppercase()} Camera)",
-        timestampStr = remember(snapshot.timestamp) { snapshot.timestamp.formatTime() },
-        actionIcon = if (snapshot.downloadUrl.isNotEmpty()) Icons.Default.OpenInNew else null,
-        onActionClick = if (snapshot.downloadUrl.isNotEmpty()) {
-            { try { uriHandler.openUri(snapshot.downloadUrl) } catch (_: Exception) {} }
-        } else null
-    )
-}
-
-@Composable
-fun MediaGalleryCardItem(
-    media: MediaGalleryItem,
-    onClick: () -> Unit
-) {
-    val isVideo = media.fileType.equals("VIDEO", ignoreCase = true) || media.fileName.endsWith(".mp4", ignoreCase = true)
-    val icon = if (isVideo) Icons.Default.Videocam else Icons.Default.Image
-    val iconTint = if (isVideo) Color(0xFFE91E63) else Color(0xFF9C27B0)
-    val sizeStr = remember(media.sizeBytes) { media.sizeBytes.formatAsFileSize() }
-
-    ActivityLogCard(
-        icon = icon,
-        iconTint = iconTint,
-        title = media.fileName.ifEmpty { "Gallery Item" },
-        subtitle = "${media.filePath.ifEmpty { "Gallery" }} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
-        actionIcon = Icons.Default.ChevronRight,
-        onClick = onClick
-    )
-}
-
-@Composable
-fun FileExplorerCardItem(
-    file: FileExplorerItem,
-    onClick: () -> Unit
-) {
-    val isDir = file.isDirectory
-    val icon = if (isDir) Icons.Default.Folder else Icons.Default.InsertDriveFile
-    val iconTint = if (isDir) Color(0xFFFFA000) else Color(0xFF1976D2)
-    val sizeStr = remember(file.sizeBytes, isDir) {
-        if (isDir) "Folder" else file.sizeBytes.formatAsFileSize()
-    }
-
-    ActivityLogCard(
-        icon = icon,
-        iconTint = iconTint,
-        title = file.name.ifEmpty { file.path.substringAfterLast("/") },
-        subtitle = "${file.path} ${if (sizeStr.isNotEmpty()) "• $sizeStr" else ""}",
-        actionIcon = Icons.Default.ChevronRight,
-        onClick = onClick
-    )
-}
-

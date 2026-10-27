@@ -1,42 +1,23 @@
 package com.example.authapp.ui.components
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.authapp.audio.AudioOutputRoute
 import com.example.authapp.webrtc.WebRtcManager
 import org.webrtc.VideoTrack
-import java.util.Locale
 
 @Composable
 fun LiveStreamDialog(
@@ -81,7 +62,6 @@ fun LiveStreamDialog(
                         eglContext = webRtcManager.eglBase.eglBaseContext,
                         modifier = Modifier.fillMaxSize(),
                         onRendererReleased = {
-                            // EglBase is released AFTER renderer disposal to avoid use-after-free crash
                             webRtcManager.releaseEglBase()
                         }
                     )
@@ -107,405 +87,103 @@ fun LiveStreamDialog(
                     }
                 }
 
-                    // Top Floating Bar with Gradient
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.TopCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.Black.copy(alpha = 0.8f),
-                                        Color.Black.copy(alpha = 0.4f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                            .statusBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close Stream",
-                                    tint = Color.White
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = activeChildName ?: "Child Device",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = streamStatusText,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.75f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            // Compact Quick Record Button (Top Corner)
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isRecording) Color(0xFFDC2626) else Color.Black.copy(alpha = 0.6f),
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { onToggleRecording(if (isVideo) "video" else "audio") }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                        contentDescription = "Quick Record",
-                                        tint = if (isRecording) Color.White else Color.Red,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    val recTimeStr = remember(recordingDurationSeconds) {
-                                        val m = recordingDurationSeconds / 60
-                                        val s = recordingDurationSeconds % 60
-                                        String.format(Locale.getDefault(), "%02d:%02d", m, s)
-                                    }
-                                    Text(
-                                        text = if (isRecording) "REC $recTimeStr" else "REC",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
-                                    )
-                                }
-                            }
+                val isActuallyLive = remoteVideoTrack != null && streamElapsedSeconds > 0
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                // Top Floating Header
+                LiveStreamTopBar(
+                    activeChildName = activeChildName,
+                    streamStatusText = streamStatusText,
+                    streamElapsedSeconds = streamElapsedSeconds,
+                    isActuallyLive = isActuallyLive,
+                    onDismiss = onDismiss,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
 
-                            // Live Elapsed Time Badge (🔴 LIVE 02:45)
-                            val liveElapsedStr = remember(streamElapsedSeconds) {
-                                val m = streamElapsedSeconds / 60
-                                val s = streamElapsedSeconds % 60
-                                String.format(Locale.getDefault(), "%02d:%02d", m, s)
-                            }
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFFE53935)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.White)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = if (streamElapsedSeconds > 0) "LIVE $liveElapsedStr" else "LIVE",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Bottom Floating Glassmorphic Controls Bar
-                    Card(
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B).copy(alpha = 0.85f)),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // Audio Route Chips
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = currentAudioRoute == AudioOutputRoute.SPEAKER,
-                                    onClick = { onAudioRouteSelect(AudioOutputRoute.SPEAKER) },
-                                    label = { Text("Speaker", style = MaterialTheme.typography.labelSmall) },
-                                    leadingIcon = {
-                                        Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                FilterChip(
-                                    selected = currentAudioRoute == AudioOutputRoute.EARPIECE,
-                                    onClick = { onAudioRouteSelect(AudioOutputRoute.EARPIECE) },
-                                    label = { Text("Earpiece", style = MaterialTheme.typography.labelSmall) },
-                                    leadingIcon = {
-                                        Icon(imageVector = Icons.Default.Hearing, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (isBluetoothConnected || currentAudioRoute == AudioOutputRoute.BLUETOOTH) {
-                                    FilterChip(
-                                        selected = currentAudioRoute == AudioOutputRoute.BLUETOOTH,
-                                        onClick = { onAudioRouteSelect(AudioOutputRoute.BLUETOOTH) },
-                                        label = { Text("Bluetooth", style = MaterialTheme.typography.labelSmall) },
-                                        leadingIcon = {
-                                            Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (isHeadsetConnected || currentAudioRoute == AudioOutputRoute.HEADSET) {
-                                    FilterChip(
-                                        selected = currentAudioRoute == AudioOutputRoute.HEADSET,
-                                        onClick = { onAudioRouteSelect(AudioOutputRoute.HEADSET) },
-                                        label = { Text("Wired", style = MaterialTheme.typography.labelSmall) },
-                                        leadingIcon = {
-                                            Icon(imageVector = Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Far-Voice Whisper Boost Slider Row (Video Mode)
-                            var showAudioBoostSlider by remember { mutableStateOf(false) }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = { showAudioBoostSlider = !showAudioBoostSlider },
-                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Tune,
-                                        contentDescription = null,
-                                        tint = Color(0xFF10B981),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Far-Voice Boost: ${WebRtcManager.getGainMultiplierText(audioSensitivity)}",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color(0xFF10B981)
-                                    )
-                                }
-
-                                Text(
-                                    text = if (audioSensitivity >= 95f) "5.0x Ultra Whisper" else if (audioSensitivity >= 50f) "3.0x Far Speech" else "1.0x Normal",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.LightGray
-                                )
-                            }
-
-                            if (showAudioBoostSlider) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    Slider(
-                                        value = audioSensitivity,
-                                        onValueChange = onSensitivityChange,
-                                        valueRange = 10f..100f,
-                                        steps = 8,
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = Color(0xFF10B981),
-                                            activeTrackColor = Color(0xFF10B981)
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        AssistChip(
-                                            onClick = { onSensitivityChange(10f) },
-                                            label = { Text("1.0x Normal", style = MaterialTheme.typography.labelSmall) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        AssistChip(
-                                            onClick = { onSensitivityChange(50f) },
-                                            label = { Text("3.0x Far Speech", style = MaterialTheme.typography.labelSmall) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        AssistChip(
-                                            onClick = { onSensitivityChange(100f) },
-                                            label = { Text("5.0x Whisper", style = MaterialTheme.typography.labelSmall) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Action Buttons Row: Flip, Record, End Call
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                FilledTonalButton(
-                                    onClick = onFlipCamera,
-                                    modifier = Modifier.height(50.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Cameraswitch,
-                                        contentDescription = "Switch Camera Lens",
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = when (cameraMode.lowercase()) {
-                                            "ultrawide", "ultra_wide", "0.5x" -> "0.5x Wide"
-                                            "front" -> "Front"
-                                            else -> "1x Rear"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                }
-
-                                Button(
-                                    onClick = { onToggleRecording("video") },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isRecording) Color.Red else MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(50.dp),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    val recTimeStr = remember(recordingDurationSeconds) {
-                                        val m = recordingDurationSeconds / 60
-                                        val s = recordingDurationSeconds % 60
-                                        String.format(Locale.getDefault(), "%02d:%02d", m, s)
-                                    }
-                                    Text(
-                                        text = if (isRecording) "Stop $recTimeStr" else "Record",
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                }
-
-                                Button(
-                                    onClick = onDismiss,
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                    modifier = Modifier.size(50.dp),
-                                    contentPadding = PaddingValues(0.dp),
-                                    shape = CircleShape
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CallEnd,
-                                        contentDescription = "Disconnect Stream",
-                                        tint = MaterialTheme.colorScheme.onError,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Audio Mode: Fullscreen Ambient Audio Monitor
-                Box(
+                // Bottom Floating Controls
+                LiveStreamControlsBar(
+                    isVideo = true,
+                    onFlipCamera = onFlipCamera,
+                    currentAudioRoute = currentAudioRoute,
+                    isBluetoothConnected = isBluetoothConnected,
+                    onAudioRouteSelect = onAudioRouteSelect,
+                    audioSensitivity = audioSensitivity,
+                    onSensitivityChange = onSensitivityChange,
+                    isRecording = isRecording,
+                    onToggleRecording = onToggleRecording,
+                    onDismiss = onDismiss,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+        } else {
+            // Audio Mode: Fullscreen Ambient Audio Monitor
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(20.dp)
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Header
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onDismiss) {
-                                Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Live Audio Cast",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Text(
-                                    text = activeChildName ?: "Child Device",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        IconButton(onClick = onDismiss) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Audio Monitor Card
-                        LiveAudioMonitorView(
-                            childName = activeChildName ?: "Child",
-                            statusText = streamStatusText,
-                            audioSensitivity = audioSensitivity,
-                            onSensitivityChange = onSensitivityChange,
-                            isRecording = isRecording,
-                            recordingDurationSeconds = recordingDurationSeconds,
-                            onToggleRecording = { onToggleRecording("audio") },
-                            audioLevel = audioLevel,
-                            currentAudioRoute = currentAudioRoute,
-                            isBluetoothConnected = isBluetoothConnected,
-                            isHeadsetConnected = isHeadsetConnected,
-                            onAudioRouteSelect = onAudioRouteSelect
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Button(
-                            onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Disconnect Audio Cast", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Live Audio Cast",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = activeChildName ?: "Child Device",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    LiveAudioMonitorView(
+                        childName = activeChildName ?: "Child",
+                        statusText = streamStatusText,
+                        audioSensitivity = audioSensitivity,
+                        onSensitivityChange = onSensitivityChange,
+                        isRecording = isRecording,
+                        recordingDurationSeconds = recordingDurationSeconds,
+                        onToggleRecording = { onToggleRecording("audio") },
+                        audioLevel = audioLevel,
+                        currentAudioRoute = currentAudioRoute,
+                        isBluetoothConnected = isBluetoothConnected,
+                        isHeadsetConnected = isHeadsetConnected,
+                        onAudioRouteSelect = onAudioRouteSelect
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Disconnect Audio Cast", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
                     }
                 }
             }
         }
     }
+}

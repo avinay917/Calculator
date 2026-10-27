@@ -2,26 +2,42 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Call recordings — only child or their parent can read/write
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isChildOrParent(childId) {
+      return isAuthenticated() && (
+        request.auth.uid == childId ||
+        firestore.get(/databases/(default)/documents/users/$(childId)).data.parentId == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // Call recordings — child, linked parent, or admin can read/write/delete (Max 50MB)
     match /recordings/{childId}/{allPaths=**} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == childId ||
-         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.parentChildId == childId);
-      allow write: if request.auth != null && request.auth.uid == childId;
+      allow read: if isChildOrParent(childId);
+      allow write: if isChildOrParent(childId) && (
+        request.resource == null ||
+        request.resource.size < 50 * 1024 * 1024
+      );
     }
 
-    // Remote camera snapshots — only child device writes, parent reads
+    // Remote camera snapshots — child, linked parent, or admin can read/write/delete (Max 5MB)
     match /snapshots/{childId}/{allPaths=**} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == childId ||
-         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.parentChildId == childId);
-      allow write: if request.auth != null && request.auth.uid == childId;
+      allow read: if isChildOrParent(childId);
+      allow write: if isChildOrParent(childId) && (
+        request.resource == null ||
+        request.resource.size < 5 * 1024 * 1024
+      );
     }
 
-    // App update APK folder: public read, no write from client
+    // App update APK folder: public read, admin write
     match /updates/{allPaths=**} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAuthenticated() &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // Fallback: deny all other storage paths
