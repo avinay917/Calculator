@@ -56,6 +56,15 @@ class App : Application() {
                 firestore.firestoreSettings = settings
             } catch (_: Exception) {}
 
+            // Configure Firebase Storage upload & operation timeout retry cap (30 seconds)
+            // Prevents infinite retry loops on HTTP 402 or network failures
+            try {
+                val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+                storage.maxUploadRetryTimeMillis = 30000L
+                storage.maxOperationRetryTimeMillis = 30000L
+                storage.maxDownloadRetryTimeMillis = 30000L
+            } catch (_: Exception) {}
+
             com.example.authapp.config.RemoteConfigManager.init(this)
             Logger.i(Constants.Logging.TAG_APP, "Firebase initialized with persistence enabled and RemoteConfig initialized")
         } catch (e: Exception) {

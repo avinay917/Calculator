@@ -28,6 +28,11 @@ object FirebaseRepository {
         try {
             database.setPersistenceEnabled(true)
         } catch (_: Exception) {}
+        try {
+            storage.maxUploadRetryTimeMillis = 30000L
+            storage.maxOperationRetryTimeMillis = 30000L
+            storage.maxDownloadRetryTimeMillis = 30000L
+        } catch (_: Exception) {}
     }
 
     inline fun <reified T> listenToChildNode(

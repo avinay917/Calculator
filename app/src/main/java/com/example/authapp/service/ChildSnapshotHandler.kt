@@ -47,6 +47,7 @@ class ChildSnapshotHandler(private val context: Context) {
                     onFailure = { err ->
                         FirebaseCrashlytics.getInstance().log("[ChildService] Snapshot upload error: $err")
                         FirebaseRepository.reportSnapshotError(uid, err)
+                        try { file.delete() } catch (_: Exception) {}
                     }
                 )
             },
