@@ -38,6 +38,7 @@ fun ChildActivityDialog(
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     var searchQuery by remember { mutableStateOf("") }
     val audioPlayer = rememberActivityAudioPlayer()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val filteredCallLogs = remember(callLogs, searchQuery) {
         if (searchQuery.isBlank()) callLogs
@@ -244,6 +245,12 @@ fun ChildActivityDialog(
                         audioPlaybackSpeed = audioPlayer.audioPlaybackSpeed,
                         onSpeedToggle = { audioPlayer.togglePlaybackSpeed() },
                         onPlayAudio = { audioPlayer.playAudio(it) },
+                        onSeekTo = { audioPlayer.seekTo(it) },
+                        onForward = { audioPlayer.forward(10) },
+                        onRewind = { audioPlayer.rewind(10) },
+                        onDownloadAudio = { url, fileName ->
+                            audioPlayer.downloadAudio(context, url, fileName)
+                        },
                         onSelectGalleryItem = { selectedGalleryItemForDetails = it },
                         onSelectFileItem = { selectedFileItemForDetails = it }
                     )

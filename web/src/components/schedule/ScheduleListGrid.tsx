@@ -31,6 +31,10 @@ export default function ScheduleListGrid({
       {schedulesList.map((sched: any) => {
         const hourStr = String(sched.hour ?? 0).padStart(2, "0");
         const minStr = String(sched.minute ?? 0).padStart(2, "0");
+        const rawHour = sched.hour ?? 0;
+        const h12 = rawHour % 12 || 12;
+        const amPm = rawHour >= 12 ? "PM" : "AM";
+        const time12Str = `${h12}:${minStr} ${amPm}`;
         const isSpecificDate = !!sched.targetDate;
         const isSnapshot = sched.captureType === "snapshot";
 
@@ -54,7 +58,7 @@ export default function ScheduleListGrid({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-white font-mono">
-                    {hourStr}:{minStr}
+                    {time12Str}
                   </span>
                   <span className="px-2 py-0.5 bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 rounded text-[10px] font-bold">
                     {sched.durationMinutes || 5} min

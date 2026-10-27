@@ -218,7 +218,11 @@ fun ChildSchedulesView(
                             Spacer(modifier = Modifier.width(12.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                val timeFormatted = String.format(Locale.getDefault(), "%02d:%02d", schedule.hour, schedule.minute)
+                                val h = if (schedule.hour == 0) 12 else if (schedule.hour > 12) schedule.hour - 12 else schedule.hour
+                                val amPm = if (schedule.hour < 12) "AM" else "PM"
+                                val m = String.format(Locale.getDefault(), "%02d", schedule.minute)
+                                val timeFormatted = "$h:$m $amPm"
+
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = timeFormatted,
@@ -259,9 +263,10 @@ fun ChildSchedulesView(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
 
+                                val dateText = if (schedule.targetDate.isNotBlank()) "📅 Date: ${schedule.targetDate} (One-Time)" else if (schedule.repeatDaily) "🔄 Daily Repeat (Everyday)" else "⏱️ One-Time Today"
                                 Text(
-                                    text = if (schedule.repeatDaily) "Repeat Daily • Silent Offline Capture" else "Scheduled Once • Silent Sync",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    text = dateText,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                     color = if (schedule.isEnabled) accentColor else MaterialTheme.colorScheme.outline
                                 )
                             }

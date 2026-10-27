@@ -318,8 +318,9 @@ fun ScheduleListItem(
                         )
                     }
                 }
+                val dateLabel = if (schedule.targetDate.isNotBlank()) "📅 Date: ${schedule.targetDate}" else if (schedule.repeatDaily) "🔄 Daily Repeat" else "One-Time"
                 Text(
-                    text = "$timeFormatted • ${schedule.durationMinutes} mins • ${if (schedule.repeatDaily) "Daily Silent" else "One-Time Silent"}",
+                    text = "$timeFormatted • ${schedule.durationMinutes} mins • $dateLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

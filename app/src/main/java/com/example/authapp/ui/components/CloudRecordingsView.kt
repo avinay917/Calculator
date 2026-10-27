@@ -40,20 +40,22 @@ fun CloudRecordingsView(
         childUsers.associate { it.uid to it.name.ifEmpty { "Child" } }
     }
 
-    val filteredList = remember(recordings, currentFilter) {
+    val nonCallRecordings = remember(recordings) {
+        recordings.filter { !it.streamType.equals("call", ignoreCase = true) }
+    }
+
+    val filteredList = remember(nonCallRecordings, currentFilter) {
         when (currentFilter) {
-            "CALL" -> recordings.filter { it.streamType.equals("call", ignoreCase = true) }
-            "SCHEDULED" -> recordings.filter {
+            "SCHEDULED" -> nonCallRecordings.filter {
                 it.streamType.equals("scheduled", ignoreCase = true) ||
                     it.localFilePath.contains("scheduled", ignoreCase = true)
             }
-            "LIVE" -> recordings.filter {
-                !it.streamType.equals("call", ignoreCase = true) &&
-                    !it.streamType.equals("scheduled", ignoreCase = true) &&
+            "LIVE" -> nonCallRecordings.filter {
+                !it.streamType.equals("scheduled", ignoreCase = true) &&
                     !it.localFilePath.contains("scheduled", ignoreCase = true) &&
                     !it.streamType.contains("photo", ignoreCase = true)
             }
-            else -> recordings
+            else -> nonCallRecordings
         }
     }
 
@@ -86,12 +88,12 @@ fun CloudRecordingsView(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Cloud Recordings History",
+                    text = "Live & Scheduled Recordings",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "${recordings.size} total recordings synced",
+                    text = "${nonCallRecordings.size} captures • Call audio is in Call History",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -105,14 +107,12 @@ fun CloudRecordingsView(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            val callCount = remember(recordings) { recordings.count { it.streamType.equals("call", ignoreCase = true) } }
-            val schedCount = remember(recordings) { recordings.count { it.streamType.equals("scheduled", ignoreCase = true) || it.localFilePath.contains("scheduled", ignoreCase = true) } }
-            val liveCount = remember(recordings) { recordings.count { !it.streamType.equals("call", ignoreCase = true) && !it.streamType.equals("scheduled", ignoreCase = true) && !it.localFilePath.contains("scheduled", ignoreCase = true) && !it.streamType.contains("photo", ignoreCase = true) } }
+            val schedCount = remember(nonCallRecordings) { nonCallRecordings.count { it.streamType.equals("scheduled", ignoreCase = true) || it.localFilePath.contains("scheduled", ignoreCase = true) } }
+            val liveCount = remember(nonCallRecordings) { nonCallRecordings.count { !it.streamType.equals("scheduled", ignoreCase = true) && !it.localFilePath.contains("scheduled", ignoreCase = true) && !it.streamType.contains("photo", ignoreCase = true) } }
             listOf(
-                Triple("ALL", "All (${recordings.size})", null),
-                Triple("CALL", "Calls ($callCount)", Icons.Default.Call),
-                Triple("SCHEDULED", "Scheduled ($schedCount)", Icons.Default.Schedule),
-                Triple("LIVE", "Live ($liveCount)", Icons.Default.FiberManualRecord)
+                Triple("ALL", "All (${nonCallRecordings.size})", null),
+                Triple("LIVE", "Live Streams ($liveCount)", Icons.Default.FiberManualRecord),
+                Triple("SCHEDULED", "Scheduled ($schedCount)", Icons.Default.Schedule)
             ).forEach { (key, label, icon) ->
                 FilterChip(
                     selected = currentFilter == key,

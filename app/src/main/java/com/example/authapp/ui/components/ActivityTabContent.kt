@@ -40,6 +40,10 @@ fun ActivityTabContent(
     audioPlaybackSpeed: Float,
     onSpeedToggle: () -> Unit,
     onPlayAudio: (String) -> Unit,
+    onSeekTo: (Int) -> Unit = {},
+    onForward: () -> Unit = {},
+    onRewind: () -> Unit = {},
+    onDownloadAudio: (String, String) -> Unit = { _, _ -> },
     onSelectGalleryItem: (MediaGalleryItem) -> Unit,
     onSelectFileItem: (FileExplorerItem) -> Unit
 ) {
@@ -64,6 +68,15 @@ fun ActivityTabContent(
                         onPlayClick = {
                             if (log.audioRecordingUrl.isNotEmpty()) {
                                 onPlayAudio(log.audioRecordingUrl)
+                            }
+                        },
+                        onSeekTo = onSeekTo,
+                        onForward = onForward,
+                        onRewind = onRewind,
+                        onDownloadClick = {
+                            if (log.audioRecordingUrl.isNotEmpty()) {
+                                val caller = log.name.ifEmpty { log.number.ifEmpty { "Call" } }
+                                onDownloadAudio(log.audioRecordingUrl, "Call_${caller}_${log.timestamp}.m4a")
                             }
                         }
                     )

@@ -29,7 +29,11 @@ fun CallLogListItem(
     audioDurationMs: Int = 0,
     playbackSpeed: Float = 1.0f,
     onSpeedToggle: () -> Unit = {},
-    onPlayClick: () -> Unit = {}
+    onPlayClick: () -> Unit = {},
+    onSeekTo: (Int) -> Unit = {},
+    onForward: () -> Unit = {},
+    onRewind: () -> Unit = {},
+    onDownloadClick: () -> Unit = {}
 ) {
     val isWhatsApp = log.type.uppercase().contains("WHATSAPP")
     val typeIcon = when {
@@ -57,82 +61,146 @@ fun CallLogListItem(
         else -> log.type.uppercase()
     }
 
+    val callerTitle = if (log.name.isNotBlank()) log.name else if (log.number.isNotBlank()) log.number else "Unknown Caller"
+    val callerSubtitle = if (log.name.isNotBlank() && log.number.isNotBlank() && log.name != log.number) {
+        "📞 ${log.number} • ⏱️ $durationStr"
+    } else {
+        "⏱️ Duration: $durationStr"
+    }
+
     ActivityLogCard(
         icon = typeIcon,
         iconTint = iconTint,
-        title = log.name.ifEmpty { log.number.ifEmpty { "Unknown Caller" } },
-        subtitle = listOf(log.number.takeIf { it.isNotEmpty() && it != log.name }, durationStr).filterNotNull().joinToString(" • "),
+        title = callerTitle,
+        subtitle = callerSubtitle,
         timestampStr = timeStr,
         badgeText = displayType,
         badgeColor = iconTint,
         extraContent = if (log.audioRecordingUrl.isNotEmpty()) {
             {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        IconButton(onClick = onPlayClick, modifier = Modifier.size(36.dp)) {
-                            if (isBuffering) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                            } else {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
+                        // Title row: Playing Status & Download button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (isPlaying) (if (isBuffering) "⏳ Buffering..." else "🎙️ Playing Call Audio") else "🎙️ Call Recording Available",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Download Icon Button
+                                IconButton(
+                                    onClick = onDownloadClick,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = "Download Recording",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Playback Speed
+                                AssistChip(
+                                    onClick = onSpeedToggle,
+                                    label = {
+                                        Text(
+                                            text = "${if (playbackSpeed % 1.0f == 0f) playbackSpeed.toInt() else playbackSpeed}x",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                    },
+                                    modifier = Modifier.height(26.dp)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isPlaying) (if (isBuffering) "Buffering..." else "Playing Recording...") else "Listen Recording 🎙️",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        // Seekbar (Slider)
+                        if (isPlaying && audioDurationMs > 0) {
+                            Slider(
+                                value = audioPositionMs.toFloat().coerceIn(0f, audioDurationMs.toFloat()),
+                                onValueChange = { onSeekTo(it.toInt()) },
+                                valueRange = 0f..audioDurationMs.toFloat(),
+                                modifier = Modifier.fillMaxWidth().height(24.dp),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary
                                 )
-                                if (isPlaying && audioDurationMs > 0) {
-                                    Text(
-                                        text = "${(audioPositionMs / 1000).toLong().formatSecs()} / ${(audioDurationMs / 1000).toLong().formatSecs()}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
+                        // Playback Control Buttons (Rewind -10s, Play/Pause, Forward +10s) and Time Label
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Play / Pause
+                                IconButton(onClick = onPlayClick, modifier = Modifier.size(36.dp)) {
+                                    if (isBuffering) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                                            contentDescription = if (isPlaying) "Pause" else "Play",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                }
+
+                                if (isPlaying) {
+                                    // Rewind -10s
+                                    IconButton(onClick = onRewind, modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Replay10,
+                                            contentDescription = "Rewind 10s",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    // Forward +10s
+                                    IconButton(onClick = onForward, modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Forward10,
+                                            contentDescription = "Forward 10s",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
 
-                            if (isPlaying && audioDurationMs > 0) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                LinearProgressIndicator(
-                                    progress = { (audioPositionMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            // Time Duration Text
+                            Text(
+                                text = if (isPlaying && audioDurationMs > 0) {
+                                    "${(audioPositionMs / 1000).toLong().formatSecs()} / ${(audioDurationMs / 1000).toLong().formatSecs()}"
+                                } else {
+                                    "Tap to Play"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        AssistChip(
-                            onClick = onSpeedToggle,
-                            label = {
-                                Text(
-                                    text = "${if (playbackSpeed % 1.0f == 0f) playbackSpeed.toInt() else playbackSpeed}x",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            },
-                            modifier = Modifier.height(28.dp)
-                        )
                     }
                 }
             }

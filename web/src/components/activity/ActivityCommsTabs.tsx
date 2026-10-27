@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Download, Phone } from "lucide-react";
 
 export function WhatsAppTab({ logs }: { logs: any[] }) {
   if (logs.length === 0) {
@@ -35,19 +35,52 @@ export function CallsTab({ logs }: { logs: any[] }) {
   }
   return (
     <div className="space-y-2 mt-2">
-      {logs.map((call, idx) => (
-        <div key={idx} className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex items-center justify-between text-xs">
-          <div>
-            <p className="font-bold text-white">{call.number || call.phoneNumber || "Unknown Number"}</p>
-            <p className="text-[10px] text-gray-400">
-              {call.callType || "Call"} • Duration: {call.duration || 0}s
-            </p>
+      {logs.map((call, idx) => {
+        const callerName = call.name || "";
+        const callerNumber = call.number || call.phoneNumber || "Unknown Number";
+        const recUrl = call.audioRecordingUrl || "";
+        return (
+          <div key={idx} className="p-3.5 bg-[#1B1B22] border border-[#272733] rounded-xl flex flex-col gap-2 text-xs">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-bold text-white text-sm">
+                  {callerName ? callerName : callerNumber}
+                </p>
+                {callerName && callerName !== callerNumber && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-gray-500" />
+                    {callerNumber}
+                  </p>
+                )}
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  <span className="font-semibold text-blue-400 uppercase tracking-wider">{call.type || call.callType || "Call"}</span>
+                  {" • "}Duration: {call.durationSeconds || call.duration || 0}s
+                </p>
+              </div>
+              <span className="text-[10px] text-gray-500 font-mono">
+                {call.timestamp ? new Date(call.timestamp).toLocaleString() : ""}
+              </span>
+            </div>
+
+            {recUrl && (
+              <div className="mt-1 p-2 bg-[#121217] border border-[#2D2D3B] rounded-lg flex items-center justify-between gap-2">
+                <audio controls src={recUrl} className="h-8 flex-1 max-w-sm" />
+                <a
+                  href={recUrl}
+                  download={`Call_${callerName || callerNumber}_${call.timestamp || Date.now()}.m4a`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600/40 transition flex items-center gap-1 text-[10px] font-bold"
+                  title="Download Recording"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+              </div>
+            )}
           </div>
-          <span className="text-[10px] text-gray-500">
-            {call.timestamp ? new Date(call.timestamp).toLocaleDateString() : ""}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

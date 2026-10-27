@@ -29,6 +29,48 @@ class ActivityAudioPlayerState {
         } catch (_: Exception) {}
     }
 
+    fun seekTo(positionMs: Int) {
+        try {
+            val target = positionMs.coerceIn(0, audioDurationMs)
+            mediaPlayer?.seekTo(target)
+            audioPositionMs = target
+        } catch (_: Exception) {}
+    }
+
+    fun forward(seconds: Int = 10) {
+        seekTo(audioPositionMs + (seconds * 1000))
+    }
+
+    fun rewind(seconds: Int = 10) {
+        seekTo(audioPositionMs - (seconds * 1000))
+    }
+
+    fun downloadAudio(context: android.content.Context, url: String, fileName: String = "Call_Recording.m4a") {
+        if (url.isBlank()) return
+        try {
+            val safeName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                .setTitle(safeName)
+                .setDescription("Downloading call audio recording...")
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, safeName)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+            val dm = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+            dm?.enqueue(request)
+            android.widget.Toast.makeText(context, "Download started: $safeName", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(context, "Cannot open download link", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun stopAudio() {
         try {
             mediaPlayer?.stop()
