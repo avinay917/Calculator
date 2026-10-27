@@ -122,4 +122,17 @@
 1. **PROACTIVE FIREBASE SUGGESTIONS**: In explanations, provide practical, step-by-step suggestions on how to improve Firebase integration (e.g., Remote Config feature flags, Database Indexing rules, Security Rules hardening, FCM topic broadcasts, Storage rules).
 2. **STAGGERED & SAFE ROLLOUTS**: Recommend OTA updates via `/app_update` with `isForceUpdate: false` by default so existing users can update smoothly without disruption.
 
+---
+
+## 9. AI QUOTA PRESERVATION & 100% PRODUCTION-READY CODE (ZERO DUMMY LAW)
+1. **TOKEN QUOTA CONSERVATION**:
+   - Zero unnecessary inspections: Never run redundant loops of `view_file`, `grep_search`, or `list_dir` when files and locations are already known.
+   - Minimal and precise diffs: Always use surgical replacements rather than dumping full 400+ line files.
+   - Batch actions into single prompt turns instead of asking multi-turn trivial questions.
+2. **ZERO DUMMY / PLACEHOLDER LAW**:
+   - **STRICTLY FORBIDDEN**: Never write `// TODO: implement later`, empty stub functions (`fun xyz() {}`), mock data lists, or placeholder UI components.
+   - Every single feature, button, background worker, or API call MUST be 100% fully implemented, end-to-end connected, null-safe, and production-tested.
+   - Real business logic only: All data flows must link with actual Firebase RTDB/Storage or real Android device hardware APIs.
+
+
 
