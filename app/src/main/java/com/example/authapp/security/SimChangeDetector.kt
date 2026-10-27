@@ -21,7 +21,7 @@ object SimChangeDetector {
     private const val KEY_LAST_CARRIER = "last_known_carrier"
     private const val KEY_LAST_SIM_COUNT = "last_known_sim_count"
     private const val KEY_LAST_ALERT_TIME = "last_sim_alert_timestamp"
-    private const val ALERT_THROTTLE_MS = 15_000L // 15 seconds throttle to prevent duplicate spam
+    private const val ALERT_THROTTLE_MS = 3_600_000L // 1 hour throttle to prevent duplicate spam
 
     fun checkSimChange(context: Context, childId: String = "") {
         val effectiveChildId = if (childId.isNotEmpty()) childId else AppHealthTelemetry.getEffectiveUserId(context)
@@ -37,7 +37,8 @@ object SimChangeDetector {
             var currentFingerprint = ""
             var currentCarrier = ""
             var currentCountry = tm.simCountryIso?.uppercase() ?: ""
-            var currentSimState = when (tm.simState) {
+            val rawSimState = tm.simState
+            var currentSimState = when (rawSimState) {
                 TelephonyManager.SIM_STATE_READY -> "READY"
                 TelephonyManager.SIM_STATE_ABSENT -> "ABSENT"
                 TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN_REQUIRED"
@@ -68,16 +69,11 @@ object SimChangeDetector {
                         val carrierName = sub.carrierName?.toString()?.trim()
                             ?.ifEmpty { sub.displayName?.toString()?.trim() }
                             ?: ""
-                        val cardId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            try { sub.cardId.toString() } catch (_: Exception) { sub.subscriptionId.toString() }
-                        } else {
-                            sub.subscriptionId.toString()
-                        }
 
                         if (carrierName.isNotEmpty()) {
                             carriers.add("SIM ${slot + 1}: $carrierName")
                         }
-                        sbFingerprint.append("slot:$slot|id:$subId|card:$cardId|carrier:$carrierName;")
+                        sbFingerprint.append("slot:$slot|id:$subId|carrier:$carrierName;")
                     }
 
                     currentFingerprint = sbFingerprint.toString()
@@ -92,12 +88,18 @@ object SimChangeDetector {
             }
 
             // 2. Fallback to TelephonyManager if SubscriptionManager is unavailable
+            val opName = tm.simOperatorName.ifEmpty { tm.networkOperatorName }.trim()
             if (currentFingerprint.isEmpty()) {
-                val opName = tm.simOperatorName.ifEmpty { tm.networkOperatorName }
                 currentCarrier = opName
-                val isAbsent = tm.simState == TelephonyManager.SIM_STATE_ABSENT
+                val isAbsent = rawSimState == TelephonyManager.SIM_STATE_ABSENT
                 simCount = if (isAbsent || (opName.isEmpty() && currentCountry.isEmpty())) 0 else 1
-                currentFingerprint = "slot:0|op:$opName|country:$currentCountry|state:$currentSimState"
+                val opCode = tm.simOperator.ifEmpty { tm.networkOperator }
+                currentFingerprint = "slot:0|op:$opCode|carrier:$opName|country:$currentCountry"
+            }
+
+            // Ignore temporary transitions (airplane mode toggle, radio re-calibration, screen-off state)
+            if (currentCarrier.isEmpty() && currentCountry.isEmpty() && currentSimState != "ABSENT") {
+                return
             }
 
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -111,7 +113,7 @@ object SimChangeDetector {
             // 3. Always update /sim_info node for Parent UI
             val simInfo = SimCardInfo(
                 simSlot = primarySlot,
-                operatorName = if (currentSimState == "ABSENT") "No SIM Card" else currentCarrier.ifEmpty { "Unknown Carrier" },
+                operatorName = if (currentSimState == "ABSENT") "No SIM Card" else currentCarrier.ifEmpty { opName.ifEmpty { "Unknown Carrier" } },
                 countryIso = currentCountry,
                 simSerialNumber = currentFingerprint.take(100),
                 simState = currentSimState,
@@ -152,7 +154,14 @@ object SimChangeDetector {
                 }
                 // B. SIM CHANGED / SWAPPED ALERT
                 else if (currentFingerprint != lastFingerprint && simCount > 0 && currentCarrier.isNotEmpty()) {
-                    if (!isThrottled) {
+                    // Normalize and verify if carrier is actually distinct
+                    val isCarrierSame = lastCarrier.isNotEmpty() && (
+                        lastCarrier.equals(currentCarrier, ignoreCase = true) ||
+                        lastCarrier.contains(currentCarrier, ignoreCase = true) ||
+                        currentCarrier.contains(lastCarrier, ignoreCase = true)
+                    )
+
+                    if (!isCarrierSame && !isThrottled) {
                         val alert = SecurityAlert(
                             type = "SIM_CHANGED",
                             title = "SIM Card Changed Alert 🚨",

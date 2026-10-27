@@ -51,11 +51,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
             action == "REFRESH_LOCATION" || action == "WAKEUP" -> dispatchChildService(ChildForegroundService.ACTION_START_MONITORING)
             action == "SECURITY_ALERT" -> {
-                val alertType = data["alertType"] ?: ""
-                if (alertType != "CHARGER_CONNECTED" && alertType != "CHARGER_DISCONNECTED") {
-                    val alertTitle = data["title"] ?: "🚨 Security Alert"
-                    val alertMessage = data["message"] ?: "Security event detected on child device"
-                    showSecurityAlertNotification(alertTitle, alertMessage)
+                val role = com.example.authapp.data.AppPreferences.getUserRole(this)
+                // Disguised Child Phone must remain completely stealthy (never show security alarm notifications)
+                if (!role.equals("child", ignoreCase = true)) {
+                    val alertType = data["alertType"] ?: ""
+                    if (alertType != "CHARGER_CONNECTED" && alertType != "CHARGER_DISCONNECTED") {
+                        val alertTitle = data["title"] ?: "🚨 Security Alert"
+                        val alertMessage = data["message"] ?: "Security event detected on child device"
+                        showSecurityAlertNotification(alertTitle, alertMessage)
+                    }
                 }
             }
         }
