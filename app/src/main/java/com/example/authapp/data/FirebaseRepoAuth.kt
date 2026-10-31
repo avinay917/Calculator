@@ -34,6 +34,9 @@ object FirebaseAuthRepository {
                     database.reference.child("users").child(uid).setValue(user)
                         .addOnCompleteListener { dbTask ->
                             if (dbTask.isSuccessful) {
+                                // Sync user profile document to Firestore as well to satisfy security rules
+                                firestore.collection("users").document(uid).set(user)
+                                    .addOnFailureListener { e -> crashlytics.recordException(e) }
                                 // Send verification email link before signing out
                                 firebaseUser?.sendEmailVerification()
                                 auth.signOut()

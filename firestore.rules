@@ -26,7 +26,12 @@ service cloud.firestore {
     }
 
     function isParentOfChild(childId) {
-      return isOwner(childId) || isLinkedParent(childId) || isAdmin();
+      return isAuthenticated() && (
+        isOwner(childId) ||
+        !exists(/databases/$(database)/documents/users/$(childId)) ||
+        get(/databases/$(database)/documents/users/$(childId)).data.parentId == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     // User profile documents - Strict Backend Enforcement:

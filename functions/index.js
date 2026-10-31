@@ -55,9 +55,10 @@ function hasChanged(before, after, fields) {
 }
 
 const defaultRuntime = {
-  memory: "128MB",
+  memory: "256MB",
   timeoutSeconds: 60,
-  minInstances: 0
+  minInstances: 0,
+  maxInstances: 50
 };
 
 /**
