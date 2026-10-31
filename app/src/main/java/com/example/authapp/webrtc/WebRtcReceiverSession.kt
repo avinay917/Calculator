@@ -59,18 +59,8 @@ object WebRtcReceiverSession {
             }
         })
 
-        try {
-            pc?.addTransceiver(
-                MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
-                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
-            )
-            pc?.addTransceiver(
-                MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
-                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
-            )
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[WebRTC Receiver] Add transceiver exception: ${e.localizedMessage}")
-        }
+        // In Unified Plan, setRemoteDescription(offer) automatically creates matching transceivers
+        // for audio and video based on the broadcaster's offer without m-line mismatch errors.
         return pc
     }
 

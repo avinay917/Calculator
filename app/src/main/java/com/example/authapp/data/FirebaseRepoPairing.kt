@@ -144,9 +144,6 @@ object FirebasePairingRepository {
                 database.reference.child("users").child(childUid).child("parentId").setValue(parentUid)
                     .addOnCompleteListener { updateTask ->
                         if (updateTask.isSuccessful) {
-                            firestore.collection("users").document(childUid)
-                                .set(mapOf("parentId" to parentUid), SetOptions.merge())
-                                .addOnFailureListener { e -> crashlytics.recordException(e) }
                             onResult(true, parentEmail, null)
                         } else {
                             codeRef.runTransaction(object : Transaction.Handler {
@@ -260,18 +257,60 @@ object FirebasePairingRepository {
                     return
                 }
 
-                database.reference.child("users").child(childUid).child("parentId").setValue(parentUid)
-                    .addOnCompleteListener { updateTask ->
-                        if (updateTask.isSuccessful) {
-                            try {
-                                firestore.collection("users").document(childUid)
-                                    .set(mapOf("parentId" to parentUid), SetOptions.merge())
-                            } catch (_: Exception) {}
-                            onResult(true, childUid, childEmail, null)
-                        } else {
-                            onResult(false, null, null, updateTask.exception?.localizedMessage ?: "Failed to link device")
+                // 1. Role verification
+                database.reference.child("users").child(parentUid).child("role")
+                    .addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(roleSnap: DataSnapshot) {
+                            var role = roleSnap.getValue(String::class.java)
+                            if (role == null || role == "admin") {
+                                database.reference.child("users").child(parentUid).child("role").setValue("parent")
+                                database.reference.child("users").child(parentUid).child("email").setValue(parentEmail)
+                                role = "parent"
+                            }
+
+                            // 2. Strict 1-Parent to 1-Child rule: Parent can only monitor 1 child
+                            database.reference.child("users").orderByChild("parentId").equalTo(parentUid)
+                                .addListenerForSingleValueEvent(object : ValueEventListener {
+                                    override fun onDataChange(childrenSnap: DataSnapshot) {
+                                        val otherChildren = childrenSnap.children.filter { it.key != childUid }
+                                        if (otherChildren.isNotEmpty()) {
+                                            onResult(false, null, null, "Aapke paas pehle se 1 child linked hai! Doosra link karne ke liye pehle purane child ko remove karein.")
+                                            return
+                                        }
+
+                                        // 3. Strict 1-Child to 1-Parent rule: Child can only belong to 1 parent
+                                        database.reference.child("users").child(childUid).child("parentId")
+                                            .addListenerForSingleValueEvent(object : ValueEventListener {
+                                                override fun onDataChange(pSnap: DataSnapshot) {
+                                                    val existingParent = pSnap.getValue(String::class.java)
+                                                    if (!existingParent.isNullOrBlank() && existingParent != parentUid) {
+                                                        onResult(false, null, null, "Yeh child pehle se kisi doosre parent se linked hai! Pehle purane parent ko remove karein.")
+                                                        return
+                                                    }
+
+                                                    database.reference.child("users").child(childUid).child("parentId").setValue(parentUid)
+                                                        .addOnCompleteListener { updateTask ->
+                                                            if (updateTask.isSuccessful) {
+                                                                onResult(true, childUid, childEmail, null)
+                                                            } else {
+                                                                onResult(false, null, null, updateTask.exception?.localizedMessage ?: "Failed to link device")
+                                                            }
+                                                        }
+                                                }
+                                                override fun onCancelled(err: DatabaseError) {
+                                                    onResult(false, null, null, err.message)
+                                                }
+                                            })
+                                    }
+                                    override fun onCancelled(err: DatabaseError) {
+                                        onResult(false, null, null, err.message)
+                                    }
+                                })
                         }
-                    }
+                        override fun onCancelled(err: DatabaseError) {
+                            onResult(false, null, null, err.message)
+                        }
+                    })
             }
         })
     }
@@ -284,10 +323,6 @@ object FirebasePairingRepository {
         )
         database.reference.updateChildren(updates).addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                try {
-                    firestore.collection("users").document(childUid)
-                        .set(mapOf("parentId" to ""), SetOptions.merge())
-                } catch (_: Exception) {}
                 onComplete(true, null)
             } else {
                 onComplete(false, task.exception?.localizedMessage ?: "Failed to unpair child")

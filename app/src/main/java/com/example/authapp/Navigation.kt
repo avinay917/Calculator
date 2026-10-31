@@ -24,8 +24,8 @@ fun MainNavigation() {
     val cachedRole = remember(context) { com.example.authapp.data.AppPreferences.getUserRole(context) }
     val initialNavKey: NavKey = remember {
         val email = currentUser?.email
-        if (currentUser != null && !email.isNullOrEmpty()) {
-            if (cachedRole == "parent") {
+        if (currentUser != null && !email.isNullOrEmpty() && currentUser.isEmailVerified) {
+            if (cachedRole == "parent" || cachedRole == "admin") {
                 ParentNavKey(email = email)
             } else {
                 if (com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) {
@@ -41,16 +41,36 @@ fun MainNavigation() {
     val backStack = rememberNavBackStack(initialNavKey)
     var isConfiguringSession by remember { mutableStateOf(false) }
 
-    fun navigateBasedOnRole(email: String) {
+    fun navigateBasedOnRole(email: String, forceShowLoading: Boolean = false) {
         val uid = FirebaseRepository.currentUser?.uid ?: return
+        val currentCachedRole = com.example.authapp.data.AppPreferences.getUserRole(context)
+        if (currentCachedRole.isNotEmpty() && !forceShowLoading) {
+            isConfiguringSession = false
+            backStack.clear()
+            if (currentCachedRole == "parent" || currentCachedRole == "admin") {
+                backStack.add(ParentNavKey(email = email))
+            } else {
+                if (com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) {
+                    backStack.add(CalculatorNavKey(email = email))
+                } else {
+                    backStack.add(ChildNavKey(email = email))
+                }
+            }
+            FirebaseRepository.getUserRoleOnce(uid) { role ->
+                com.example.authapp.data.AppPreferences.saveUserSession(context, uid, email, role)
+                com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
+            }
+            return
+        }
         isConfiguringSession = true
         FirebaseRepository.getUserRoleOnce(uid) { role ->
             com.example.authapp.data.AppPreferences.saveUserSession(context, uid, email, role)
             com.example.authapp.analytics.AppHealthTelemetry.syncDeviceHealth(context)
             backStack.clear()
-            if (role == "parent") {
+            if (role == "parent" || role == "admin") {
                 backStack.add(ParentNavKey(email = email))
             } else {
+                com.example.authapp.ui.screens.ChildPermissionsHelper.startMonitoringService(context)
                 if (com.example.authapp.data.AppPreferences.isStealthModeEnabled(context)) {
                     backStack.add(CalculatorNavKey(email = email))
                 } else {
@@ -65,8 +85,17 @@ fun MainNavigation() {
         val user = FirebaseRepository.currentUser
         val email = user?.email
         if (user != null && !email.isNullOrEmpty()) {
+            if (!user.isEmailVerified) {
+                FirebaseRepository.signOut()
+                backStack.clear()
+                backStack.add(SignInNavKey)
+                return@LaunchedEffect
+            }
+            if (cachedRole != "parent" && cachedRole != "admin") {
+                com.example.authapp.ui.screens.ChildPermissionsHelper.startMonitoringService(context)
+            }
             FirebaseRepository.setupPresenceSystem(user.uid)
-            navigateBasedOnRole(email)
+            navigateBasedOnRole(email, forceShowLoading = false)
         }
     }
 
@@ -81,7 +110,7 @@ fun MainNavigation() {
                         FirebaseRepository.currentUser?.let {
                             FirebaseRepository.setupPresenceSystem(it.uid)
                         }
-                        navigateBasedOnRole(email)
+                        navigateBasedOnRole(email, forceShowLoading = true)
                     },
                     onNavigateToSignUp = {
                         backStack.add(SignUpNavKey)

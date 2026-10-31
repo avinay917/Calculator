@@ -22,7 +22,8 @@ object FirebaseAuthRepository {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    val uid = task.result?.user?.uid ?: ""
+                    val firebaseUser = task.result?.user
+                    val uid = firebaseUser?.uid ?: ""
                     val user = User(
                         uid = uid,
                         name = fullName,
@@ -33,6 +34,8 @@ object FirebaseAuthRepository {
                     database.reference.child("users").child(uid).setValue(user)
                         .addOnCompleteListener { dbTask ->
                             if (dbTask.isSuccessful) {
+                                // Send verification email link before signing out
+                                firebaseUser?.sendEmailVerification()
                                 auth.signOut()
                                 onResult(true, null)
                             } else {
@@ -54,7 +57,17 @@ object FirebaseAuthRepository {
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    val uid = task.result?.user?.uid ?: auth.currentUser?.uid
+                    val user = auth.currentUser
+                    if (user != null && !user.isEmailVerified) {
+                        // User has not verified their email - reject login and send verification link
+                        try {
+                            user.sendEmailVerification()
+                        } catch (_: Exception) {}
+                        auth.signOut()
+                        onResult(false, "Aapka email verify nahi hai. Kripya apne email inbox mein bheje gaye link par click karke pehle verify karein.")
+                        return@addOnCompleteListener
+                    }
+                    val uid = user?.uid
                     if (uid != null) {
                         FirebaseRepository.setupPresenceSystem(uid)
                     }

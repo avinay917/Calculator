@@ -43,6 +43,7 @@ fun ParentLiveTab(
     onActivityClick: (User, Int) -> Unit,
     onAlertsClick: (User) -> Unit,
     onScheduleClick: (User) -> Unit,
+    onUnlinkClick: ((User) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -50,65 +51,81 @@ fun ParentLiveTab(
             .fillMaxSize()
             .padding(20.dp)
     ) {
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        // Floating Pill Header
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.96f),
+            shadowElevation = 8.dp,
+            tonalElevation = 4.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
         ) {
-            Box(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .clickable { onOpenDrawer() },
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.SupervisorAccount,
-                    contentDescription = "User Settings",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .clickable { onOpenDrawer() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SupervisorAccount,
+                        contentDescription = "User Settings",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Parent Dashboard",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Parent Dashboard",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = email,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(4.dp))
+                FilledTonalButton(
+                    onClick = onPairClick,
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(Icons.Default.QrCode, contentDescription = "Pair", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Pair", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                }
 
-            IconButton(onClick = onPairClick) {
-                Icon(
-                    imageVector = Icons.Default.QrCode,
-                    contentDescription = "Pair Child Device",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+                Spacer(modifier = Modifier.width(4.dp))
 
-            IconButton(onClick = onSignOut) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Sign Out",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(24.dp)
-                )
+                IconButton(
+                    onClick = onSignOut,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Sign Out",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -161,17 +178,9 @@ fun ParentLiveTab(
         ) {
             Text(
                 text = "Connected Child Devices (${uiState.childUsers.size})",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground
             )
-            FilledTonalButton(
-                onClick = onPairClick,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Pair Device", style = MaterialTheme.typography.labelMedium)
-            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -224,17 +233,20 @@ fun ParentLiveTab(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = onPairClick,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = CircleShape,
+                        modifier = Modifier.height(44.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Get 6-Digit Pairing Code")
+                        Text("Get 6-Digit Pairing Code", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 120.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 items(uiState.childUsers) { child ->
@@ -250,7 +262,8 @@ fun ParentLiveTab(
                         onActivityClick = { onActivityClick(child, 0) },
                         onWhatsAppClick = { onActivityClick(child, 2) },
                         onAlertsClick = { onAlertsClick(child) },
-                        onScheduleClick = { onScheduleClick(child) }
+                        onScheduleClick = { onScheduleClick(child) },
+                        onUnlinkClick = onUnlinkClick?.let { fn -> { fn(child) } }
                     )
                 }
             }

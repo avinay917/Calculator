@@ -9,26 +9,14 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" },
+  { urls: "stun:stun.services.mozilla.com" },
 
-  // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Always Free Tier - us-central1)
-  { urls: "stun:34.46.137.244:3478" },
-  {
-    urls: "turn:34.46.137.244:3478",
-    username: "apnasatthi",
-    credential: "ApnaPass@2026",
-  },
-  {
-    urls: "turn:34.46.137.244:3478?transport=tcp",
-    username: "apnasatthi",
-    credential: "ApnaPass@2026",
-  },
 
-  // 3. Fallback TURN Servers (FreeSTUN)
-  {
-    urls: "turn:freestun.net:3478",
-    username: "free",
-    credential: "free",
-  },
+
+
+
+
+
 ];
 
 export class WebRtcReceiver {
@@ -58,7 +46,8 @@ export class WebRtcReceiver {
   public async startReceiver(childUid: string, streamType: "video" | "audio" = "video") {
     this.stop(false);
     this.childUid = childUid;
-    this.sessionId = "session_" + Date.now();
+    const randomNonce = Math.random().toString(36).substring(2, 10);
+    this.sessionId = `session_${Date.now()}_${randomNonce}`;
     this.pendingCandidates = [];
     this.isRemoteDescriptionSet = false;
     this.remoteStream = new MediaStream();
@@ -88,9 +77,11 @@ export class WebRtcReceiver {
         iceCandidatePoolSize: 2,
       });
 
-      // Explicitly request audio and video reception
+      // Explicitly request audio reception; only request video if streamType is video
       this.peerConnection.addTransceiver("audio", { direction: "recvonly" });
-      this.peerConnection.addTransceiver("video", { direction: "recvonly" });
+      if (streamType === "video") {
+        this.peerConnection.addTransceiver("video", { direction: "recvonly" });
+      }
 
       this.peerConnection.ontrack = (event) => {
         console.log("WebRTC ontrack received:", event.track.kind, event.track.id);
@@ -138,8 +129,8 @@ export class WebRtcReceiver {
           // 1. Send to child's primary listener node: parentCandidates
           push(ref(rtdb, `signaling/${this.sessionId}/parentCandidates`), candPayload);
 
-          // 2. Also send to candidates/parent for compatibility
-          push(ref(rtdb, `signaling/${this.sessionId}/candidates/parent`), candPayload);
+
+
         }
       };
 
@@ -337,6 +328,14 @@ export class WebRtcReceiver {
     }
 
     if (this.peerConnection) {
+      try {
+        this.peerConnection.getReceivers().forEach((r) => {
+          try { r.track?.stop(); } catch (_e) {}
+        });
+        this.peerConnection.getSenders().forEach((s) => {
+          try { s.track?.stop(); } catch (_e) {}
+        });
+      } catch (_e) {}
       this.peerConnection.close();
       this.peerConnection = null;
     }

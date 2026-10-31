@@ -1,5 +1,6 @@
 package com.example.authapp.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -66,41 +67,52 @@ fun CloudRecordingsView(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+        // Floating Pill Header
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.96f),
+            shadowElevation = 6.dp,
+            tonalElevation = 3.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         ) {
-            Box(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.CloudQueue,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Live & Scheduled Recordings",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "${nonCallRecordings.size} captures • Call audio is in Call History",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudQueue,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Cloud Recordings",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "${nonCallRecordings.size} captures • Call audio in Call History",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Filters Row
         Row(
@@ -117,6 +129,7 @@ fun CloudRecordingsView(
                 FilterChip(
                     selected = currentFilter == key,
                     onClick = { onFilterChange(key) },
+                    shape = CircleShape,
                     label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = icon?.let { { Icon(it, contentDescription = null, modifier = Modifier.size(14.dp), tint = if (key == "LIVE") Color.Red else MaterialTheme.colorScheme.primary) } }
                 )
@@ -143,48 +156,17 @@ fun CloudRecordingsView(
                 }
             }
         } else if (filteredList.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth(0.9f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderZip,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (currentFilter == "ALL") "No recordings saved yet" else "No $currentFilter recordings found",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Record live audio or video streams from child devices to save and play them here anytime.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
+            EmptyStateCard(
+                icon = Icons.Default.FolderZip,
+                title = if (currentFilter == "ALL") "No recordings saved yet" else "No $currentFilter recordings found",
+                subtitle = "Record live audio or video streams from child devices to save and play them here anytime.",
+                modifier = Modifier.weight(1f)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 items(filteredList, key = { it.id }) { rec ->
                     CloudRecordingItemCard(

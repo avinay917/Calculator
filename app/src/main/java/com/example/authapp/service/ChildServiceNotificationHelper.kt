@@ -66,7 +66,7 @@ class ChildServiceNotificationHelper(private val service: Service) {
     fun getIdleServiceType(): Int {
         var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasLocationPermission()) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
@@ -88,7 +88,7 @@ class ChildServiceNotificationHelper(private val service: Service) {
         val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
         var type = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         }
         if (hasLocationPermission()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         if (isScreen) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION

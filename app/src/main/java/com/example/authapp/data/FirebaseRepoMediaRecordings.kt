@@ -90,25 +90,51 @@ object FirebaseMediaRepository {
         FirebaseRepository.listenToChildNodeList("recordings", childId, limit = 50, transform = { it.reversed() }, onData = onRecordingsUpdated)
 
     fun listenToAllRecordings(onRecordingsUpdated: (List<RecordingSession>) -> Unit): ValueEventListener {
+        val parentUid = auth.currentUser?.uid
+        if (parentUid.isNullOrEmpty()) {
+            onRecordingsUpdated(emptyList())
+            return object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) { onRecordingsUpdated(emptyList()) }
+                override fun onCancelled(error: DatabaseError) {}
+            }
+        }
+        val ref = database.reference.child("users").orderByChild("parentId").equalTo(parentUid)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<RecordingSession>()
-                for (childFolder in snapshot.children) {
-                    for (recSnapshot in childFolder.children) {
-                        val session = recSnapshot.getValue(RecordingSession::class.java)
-                        if (session != null) {
-                            list.add(session)
-                        }
-                    }
+                val childIds = snapshot.children.mapNotNull { it.key }
+                if (childIds.isEmpty()) {
+                    onRecordingsUpdated(emptyList())
+                    return
                 }
-                onRecordingsUpdated(list.sortedByDescending { it.startTime })
+                val allList = mutableListOf<RecordingSession>()
+                var remaining = childIds.size
+                for (cid in childIds) {
+                    database.reference.child("recordings").child(cid).limitToLast(25)
+                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(recSnap: DataSnapshot) {
+                                for (item in recSnap.children) {
+                                    item.getValue(RecordingSession::class.java)?.let { allList.add(it) }
+                                }
+                                remaining--
+                                if (remaining == 0) {
+                                    onRecordingsUpdated(allList.sortedByDescending { it.startTime })
+                                }
+                            }
+                            override fun onCancelled(error: DatabaseError) {
+                                remaining--
+                                if (remaining == 0) {
+                                    onRecordingsUpdated(allList.sortedByDescending { it.startTime })
+                                }
+                            }
+                        })
+                }
             }
             override fun onCancelled(error: DatabaseError) {
                 FirebaseCrashlytics.getInstance().log("[Firebase allRecordings cancelled] ${error.message}")
                 onRecordingsUpdated(emptyList())
             }
         }
-        database.reference.child("recordings").limitToLast(50).addValueEventListener(listener)
+        ref.addListenerForSingleValueEvent(listener)
         return listener
     }
 

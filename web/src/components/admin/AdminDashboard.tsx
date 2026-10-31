@@ -8,7 +8,7 @@ import { AdminBroadcastModal } from "./AdminBroadcastModal";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 interface AdminDashboardProps {
-  onBackToParentView: () => void;
+  onBackToParentView?: () => void;
 }
 
 export function AdminDashboard({ onBackToParentView }: AdminDashboardProps) {
@@ -93,13 +93,6 @@ export function AdminDashboard({ onBackToParentView }: AdminDashboardProps) {
           </span>
           <span className="text-xs text-amber-200">You are in System Administration Master Control Mode.</span>
         </div>
-        <button
-          onClick={onBackToParentView}
-          className="flex items-center gap-1.5 px-3 py-1 bg-[#232330] hover:bg-[#2e2e3f] text-gray-200 rounded-xl text-xs font-semibold border border-[#3b3b4f] transition-all"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Switch to Parent Monitoring
-        </button>
       </div>
 
       <AdminOverviewCards users={users} onOpenBroadcast={() => setShowBroadcastModal(true)} />

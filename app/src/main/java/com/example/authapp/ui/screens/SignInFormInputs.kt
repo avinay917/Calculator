@@ -37,6 +37,9 @@ fun SignInFormInputs(
     onRememberMeChange: (Boolean) -> Unit,
     errorMessage: String?,
     onForgotPasswordClick: () -> Unit,
+    isUnverifiedEmail: Boolean = false,
+    resendCooldownSeconds: Int = 0,
+    onResendVerificationClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -54,13 +57,40 @@ fun SignInFormInputs(
                         .padding(bottom = 16.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text = msg,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall,
+                    Column(
                         modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = msg,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
+                        )
+                        if (isUnverifiedEmail) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = onResendVerificationClick,
+                                enabled = resendCooldownSeconds == 0,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (resendCooldownSeconds > 0) {
+                                    Text(
+                                        text = "Dobara link bhej sakte hain (${resendCooldownSeconds}s)",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                } else {
+                                    Text(
+                                        text = "📨 Dobara Verification Link Bhejein",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

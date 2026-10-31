@@ -10,8 +10,10 @@ service firebase.storage {
     function isChildOrParent(childId) {
       return isAuthenticated() && (
         request.auth.uid == childId ||
-        firestore.get(/databases/(default)/documents/users/$(childId)).data.parentId == request.auth.uid ||
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        (firestore.exists(/databases/(default)/documents/users/$(childId)) &&
+         firestore.get(/databases/(default)/documents/users/$(childId)).data.parentId == request.auth.uid) ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -33,10 +35,29 @@ service firebase.storage {
       );
     }
 
+    // Gallery thumbnails — child uploads, parent reads (Max 500KB)
+    match /thumbnails/{childId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        request.resource == null ||
+        request.resource.size < 500 * 1024
+      );
+    }
+
+    // Requested full gallery files / photos
+    match /gallery_files/{childId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        request.resource == null ||
+        request.resource.size < 50 * 1024 * 1024
+      );
+    }
+
     // App update APK folder: public read, admin write
     match /updates/{allPaths=**} {
       allow read: if true;
       allow write: if isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 

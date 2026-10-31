@@ -49,6 +49,21 @@ object FirebaseRepository {
         crossinline onData: (List<T>) -> Unit
     ): ValueEventListener = FirebaseRepoHelpers.listenToChildNodeList(nodePath, childId, limit, transform, onData)
 
+    inline fun <T> pushChildItem(
+        path: String,
+        childId: String,
+        item: T,
+        crossinline withId: (T, String) -> T = { itm, _ -> itm }
+    ) = FirebaseRepoHelpers.pushChildItem(path, childId, item, withId)
+
+    inline fun <T> syncChildMap(
+        path: String,
+        childId: String,
+        items: List<T>,
+        limit: Int = 50,
+        crossinline keySelector: (T) -> String
+    ) = FirebaseRepoHelpers.syncChildMap(path, childId, items, limit, keySelector)
+
     inline fun <reified T> listenFirestoreCollection(
         collection: String,
         childId: String,
@@ -174,6 +189,10 @@ object FirebaseRepository {
         FirebaseCommunicationsRepository.listenToClipboardLogsFirestore(childId, limit, onLogs)
     fun listenToClipboardLogs(childId: String, onLogs: (List<ClipboardLogItem>) -> Unit) =
         FirebaseCommunicationsRepository.listenToClipboardLogs(childId, onLogs)
+    fun pushActivityFeedItem(childId: String, item: com.example.authapp.model.ActivityFeedItem) =
+        FirebaseCommunicationsRepository.pushActivityFeedItem(childId, item)
+    fun listenToActivityFeed(childId: String, limit: Int = 50, onEvents: (List<com.example.authapp.model.ActivityFeedItem>) -> Unit) =
+        FirebaseCommunicationsRepository.listenToActivityFeed(childId, limit, onEvents)
 
     // --- Media & Recordings Delegates (FirebaseMediaRepository) ---
     fun saveRecordingSession(childId: String, streamType: String, durationSeconds: Long, localFilePath: String = "", parentId: String = "", existingRecId: String = "", onSaved: () -> Unit = {}) =

@@ -43,12 +43,44 @@ fun SignInScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
+    var isUnverifiedEmail by remember { mutableStateOf(false) }
+    var resendCooldown by remember { mutableStateOf(0) }
+
+    LaunchedEffect(resendCooldown) {
+        if (resendCooldown > 0) {
+            kotlinx.coroutines.delay(1000L)
+            resendCooldown -= 1
+        }
+    }
+
+    fun handleResendVerification() {
+        if (resendCooldown > 0) return
+        val trimmedEmail = email.trim()
+        if (trimmedEmail.isBlank() || password.isBlank()) {
+            errorMessage = "Kripya email aur password bharein"
+            return
+        }
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+            .signInWithEmailAndPassword(trimmedEmail, password)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    task.result?.user?.sendEmailVerification()
+                    com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                    resendCooldown = 60
+                    context.toast("Naya verification link aapke email par bhej diya gaya hai!")
+                } else {
+                    errorMessage = task.exception?.localizedMessage ?: "Failed to resend verification link"
+                }
+            }
+    }
+
     fun validateAndSubmit() {
         if (isLoading) return
         var isValid = true
         emailError = null
         passwordError = null
         errorMessage = null
+        isUnverifiedEmail = false
 
         if (email.isBlank()) {
             emailError = "Email is required"
@@ -82,6 +114,10 @@ fun SignInScreen(
                 } else {
                     isLoading = false
                     errorMessage = errorMsg ?: "Authentication failed"
+                    if (errorMsg?.contains("verify", ignoreCase = true) == true) {
+                        isUnverifiedEmail = true
+                        resendCooldown = 60
+                    }
                     AppAnalytics.logActionFailure("sign_in", "SignInScreen", errorMsg ?: "Authentication failed")
                 }
             }
@@ -151,7 +187,10 @@ fun SignInScreen(
             rememberMe = rememberMe,
             onRememberMeChange = { rememberMe = it },
             errorMessage = errorMessage,
-            onForgotPasswordClick = { showResetDialog = true }
+            onForgotPasswordClick = { showResetDialog = true },
+            isUnverifiedEmail = isUnverifiedEmail,
+            resendCooldownSeconds = resendCooldown,
+            onResendVerificationClick = { handleResendVerification() }
         )
 
         Spacer(modifier = Modifier.height(24.dp))

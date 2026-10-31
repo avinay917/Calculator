@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,82 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.authapp.data.User
+
+@Composable
+fun ChildSelectorRow(
+    childUsers: List<User>,
+    selectedChildId: String,
+    onSelectChild: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (childUsers.size <= 1) return
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(childUsers, key = { it.uid }) { child ->
+            FilterChip(
+                selected = child.uid == selectedChildId,
+                onClick = { onSelectChild(child.uid) },
+                label = { Text(child.name.ifEmpty { "Child" }) },
+                leadingIcon = {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (child.isOnline) Color(0xFF10B981) else Color.Gray)
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyStateCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String = "",
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth(0.92f)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (subtitle.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun EmptyStateBox(icon: ImageVector, message: String) {

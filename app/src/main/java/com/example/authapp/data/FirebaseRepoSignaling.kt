@@ -47,7 +47,8 @@ object FirebaseSignalingRepository {
             return
         }
         val timestamp = System.currentTimeMillis()
-        val sessionId = "session_${childId}_${parentId}_$timestamp"
+        val nonce = java.util.UUID.randomUUID().toString().take(8)
+        val sessionId = "session_${childId}_${parentId}_${timestamp}_$nonce"
         val requestData = mapOf(
             "requestId" to sessionId,
             "childId" to childId,
@@ -268,21 +269,35 @@ object FirebaseSignalingRepository {
         }
 
     fun fetchIceServers(onResult: (List<PeerConnection.IceServer>) -> Unit) {
+        val currentUserId = auth.currentUser?.uid ?: "user_anonymous"
         database.reference.child("ice_servers").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<PeerConnection.IceServer>()
                 for (item in snapshot.children) {
                     val uri = item.child("uri").getValue(String::class.java)
                         ?: item.child("url").getValue(String::class.java)
+                    val secret = item.child("secret").getValue(String::class.java)
+                        ?: item.child("staticAuthSecret").getValue(String::class.java)
                     val username = item.child("username").getValue(String::class.java)
                     val credential = item.child("credential").getValue(String::class.java)
                         ?: item.child("password").getValue(String::class.java)
 
                     if (!uri.isNullOrEmpty()) {
-                        val builder = PeerConnection.IceServer.builder(uri)
-                        if (!username.isNullOrEmpty()) builder.setUsername(username)
-                        if (!credential.isNullOrEmpty()) builder.setPassword(credential)
-                        list.add(builder.createIceServer())
+                        if (!secret.isNullOrEmpty()) {
+                            // High security: dynamic ephemeral token using HMAC-SHA1
+                            val ephemeralServers = com.example.authapp.webrtc.WebRtcSdpHelper.createEphemeralIceServers(
+                                turnHost = uri,
+                                secretKey = secret,
+                                userId = currentUserId
+                            )
+                            list.addAll(ephemeralServers)
+                        } else {
+                            // Standard/Static fallback
+                            val builder = PeerConnection.IceServer.builder(uri)
+                            if (!username.isNullOrEmpty()) builder.setUsername(username)
+                            if (!credential.isNullOrEmpty()) builder.setPassword(credential)
+                            list.add(builder.createIceServer())
+                        }
                     }
                 }
                 val result = if (list.isNotEmpty()) list else com.example.authapp.webrtc.WebRtcManager.getDefaultIceServers()

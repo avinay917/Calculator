@@ -1,46 +1,68 @@
 package com.example.authapp.webrtc
 
+import android.util.Base64
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
 import java.util.Locale
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 object WebRtcSdpHelper {
 
+    /**
+     * Generates RFC 5766 compliant dynamic Ephemeral TURN credentials using HMAC-SHA1.
+     * Tokens expire automatically after [ttlSeconds] (default 2 hours = 7200s),
+     * preventing unauthorized relay usage or bandwidth draining.
+     */
+    fun createEphemeralIceServers(
+        turnHost: String,
+        secretKey: String,
+        userId: String = "client",
+        ttlSeconds: Long = 7200L
+    ): List<PeerConnection.IceServer> {
+        val servers = mutableListOf<PeerConnection.IceServer>()
+        try {
+            val expiry = (System.currentTimeMillis() / 1000L) + ttlSeconds
+            val username = "$expiry:$userId"
+            val keySpec = SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), "HmacSHA1")
+            val mac = Mac.getInstance("HmacSHA1")
+            mac.init(keySpec)
+            val rawHmac = mac.doFinal(username.toByteArray(Charsets.UTF_8))
+            val password = Base64.encodeToString(rawHmac, Base64.NO_WRAP)
+
+            // Clean host in case user supplied turn: prefix
+            val cleanHost = turnHost.removePrefix("turn:").removePrefix("turns:")
+
+            // 1. UDP Relay
+            servers.add(
+                PeerConnection.IceServer.builder("turn:$cleanHost?transport=udp")
+                    .setUsername(username)
+                    .setPassword(password)
+                    .createIceServer()
+            )
+            // 2. TCP Relay (Mandatory for strict mobile NAT / 4G firewalls)
+            servers.add(
+                PeerConnection.IceServer.builder("turn:$cleanHost?transport=tcp")
+                    .setUsername(username)
+                    .setPassword(password)
+                    .createIceServer()
+            )
+        } catch (e: Exception) {
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+        }
+        return servers
+    }
+
     fun getDefaultIceServers(): List<PeerConnection.IceServer> {
         return listOf(
-            // 1. PRIMARY: Free Google STUN Servers (Direct P2P First - ZERO Cost / 0 Bandwidth)
+            // 1. PRIMARY: Free Google & Twilio STUN Servers (Direct P2P First - ZERO Cost / 0 Bandwidth)
             PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer(),
-            PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer(),
-
-            // 2. Dedicated Google Cloud Compute Engine (GCE) Coturn Server (Always Free Tier - us-central1)
-            PeerConnection.IceServer.builder("stun:34.46.137.244:3478").createIceServer(),
-            PeerConnection.IceServer.builder("turn:34.46.137.244:3478")
-                .setUsername("apnasatthi")
-                .setPassword("ApnaPass@2026")
-                .createIceServer(),
-            PeerConnection.IceServer.builder("turn:34.46.137.244:3478?transport=tcp")
-                .setUsername("apnasatthi")
-                .setPassword("ApnaPass@2026")
-                .createIceServer(),
-
-            // 3. Fallback Free TURN Servers (FreeSTUN UDP & TCP)
-            PeerConnection.IceServer.builder("turn:freestun.net:3478")
-                .setUsername("free")
-                .setPassword("free")
-                .createIceServer(),
-            PeerConnection.IceServer.builder("turn:freestun.net:3478?transport=tcp")
-                .setUsername("free")
-                .setPassword("free")
-                .createIceServer(),
-            PeerConnection.IceServer.builder("turn:freestun.net:443?transport=tcp")
-                .setUsername("free")
-                .setPassword("free")
-                .createIceServer()
+            PeerConnection.IceServer.builder("stun:stun.services.mozilla.com").createIceServer()
         )
     }
 
@@ -122,7 +144,8 @@ object WebRtcSdpHelper {
     }
 
     fun restrictVideoToVP8Only(sdpDescription: String): String {
-        val lines = sdpDescription.split("\r\n")
+        if (!sdpDescription.contains("m=video")) return sdpDescription
+        val lines = sdpDescription.split(Regex("\r?\n"))
         val result = mutableListOf<String>()
         var inVideoSection = false
         var videoMLine: String? = null

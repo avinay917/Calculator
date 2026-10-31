@@ -29,7 +29,12 @@ export function PhotoViewerModal({
     selectedPhotoViewer.storageUrl ||
     selectedPhotoViewer.mediaUrl ||
     "";
-  const thumbUrl = selectedPhotoViewer.thumbnailBase64 || "";
+  const rawThumb = selectedPhotoViewer.thumbnailBase64 || selectedPhotoViewer.displayUrl || "";
+  const thumbUrl = rawThumb
+    ? (rawThumb.startsWith("data:") || rawThumb.startsWith("http")
+        ? rawThumb
+        : `data:image/jpeg;base64,${rawThumb}`)
+    : "";
   const hasFullUrl = Boolean(mediaUrl);
   const hasThumb = Boolean(thumbUrl);
 

@@ -1,5 +1,6 @@
 package com.example.authapp.data
 
+import com.example.authapp.config.FirebasePaths
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -14,27 +15,14 @@ object FirebaseControlsSafetyRepository {
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
-    fun syncAppUsage(childId: String, appUsageList: List<AppUsageInfo>) {
-        if (childId.isEmpty()) return
-        try {
-            val collection = firestore.collection("app_usage").document(childId).collection("items")
-            val batch = firestore.batch()
-            for (app in appUsageList.take(50)) {
-                val key = app.packageName.replace(".", "_")
-                val docRef = collection.document(key)
-                batch.set(docRef, app, SetOptions.merge())
-            }
-            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
-        } catch (e: Exception) {
-            crashlytics.recordException(e)
-        }
-    }
+    fun syncAppUsage(childId: String, appUsageList: List<AppUsageInfo>) =
+        FirebaseRepoHelpers.syncChildMap(FirebasePaths.APP_USAGE, childId, appUsageList) { it.packageName.replace(".", "_") }
 
     fun listenToAppUsageFirestore(childId: String, limit: Long = 50, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ListenerRegistration =
         FirebaseRepository.listenFirestoreCollection("app_usage", childId, "totalTimeInForegroundMinutes", limit, onUsageUpdated)
 
     fun listenToAppUsage(childId: String, onUsageUpdated: (List<AppUsageInfo>) -> Unit): ValueEventListener =
-        FirebaseRepository.listenToChildNodeList("app_usage", childId, limit = 50, transform = { it.sortedByDescending { a -> a.totalTimeInForegroundMinutes } }, onData = onUsageUpdated)
+        FirebaseRepository.listenToChildNodeList(FirebasePaths.APP_USAGE, childId, limit = 50, transform = { it.sortedByDescending { a -> a.totalTimeInForegroundMinutes } }, onData = onUsageUpdated)
 
     fun setAppBlocked(childId: String, packageName: String, isBlocked: Boolean) {
         if (childId.isEmpty() || packageName.isEmpty()) return
@@ -127,47 +115,42 @@ object FirebaseControlsSafetyRepository {
         return listener
     }
 
-    fun pushSecurityAlert(childId: String, alert: SecurityAlert) {
-        val ref = database.reference.child("alerts").child(childId).push()
-        val toSave = alert.copy(id = ref.key ?: "")
-        ref.setValue(toSave)
-    }
+    fun pushSecurityAlert(childId: String, alert: SecurityAlert) =
+        FirebaseRepoHelpers.pushChildItem("alerts", childId, alert) { itm, id -> itm.copy(id = id) }
 
     fun listenToSecurityAlerts(childId: String, onAlerts: (List<SecurityAlert>) -> Unit): ValueEventListener =
         FirebaseRepository.listenToChildNodeList("alerts", childId, limit = 50, transform = { it.sortedByDescending { a -> a.timestamp } }, onData = onAlerts)
 
     fun saveSecurityAlertToFirestore(childId: String, alert: SecurityAlert) {
+        if (childId.isEmpty()) return
         val key = if (alert.id.isNotEmpty()) alert.id else "${alert.timestamp}_${alert.type}"
-        FirebaseRepository.saveChildDocumentDual("security_alerts", "alerts", childId, key, alert.copy(id = key))
+        firestore.collection("security_alerts").document(childId).collection("items").document(key)
+            .set(alert.copy(id = key))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun listenToChildSecurityAlertsFirestore(childId: String, limit: Long = 50, onUpdate: (List<SecurityAlert>) -> Unit): ListenerRegistration =
         FirebaseRepository.listenFirestoreCollection("security_alerts", childId, "timestamp", limit, onUpdate)
 
     fun logWebHistoryItem(childId: String, item: WebHistoryItem) {
-        if (childId.isEmpty() || item.url.isEmpty()) return
-        val ref = database.reference.child("web_history").child(childId).push()
-        ref.setValue(item.copy(id = ref.key ?: ""))
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        saveWebHistoryToFirestore(childId, item)
     }
 
     fun listenToWebHistory(childId: String, onHistory: (List<WebHistoryItem>) -> Unit): ValueEventListener =
-        FirebaseRepository.listenToChildNodeList("web_history", childId, limit = 100, transform = { it.sortedByDescending { w -> w.timestamp }.take(100) }, onData = onHistory)
+        FirebaseRepository.listenToChildNodeList("web_history", childId, limit = 50, transform = { it.sortedByDescending { w -> w.timestamp }.take(50) }, onData = onHistory)
 
     fun saveWebHistoryToFirestore(childId: String, item: WebHistoryItem) {
-        if (item.url.isEmpty()) return
+        if (childId.isEmpty() || item.url.isEmpty()) return
         val docRef = firestore.collection("web_history").document(childId).collection("items").document()
-        FirebaseRepository.saveChildDocumentDual("web_history", "web_history", childId, docRef.id, item.copy(id = docRef.id))
+        docRef.set(item.copy(id = docRef.id))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun listenToChildWebHistoryFirestore(childId: String, limit: Long = 20, onUpdate: (List<WebHistoryItem>) -> Unit): ListenerRegistration =
         FirebaseRepository.listenFirestoreCollection("web_history", childId, "timestamp", limit, onUpdate)
 
     fun recordPackageEvent(childId: String, event: AppInstallEvent) {
-        if (childId.isEmpty()) return
-        val ref = database.reference.child("package_events").child(childId).push()
-        ref.setValue(event.copy(id = ref.key ?: ""))
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        savePackageEventToFirestore(childId, event)
     }
 
     fun listenToPackageEvents(childId: String, onEvents: (List<AppInstallEvent>) -> Unit): ValueEventListener =
@@ -179,8 +162,10 @@ object FirebaseControlsSafetyRepository {
         listenToPackageEvents(childId, onEvents)
 
     fun savePackageEventToFirestore(childId: String, event: AppInstallEvent) {
+        if (childId.isEmpty()) return
         val docRef = firestore.collection("package_events").document(childId).collection("items").document()
-        FirebaseRepository.saveChildDocumentDual("package_events", "package_events", childId, docRef.id, event.copy(id = docRef.id))
+        docRef.set(event.copy(id = docRef.id))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun listenToChildPackageEventsFirestore(childId: String, limit: Long = 50, onUpdate: (List<AppInstallEvent>) -> Unit): ListenerRegistration =

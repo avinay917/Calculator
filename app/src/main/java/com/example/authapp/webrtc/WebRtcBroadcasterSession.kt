@@ -101,12 +101,20 @@ object WebRtcBroadcasterSession {
             }
         } else if (isCamera) {
             val cameraEventsHandler = object : CameraVideoCapturer.CameraEventsHandler {
-                override fun onCameraError(errorDescription: String?) {}
-                override fun onCameraDisconnected() {}
-                override fun onCameraFreezed(errorDescription: String?) {}
+                override fun onCameraError(errorDescription: String?) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera error/hardware conflict: $errorDescription")
+                }
+                override fun onCameraDisconnected() {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera disconnected by system/other app, releasing hardware")
+                }
+                override fun onCameraFreezed(errorDescription: String?) {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera freezed: $errorDescription")
+                }
                 override fun onCameraOpening(cameraName: String?) {}
                 override fun onFirstFrameAvailable() {}
-                override fun onCameraClosed() {}
+                override fun onCameraClosed() {
+                    FirebaseCrashlytics.getInstance().log("[WebRTC] Camera hardware closed gracefully")
+                }
             }
             val res = WebRtcBroadcasterVideoHelper.startCameraCapture(appContext, eglBaseContext, factory, cameraEventsHandler, preferFront = preferFront)
             if (res != null) {

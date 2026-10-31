@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="50%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+
+    <!-- Gear Outer Neon Gradient -->
+    <linearGradient id="gearGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+
+    <!-- Core Center Radial Glow -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#1E1B4B" stop-opacity="0.95"/>
+    </radialGradient>
+
+    <!-- Shield Gradient -->
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E"/>
+      <stop offset="100%" stop-color="#FB7185"/>
+    </linearGradient>
+
+    <!-- Drop Shadows for 3D Depth -->
+    <filter id="gearShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#6366F1" flood-opacity="0.5"/>
+    </filter>
+    <filter id="innerGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#38BDF8" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Modern App Squircle Background -->
+  <rect width="512" height="512" rx="116" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="112" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+
+  <!-- Subtle Circular Ambient Wave -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="rgba(99, 102, 241, 0.15)" stroke-width="2" stroke-dasharray="12 8"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(56, 189, 248, 0.2)" stroke-width="1.5"/>
+
+  <!-- High-Precision 8-Tooth Mechanical Settings Gear -->
+  <g filter="url(#gearShadow)">
+    <path fill="url(#gearGrad)" fill-rule="evenodd" d="
+      M 230,56  L 282,56  L 288,102 A 160,160 0 0 1 332,120 L 372,96  L 408,132 L 384,172 
+      A 160,160 0 0 1 402,216 L 448,222 L 448,274 L 402,280 A 160,160 0 0 1 384,324 L 408,364 
+      L 372,400 L 332,376 A 160,160 0 0 1 288,394 L 282,440 L 230,440 L 224,394 A 160,160 0 0 1 180,376 
+      L 140,400 L 104,364 L 128,324 A 160,160 0 0 1 110,280 L 64,274  L 64,222  L 110,216 
+      A 160,160 0 0 1 128,172 L 104,132 L 140,96  L 180,120 A 160,160 0 0 1 224,102 Z
+      M 256,156 A 100,100 0 1 0 256,356 A 100,100 0 1 0 256,156 Z
+    "/>
+  </g>
+
+  <!-- Inner Metallic Bezel -->
+  <circle cx="256" cy="256" r="96" fill="url(#centerGlow)" stroke="rgba(255,255,255,0.25)" stroke-width="3"/>
+  <circle cx="256" cy="256" r="88" fill="none" stroke="rgba(56, 189, 248, 0.4)" stroke-width="2" stroke-dasharray="6 6"/>
+
+  <!-- Center Security Lock / Setting Shield Core -->
+  <!-- Lock Shackle -->
+  <path d="M 232,230 V 208 A 24,24 0 0 1 280,208 V 230" 
+        fill="none" 
+        stroke="#FFFFFF" 
+        stroke-width="12" 
+        stroke-linecap="round" 
+        filter="url(#innerGlow)"/>
+
+  <!-- Lock Body -->
+  <rect x="220" y="226" width="72" height="58" rx="14" fill="#FFFFFF" filter="url(#innerGlow)"/>
+
+  <!-- Keyhole -->
+  <circle cx="256" cy="250" r="7" fill="#1E1B4B"/>
+  <path d="M 253,252 L 259,252 L 261,268 L 251,268 Z" fill="#1E1B4B"/>
+
+  <!-- Micro Tech Accent Dots -->
+  <circle cx="256" cy="80" r="4" fill="#FFFFFF" fill-opacity="0.8"/>
+  <circle cx="256" cy="416" r="4" fill="#FFFFFF" fill-opacity="0.8"/>
+  <circle cx="88" cy="248" r="4" fill="#FFFFFF" fill-opacity="0.8"/>
+  <circle cx="424" cy="248" r="4" fill="#FFFFFF" fill-opacity="0.8"/>
+</svg>
+

@@ -29,4 +29,5 @@ object FirebasePaths {
     const val STORAGE_RECORDINGS = "recordings"
     const val STORAGE_SNAPSHOTS = "snapshots"
     const val CLIPBOARD_LOGS = "clipboard_logs"
+    const val ACTIVITY_FEED = "activity_feed"
 }

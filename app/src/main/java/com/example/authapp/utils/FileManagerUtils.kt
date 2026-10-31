@@ -75,11 +75,11 @@ object FileManagerUtils {
                 val lastFingerprint = prefs.getString("last_fingerprint_$childUid", "")
                 val lastSyncTime = prefs.getLong("last_sync_time_$childUid", 0L)
                 val now = System.currentTimeMillis()
-                val currentFingerprint = "${fileList.size}_${fileList.firstOrNull()?.path}_${fileList.firstOrNull()?.lastModified}_${fileList.lastOrNull()?.path}"
+                val currentFingerprint = "${fileList.size}_${fileList.firstOrNull()?.path}"
 
-                // Skip batch write if files have not changed and synced within 12 hours
-                if (!force && currentFingerprint == lastFingerprint && (now - lastSyncTime < 12 * 60 * 60 * 1000L)) {
-                    android.util.Log.d("FileManagerUtils", "No new files detected; skipping Firestore batch write.")
+                // Strictly throttle: Never sync automatically more than once in 24 hours unless forced by parent command
+                if (!force && (now - lastSyncTime < 24 * 60 * 60 * 1000L)) {
+                    android.util.Log.d("FileManagerUtils", "Throttled: File explorer already synced within 24 hours.")
                     return
                 }
 

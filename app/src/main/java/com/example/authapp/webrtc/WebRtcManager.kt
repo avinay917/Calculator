@@ -283,6 +283,14 @@ class WebRtcManager(
         fun getDefaultIceServers(): List<PeerConnection.IceServer> =
             WebRtcSdpHelper.getDefaultIceServers()
 
+        fun createEphemeralIceServers(
+            turnHost: String,
+            secretKey: String,
+            userId: String = "client",
+            ttlSeconds: Long = 7200L
+        ): List<PeerConnection.IceServer> =
+            WebRtcSdpHelper.createEphemeralIceServers(turnHost, secretKey, userId, ttlSeconds)
+
         fun preferOpusHighQuality(sdpDescription: String): String =
             WebRtcSdpHelper.preferOpusHighQuality(sdpDescription)
 

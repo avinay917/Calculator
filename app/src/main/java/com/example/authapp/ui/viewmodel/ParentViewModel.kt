@@ -181,14 +181,7 @@ class ParentViewModel : ViewModel() {
         if (children.isNotEmpty()) {
             listenersHandler.loadParentRecordings(children)
         } else {
-            _uiState.update { it.copy(isLoadingRecordings = true) }
-            try {
-                FirebaseRepository.listenToAllRecordings { list ->
-                    _uiState.update { it.copy(allRecordings = list, isLoadingRecordings = false) }
-                }
-            } catch (_: Exception) {
-                _uiState.update { it.copy(isLoadingRecordings = false) }
-            }
+            _uiState.update { it.copy(allRecordings = emptyList(), isLoadingRecordings = false) }
         }
     }
 

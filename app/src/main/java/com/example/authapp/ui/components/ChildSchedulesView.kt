@@ -1,5 +1,6 @@
 package com.example.authapp.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.authapp.data.RecordingSchedule
@@ -45,62 +47,70 @@ fun ChildSchedulesView(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Top Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Top Floating Pill Header
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.96f),
+            shadowElevation = 6.dp,
+            tonalElevation = 3.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         ) {
-            Column {
-                Text(
-                    text = "Scheduled Auto-Recordings",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Offline-Ready • Silent Audio & Video (No Sound/Alarm)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF10B981)
-                )
-            }
-
-            Button(
-                onClick = { showCreateDialog = true },
-                shape = RoundedCornerShape(12.dp),
-                enabled = selectedChild != null,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Schedule", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Scheduled Recordings",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Offline-Ready • Silent Audio & Video",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF10B981),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(
+                    onClick = { showCreateDialog = true },
+                    shape = CircleShape,
+                    enabled = selectedChild != null,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Schedule",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
         // Child Device Selector Chips (if multiple children)
+        ChildSelectorRow(
+            childUsers = childUsers,
+            selectedChildId = selectedChild?.uid.orEmpty(),
+            onSelectChild = { selectedChildId = it }
+        )
         if (childUsers.size > 1) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(childUsers) { child ->
-                    FilterChip(
-                        selected = child.uid == selectedChild?.uid,
-                        onClick = { selectedChildId = child.uid },
-                        label = { Text(child.name.ifEmpty { "Child" }) },
-                        leadingIcon = {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (child.isOnline) Color(0xFF10B981) else Color.Gray)
-                            )
-                        }
-                    )
-                }
-            }
             Spacer(modifier = Modifier.height(8.dp))
         }
 
@@ -140,45 +150,28 @@ fun ChildSchedulesView(
 
         // Schedules List
         if (selectedChild == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "No child device connected yet",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else if (activeSchedules.isEmpty()) {
-            Box(
+            EmptyStateCard(
+                icon = Icons.Default.Smartphone,
+                title = "No Child Device Connected",
+                subtitle = "Pair a child device to schedule automatic background recordings.",
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 60.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Koi active schedule nahi hai",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "'+ Schedule' par click karke time aur duration set karein",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
+                    .padding(bottom = 80.dp)
+            )
+        } else if (activeSchedules.isEmpty()) {
+            EmptyStateCard(
+                icon = Icons.Default.Schedule,
+                title = "Koi active schedule nahi hai",
+                subtitle = "'+ Schedule' par click karke time aur duration set karein",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 80.dp)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 80.dp)
+                contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 items(activeSchedules, key = { it.id }) { schedule ->
                     Card(

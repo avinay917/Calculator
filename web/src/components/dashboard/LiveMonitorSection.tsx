@@ -1,4 +1,5 @@
 import React from "react";
+import { useApp } from "@/context/AppContext";
 import {
   Video,
   Music,
@@ -14,55 +15,19 @@ import {
 } from "lucide-react";
 import { VoiceBoostCard } from "./VoiceBoostCard";
 
-interface LiveMonitorSectionProps {
-  isStreaming: boolean;
-  streamType: "video" | "audio";
-  setStreamType: (type: "video" | "audio") => void;
-  cameraFacing: "front" | "back" | "ultrawide";
-  streamDuration: number;
-  streamStatusText: string;
-  isMuted: boolean;
-  setIsMuted: (muted: boolean) => void;
-  audioBoostMultiplier: number;
-  setAudioBoostMultiplier: (val: number) => void;
-  isClarityFilterEnabled: boolean;
-  toggleClarityFilter: (enabled: boolean) => void;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  activeChildId: string;
-  onStartStream: () => void;
-  onStopStream: () => void;
-  onToggleCamera: () => void;
-  isRecordingStream: boolean;
-  recordingDuration: number;
-  recordedDownloadUrl: string | null;
-  onStartRecording: () => void;
-  onStopRecording: () => void;
-}
-
-export function LiveMonitorSection({
-  isStreaming,
-  streamType,
-  setStreamType,
-  cameraFacing,
-  streamDuration,
-  streamStatusText,
-  isMuted,
-  setIsMuted,
-  audioBoostMultiplier,
-  setAudioBoostMultiplier,
-  isClarityFilterEnabled,
-  toggleClarityFilter,
-  videoRef,
-  activeChildId,
-  onStartStream,
-  onStopStream,
-  onToggleCamera,
-  isRecordingStream,
-  recordingDuration,
-  recordedDownloadUrl,
-  onStartRecording,
-  onStopRecording,
-}: LiveMonitorSectionProps) {
+export function LiveMonitorSection() {
+  const { stream, childData } = useApp();
+  const {
+    isStreaming, streamType, setStreamType, cameraFacing, streamDuration,
+    streamStatusText, isMuted, setIsMuted, audioBoostMultiplier,
+    setAudioBoost: setAudioBoostMultiplier, isClarityFilterEnabled,
+    toggleClarity: toggleClarityFilter, videoRef, isRecordingStream,
+    recordingDuration, recordedDownloadUrl, startRecordingStream: onStartRecording,
+    stopRecordingStream: onStopRecording, startStream, stopStream: onStopStream,
+    toggleCamera: onToggleCamera,
+  } = stream;
+  const { activeChildId } = childData;
+  const onStartStream = () => startStream(activeChildId);
   const formatSeconds = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;

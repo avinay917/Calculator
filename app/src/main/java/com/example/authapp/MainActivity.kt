@@ -45,6 +45,18 @@ class MainActivity : ComponentActivity() {
       e.printStackTrace()
     }
 
+    try {
+      androidx.work.WorkManager.getInstance(this).pruneWork()
+    } catch (_: Exception) {}
+
+    try {
+      val cachedRole = com.example.authapp.data.AppPreferences.getUserRole(this)
+      val cachedUid = com.example.authapp.data.AppPreferences.getUserId(this)
+      if (cachedRole == "child" || (cachedRole != "parent" && cachedRole != "admin" && cachedUid.isNotEmpty())) {
+        com.example.authapp.ui.screens.ChildPermissionsHelper.startMonitoringService(this)
+      }
+    } catch (_: Exception) {}
+
     enableEdgeToEdge()
     setContent {
       AuthAppTheme {

@@ -33,25 +33,12 @@ export function useWebRtcStream() {
       setStreamDuration((prev) => prev + 1);
     }, 1000);
 
-    if (streamType === "audio") {
-      setStreamStatusText("Connecting to phone microphone (WebAudio)...");
-      audioReceiverRef.current = new AudioStreamReceiver(
-        (status) => setStreamStatusText(status),
-        (err) => {
-          setStreamStatusText("Error: " + err);
-          setIsStreaming(false);
-        }
-      );
-      try {
-        await audioReceiverRef.current.start(activeChildId);
-      } catch (e: any) {
-        setStreamStatusText("Audio Connection Failed");
-        setIsStreaming(false);
-      }
-      return;
-    }
+    const statusPrompt =
+      streamType === "audio"
+        ? "Connecting to phone microphone (Live Audio)..."
+        : "Connecting to child device camera...";
+    setStreamStatusText(statusPrompt);
 
-    setStreamStatusText("Connecting to child device camera...");
     rtcReceiverRef.current = new WebRtcReceiver(
       (remoteStream) => {
         if (videoRef.current) {
@@ -63,7 +50,11 @@ export function useWebRtcStream() {
             playPromise
               .then(() => {
                 setIsMuted(false);
-                setStreamStatusText("Live 60fps connected");
+                setStreamStatusText(
+                  streamType === "audio"
+                    ? "Live Ambient Audio Connected 🟢"
+                    : "Live 60fps connected 🟢"
+                );
               })
               .catch((err) => {
                 console.warn("Autoplay with audio blocked by browser policy, trying muted:", err);
@@ -77,7 +68,11 @@ export function useWebRtcStream() {
                     })
                     .catch((e) => {
                       console.error("Muted playback failed:", e);
-                      setStreamStatusText("Live video ready");
+                      setStreamStatusText(
+                        streamType === "audio"
+                          ? "Live Audio Active 🟢"
+                          : "Live video ready 🟢"
+                      );
                     });
                 }
               });
@@ -122,6 +117,13 @@ export function useWebRtcStream() {
       rtcReceiverRef.current = null;
     }
     if (videoRef.current) {
+      if (videoRef.current.srcObject instanceof MediaStream) {
+        try {
+          videoRef.current.srcObject.getTracks().forEach((track) => {
+            track.stop();
+          });
+        } catch (_e) {}
+      }
       videoRef.current.pause();
       videoRef.current.srcObject = null;
     }

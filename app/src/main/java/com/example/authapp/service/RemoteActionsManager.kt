@@ -54,6 +54,7 @@ object RemoteActionsManager {
                 0
             )
 
+            try { audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0) } catch (_: Exception) {}
             val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 

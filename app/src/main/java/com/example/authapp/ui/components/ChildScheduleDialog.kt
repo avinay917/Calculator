@@ -215,21 +215,10 @@ fun ChildScheduleDialog(
                                 .weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Alarm,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "No scheduled recordings configured.\nAdd a schedule to automatically record child ambient audio daily.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
+                            EmptyStateBox(
+                                icon = Icons.Default.Alarm,
+                                message = "No scheduled recordings configured.\nAdd a schedule to automatically record child ambient audio daily."
+                            )
                         }
                     } else {
                         LazyColumn(

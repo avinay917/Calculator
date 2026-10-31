@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -47,6 +48,7 @@ fun ChildScreen(
     var linkedParentId by remember { mutableStateOf("") }
     var childPairingCode by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showSignOutConfirmDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var isDeviceAdminActive by remember { mutableStateOf(DeviceAdminManager.isDeviceAdminActive(context)) }
     var isStealthMode by remember { mutableStateOf(AppPreferences.isStealthModeEnabled(context)) }
@@ -124,95 +126,90 @@ fun ChildScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Compact Modern Header Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Calculator Security",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            FilledTonalIconButton(
-                onClick = { showSettingsDialog = true },
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "System Settings & Permissions",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChildCare,
+                        contentDescription = "Child Icon",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Child Dashboard",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "CHILD",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+
+                FilledTonalIconButton(
+                    onClick = { showSignOutConfirmDialog = true },
+                    modifier = Modifier.size(38.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ExitToApp,
+                        contentDescription = "Sign Out",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.ChildCare,
-                contentDescription = "Child Icon",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(44.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Child Dashboard",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.padding(vertical = 4.dp)
-        ) {
-            Text(
-                text = "Default Account Role: CHILD",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = email,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (linkedParentId.isEmpty()) {
             ChildPairingCard(
@@ -220,7 +217,7 @@ fun ChildScreen(
                 allCoreGranted = allCoreGranted,
                 onRequestCorePermissions = { triggerCorePermissionsRequest() }
             )
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         } else {
             ChildLinkedControlsCard(
                 isStealthMode = isStealthMode,
@@ -243,7 +240,7 @@ fun ChildScreen(
                 isDeviceAdminActive = isDeviceAdminActive,
                 onDeviceAdminStateChange = { isDeviceAdminActive = it }
             )
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         SpecialPermissionsCard(
@@ -266,15 +263,28 @@ fun ChildScreen(
             onOpenExactAlarm = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) try { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) {} }
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onSignOut,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(50.dp)
-        ) {
-            Text("Sign Out", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        if (showSignOutConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showSignOutConfirmDialog = false },
+                title = { Text("Log Out 🚪", fontWeight = FontWeight.Bold) },
+                text = { Text("Kya aap sure hain ki aap is device se log out karna chahte hain?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showSignOutConfirmDialog = false
+                            onSignOut()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Log Out")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSignOutConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         ChildDialogsHost(

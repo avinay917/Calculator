@@ -119,8 +119,9 @@ dependencies {
   // Encryption at rest
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
-  // QR Code generator
+  // QR Code generator & Scanner
   implementation("com.google.zxing:core:3.5.3")
+  implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
   // DataStore for secure preferences
   implementation("androidx.datastore:datastore-preferences:1.0.0")

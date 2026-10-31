@@ -41,7 +41,7 @@ class KeepAliveWorker(
             return Result.success()
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)
-            return Result.retry()
+            return Result.success()
         }
     }
 

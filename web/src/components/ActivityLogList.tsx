@@ -1,5 +1,10 @@
 "use client";
 
+import { useApp } from "@/context/AppContext";
+
+import { UniversalActivityFeed } from "./activity/UniversalActivityFeed";
+import { ActivityFeedItem } from "@/types/dashboard";
+
 import React, { useState } from "react";
 import {
   MessageSquare,
@@ -29,6 +34,7 @@ import { FilesTab } from "./activity/ActivityFilesTab";
 import { PhotoViewerModal, FileDetailsModal } from "./activity/ActivityModals";
 
 export type ActivityTabType =
+  | "feed"
   | "whatsapp"
   | "calls"
   | "sms"
@@ -42,59 +48,42 @@ export type ActivityTabType =
   | "files"
   | "alerts";
 
-export interface ActivityLogListProps {
-  activityTab: ActivityTabType;
-  setActivityTab: (tab: ActivityTabType) => void;
-  securityAlerts?: any[];
-  whatsappLogs: any[];
-  callLogs: any[];
-  smsLogs: any[];
-  notifications: any[];
-  webHistory: any[];
-  recordings: any[];
-  packageEvents: any[];
-  simInfo: any;
-  clipboardLogs: any[];
-  mediaGallery: any[];
-  fileExplorer: any[];
-  selectedDirectoryPath: string;
-  setSelectedDirectoryPath: (path: string) => void;
-  sendCommand: (cmd: string, val: any) => void;
-  installedApps?: any[];
-  blockedPackages?: Record<string, boolean>;
-  onToggleBlockApp?: (pkg: string, currentBlocked: boolean) => void;
-  onUninstallApp?: (pkg: string) => void;
-  snapshotsList?: any[];
-  handleRequestSnapshot?: (facing: "front" | "back") => void;
-  capturingFacing?: "front" | "back" | null;
-}
+export default function ActivityLogList() {
+  const {
+    activityTab,
+    setActivityTab,
+    childData,
+    commands,
+    selectedDirectoryPath,
+    setSelectedDirectoryPath,
+  } = useApp();
 
-export default function ActivityLogList({
-  activityTab,
-  setActivityTab,
-  securityAlerts = [],
-  whatsappLogs,
-  callLogs,
-  smsLogs,
-  notifications,
-  webHistory,
-  recordings,
-  packageEvents,
-  simInfo,
-  clipboardLogs,
-  mediaGallery,
-  fileExplorer,
-  selectedDirectoryPath,
-  setSelectedDirectoryPath,
-  sendCommand,
-  installedApps = [],
-  blockedPackages = {},
-  onToggleBlockApp,
-  onUninstallApp,
-  snapshotsList = [],
-  handleRequestSnapshot,
-  capturingFacing = null,
-}: ActivityLogListProps) {
+  const {
+    whatsappLogs = [],
+    callLogs = [],
+    smsLogs = [],
+    notifications = [],
+    webHistory = [],
+    recordings = [],
+    packageEvents = [],
+    simInfo = null,
+    clipboardLogs = [],
+    mediaGallery = [],
+    fileExplorer = [],
+    installedApps = [],
+    blockedPackages = {},
+    securityAlerts = [],
+    snapshotsList = [],
+    activityFeed = [],
+  } = childData;
+
+  const {
+    sendCommand,
+    handleToggleBlockApp: onToggleBlockApp,
+    handleUninstallApp: onUninstallApp,
+    handleRequestSnapshot,
+    capturingFacing = null,
+  } = commands;
   const [selectedPhotoViewer, setSelectedPhotoViewer] = useState<any | null>(null);
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -115,6 +104,7 @@ export default function ActivityLogList({
   };
 
   const tabs = [
+    { id: "feed" as ActivityTabType, label: "Live Feed", icon: Radio, count: activityFeed.length },
     { id: "whatsapp" as ActivityTabType, label: "WhatsApp", icon: MessageSquare, count: whatsappLogs.length },
     { id: "calls" as ActivityTabType, label: "Calls", icon: Phone, count: callLogs.length },
     { id: "sms" as ActivityTabType, label: "SMS", icon: MessageSquare, count: smsLogs.length },
@@ -163,6 +153,7 @@ export default function ActivityLogList({
       </div>
 
       {/* Tab Panels */}
+      {activityTab === "feed" && <UniversalActivityFeed events={activityFeed} />}
       {activityTab === "whatsapp" && <WhatsAppTab logs={whatsappLogs} />}
       {activityTab === "calls" && <CallsTab logs={callLogs} />}
       {activityTab === "sms" && <SmsTab logs={smsLogs} />}

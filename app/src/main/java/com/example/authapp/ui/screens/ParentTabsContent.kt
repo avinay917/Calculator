@@ -26,6 +26,7 @@ fun ParentTabsContent(
     onSignOut: () -> Unit,
     onPlayRecording: (RecordingSession) -> Unit,
     onStopPlayback: () -> Unit,
+    onUnpairClick: ((User) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     when (uiState.selectedTab) {
@@ -53,6 +54,7 @@ fun ParentTabsContent(
                 onActivityClick = { child, tab -> viewModel.openActivityDialog(child, initialTab = tab) },
                 onAlertsClick = { child -> viewModel.openAlertsDialog(child) },
                 onScheduleClick = { child -> viewModel.openScheduleDialog(child) },
+                onUnlinkClick = onUnpairClick,
                 modifier = modifier
             )
         }
@@ -172,10 +174,18 @@ fun ParentTabsContent(
                         context.toast("Triggering Internet/Wi-Fi ON on Child Device...")
                     }
                 },
-                onCleanCloudStorage = {
+                onRefreshLocation = {
                     if (targetChildId.isNotEmpty()) {
-                        context.toast("Starting 7-Day Cloud Storage Cleanup...")
-                        viewModel.cleanCloudStorage(targetChildId, 7)
+                        viewModel.requestLocationRefresh(targetChildId)
+                        context.toast("Requesting GPS Location from Child Device...")
+                    } else {
+                        context.toast("Please select a child device first")
+                    }
+                },
+                onCleanCloudStorage = { days ->
+                    if (targetChildId.isNotEmpty()) {
+                        context.toast("Starting $days-Day Cloud Storage Cleanup...")
+                        viewModel.cleanCloudStorage(targetChildId, days)
                     } else {
                         context.toast("Please select a child device first")
                     }

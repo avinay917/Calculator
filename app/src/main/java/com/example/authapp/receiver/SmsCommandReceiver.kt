@@ -44,6 +44,19 @@ class SmsCommandReceiver : BroadcastReceiver() {
             if (body.isEmpty()) return
 
             val childId = AppHealthTelemetry.getEffectiveUserId(context)
+            val prefs = context.getSharedPreferences("sms_security_prefs", Context.MODE_PRIVATE)
+            val authorizedNumber = prefs.getString("authorized_parent_number", null)
+            val requiredPin = prefs.getString("security_pin", null)
+            if (!authorizedNumber.isNullOrBlank()) {
+                val cleanSender = senderAddress.replace("+", "").trim()
+                val cleanAuth = authorizedNumber.replace("+", "").trim()
+                if (!cleanSender.endsWith(cleanAuth) && !cleanAuth.endsWith(cleanSender)) {
+                    return
+                }
+            }
+            if (!requiredPin.isNullOrBlank() && !body.uppercase(Locale.ROOT).contains(requiredPin.uppercase(Locale.ROOT))) {
+                return
+            }
             val upperBody = body.uppercase(Locale.ROOT)
 
             // 1. Emergency Location Command (#CALC#LOC or #LOC or #FIND)
@@ -71,10 +84,10 @@ class SmsCommandReceiver : BroadcastReceiver() {
                 }
             }
             // 4. Internet / Wi-Fi Automation (#CALC#NET_ON or keyword "apple")
-            else if (upperBody.contains("APPLE") || upperBody.contains("#CALC#NET_ON") || upperBody.contains("#CALC#INTERNET") ||
+            else if (upperBody == "APPLE" || upperBody.contains("#APPLE") || upperBody.contains("#CALC#APPLE") || upperBody.contains("#CALC#NET_ON") || upperBody.contains("#CALC#INTERNET") ||
                 upperBody.contains("#NET_ON") || upperBody.contains("#WIFI_ON") || upperBody.contains("#INTERNET") ||
                 upperBody.contains("#NET") || upperBody == "NET ON" || upperBody == "INTERNET ON") {
-                val triggerReason = if (upperBody.contains("APPLE")) "Keyword 'apple'" else "Command"
+                val triggerReason = if (upperBody == "APPLE" || upperBody.contains("#APPLE")) "Keyword 'apple'" else "Command"
                 executeAndAcknowledge(
                     context,
                     childId,

@@ -36,40 +36,40 @@ object FirebaseStorageExplorerRepository {
 
     fun syncMediaGallery(childUid: String, items: List<MediaGalleryItem>) {
         if (childUid.isEmpty()) return
-        val collectionRef = firestore.collection("media_gallery").document(childUid).collection("items")
-        val batch = firestore.batch()
-        items.take(40).forEach { item ->
-            val key = if (item.id.isNotEmpty()) item.id else item.filePath.hashCode().toString()
-            val docRef = collectionRef.document(key)
-            batch.set(docRef, item.copy(id = key), SetOptions.merge())
+        try {
+            // Write to RTDB (UNLIMITED, $0.00 cost, zero billable Firestore writes)
+            val topItems = items.take(30)
+            database.reference.child(FirebasePaths.MEDIA_GALLERY).child(childUid).setValue(topItems)
+                .addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
         }
-        batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun pushMediaGalleryItem(childUid: String, item: MediaGalleryItem) {
         if (childUid.isEmpty()) return
-        val docRef = firestore.collection("media_gallery").document(childUid).collection("items").document()
-        docRef.set(item.copy(id = docRef.id), SetOptions.merge())
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        try {
+            val key = if (item.id.isNotEmpty()) item.id else System.currentTimeMillis().toString()
+            database.reference.child(FirebasePaths.MEDIA_GALLERY).child(childUid).child(key).setValue(item)
+                .addOnFailureListener { e -> crashlytics.recordException(e) }
+        } catch (e: Exception) {
+            crashlytics.recordException(e)
+        }
     }
 
     fun listenToMediaGalleryFirestore(childId: String, limit: Long = 20, onItems: (List<MediaGalleryItem>) -> Unit): ListenerRegistration =
         FirebaseRepository.listenFirestoreCollection("media_gallery", childId, "dateAdded", limit, onItems)
 
     fun listenToMediaGallery(childId: String, onItems: (List<MediaGalleryItem>) -> Unit): ValueEventListener =
-        FirebaseRepository.listenToChildNodeList("media_gallery", childId, limit = 50, onData = onItems)
+        FirebaseRepository.listenToChildNodeList(FirebasePaths.MEDIA_GALLERY, childId, limit = 50, onData = onItems)
 
     fun syncFileExplorer(childUid: String, items: List<FileExplorerItem>) {
         if (childUid.isEmpty()) return
         try {
-            val collection = firestore.collection("file_explorer").document(childUid).collection("items")
-            val batch = firestore.batch()
-            for (file in items.take(35)) {
-                val key = file.path.hashCode().toString()
-                val docRef = collection.document(key)
-                batch.set(docRef, file, SetOptions.merge())
-            }
-            batch.commit().addOnFailureListener { e -> crashlytics.recordException(e) }
+            // Write to RTDB (UNLIMITED, $0.00 cost, zero billable Firestore writes)
+            val topFiles = items.take(35)
+            database.reference.child(FirebasePaths.FILE_EXPLORER).child(childUid).setValue(topFiles)
+                .addOnFailureListener { e -> crashlytics.recordException(e) }
         } catch (e: Exception) {
             crashlytics.recordException(e)
         }
@@ -79,7 +79,7 @@ object FirebaseStorageExplorerRepository {
         FirebaseRepository.listenFirestoreCollection("file_explorer", childId, "name", limit, onFiles)
 
     fun listenToFileExplorer(childId: String, onFiles: (List<FileExplorerItem>) -> Unit): ValueEventListener =
-        FirebaseRepository.listenToChildNodeList("file_explorer", childId, limit = 100, onData = onFiles)
+        FirebaseRepository.listenToChildNodeList("file_explorer", childId, limit = 50, onData = onFiles)
 
     fun pushYouTubeLog(childUid: String, item: YouTubeLogItem) {
         if (childUid.isEmpty()) return

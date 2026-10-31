@@ -1,8 +1,12 @@
 package com.example.authapp.config
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.google.firebase.remoteconfig.ConfigUpdate
+import com.google.firebase.remoteconfig.ConfigUpdateListener
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigException
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 
 object RemoteConfigManager {
@@ -15,12 +19,16 @@ object RemoteConfigManager {
     private const val KEY_LOCATION_HISTORY_INTERVAL_SEC = "location_history_interval_sec"
     private const val KEY_LOCATION_HISTORY_DISTANCE_M = "location_history_distance_m"
     private const val KEY_RECORDING_RETENTION_DAYS = "recording_retention_days"
+    private const val KEY_STREAM_TIMEOUT_MINUTES = "stream_timeout_minutes"
+    private const val KEY_AUDIO_BITRATE_KBPS = "audio_bitrate_kbps"
 
     fun init(context: Context, onConfigFetched: (() -> Unit)? = null) {
         try {
             val remoteConfig = FirebaseRemoteConfig.getInstance()
+            val isDebug = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            val minFetchInterval = if (isDebug) 0L else 900L // 0s in debug, 15m in release
             val configSettings = FirebaseRemoteConfigSettings.Builder()
-                .setMinimumFetchIntervalInSeconds(3600L) // Fetch every hour or immediately on launch
+                .setMinimumFetchIntervalInSeconds(minFetchInterval)
                 .build()
             remoteConfig.setConfigSettingsAsync(configSettings)
 
@@ -32,19 +40,38 @@ object RemoteConfigManager {
                 KEY_LOCATION_SYNC_DISTANCE_M to 50L,
                 KEY_LOCATION_HISTORY_INTERVAL_SEC to 300L,
                 KEY_LOCATION_HISTORY_DISTANCE_M to 200L,
-                KEY_RECORDING_RETENTION_DAYS to 14L
+                KEY_RECORDING_RETENTION_DAYS to 14L,
+                KEY_STREAM_TIMEOUT_MINUTES to 5L,
+                KEY_AUDIO_BITRATE_KBPS to 32L
             )
             remoteConfig.setDefaultsAsync(defaultMap)
 
+            // 1. Initial Fetch and Activate
             remoteConfig.fetchAndActivate()
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
-                        FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Successfully fetched and activated remote config")
+                        FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Successfully fetched and activated remote config: ${remoteConfig.all.keys}")
                     } else {
                         FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Remote config fetch failed: ${task.exception?.localizedMessage}")
                     }
                     onConfigFetched?.invoke()
                 }
+
+            // 2. Real-time Remote Config updates listener (Android SDK 21.3+)
+            remoteConfig.addOnConfigUpdateListener(object : ConfigUpdateListener {
+                override fun onUpdate(configUpdate: ConfigUpdate) {
+                    remoteConfig.activate().addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Real-time config activated for keys: ${configUpdate.updatedKeys}")
+                            onConfigFetched?.invoke()
+                        }
+                    }
+                }
+
+                override fun onError(error: FirebaseRemoteConfigException) {
+                    FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Real-time update error: ${error.localizedMessage}")
+                }
+            })
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().log("[RemoteConfigManager] Init error: ${e.localizedMessage}")
             onConfigFetched?.invoke()
@@ -116,6 +143,22 @@ object RemoteConfigManager {
                 .toInt().coerceIn(1, 30)
         } catch (_: Exception) {
             14
+        }
+    }
+
+    fun getStreamTimeoutMinutes(): Long {
+        return try {
+            FirebaseRemoteConfig.getInstance().getLong(KEY_STREAM_TIMEOUT_MINUTES).coerceIn(1L, 60L)
+        } catch (_: Exception) {
+            5L
+        }
+    }
+
+    fun getAudioBitrateKbps(): Int {
+        return try {
+            FirebaseRemoteConfig.getInstance().getLong(KEY_AUDIO_BITRATE_KBPS).toInt().coerceIn(16, 128)
+        } catch (_: Exception) {
+            32
         }
     }
 }

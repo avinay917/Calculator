@@ -5,9 +5,11 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.QrCode
@@ -17,8 +19,12 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.authapp.audio.AudioRouteManager
@@ -198,44 +204,10 @@ fun ParentScreen(
         Scaffold(
             modifier = modifier.fillMaxSize(),
             bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = uiState.selectedTab == 0,
-                        onClick = { viewModel.selectTab(0) },
-                        icon = { Icon(Icons.Default.Sensors, contentDescription = "Live Monitor") },
-                        label = { Text("Live") }
-                    )
-                    NavigationBarItem(
-                        selected = uiState.selectedTab == 1,
-                        onClick = { viewModel.selectTab(1) },
-                        icon = { Icon(Icons.Default.Security, contentDescription = "Controls") },
-                        label = { Text("Controls") }
-                    )
-                    NavigationBarItem(
-                        selected = uiState.selectedTab == 2,
-                        onClick = { viewModel.selectTab(2) },
-                        icon = { Icon(Icons.Default.CloudQueue, contentDescription = "Cloud History") },
-                        label = { Text("History") }
-                    )
-                    NavigationBarItem(
-                        selected = uiState.selectedTab == 3,
-                        onClick = { viewModel.selectTab(3) },
-                        icon = { Icon(Icons.Default.Schedule, contentDescription = "Schedule") },
-                        label = { Text("Schedule") }
-                    )
-                    NavigationBarItem(
-                        selected = showPairingDialog,
-                        onClick = { showPairingDialog = true },
-                        icon = { Icon(Icons.Default.QrCode, contentDescription = "Pair Device") },
-                        label = { Text("Pair") }
-                    )
-                    NavigationBarItem(
-                        selected = uiState.selectedTab == 4,
-                        onClick = { viewModel.selectTab(4) },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") }
-                    )
-                }
+                FloatingPillBottomBar(
+                    selectedTab = uiState.selectedTab,
+                    onTabSelected = viewModel::selectTab
+                )
             }
         ) { innerPadding ->
             Box(
@@ -252,7 +224,8 @@ fun ParentScreen(
                     onPairClick = { showPairingDialog = true },
                     onSignOut = onSignOut,
                     onPlayRecording = { rec -> playRecording(rec) },
-                    onStopPlayback = { stopPlayback() }
+                    onStopPlayback = { stopPlayback() },
+                    onUnpairClick = { child -> childToUnpair = child }
                 )
 
                 ParentDialogsHost(
@@ -279,6 +252,123 @@ fun ParentScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun FloatingPillBottomBar(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.96f),
+            shadowElevation = 10.dp,
+            tonalElevation = 6.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(62.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FloatingPillItem(
+                    selected = selectedTab == 0,
+                    icon = Icons.Default.Sensors,
+                    label = "Live",
+                    onClick = { onTabSelected(0) }
+                )
+                FloatingPillItem(
+                    selected = selectedTab == 1,
+                    icon = Icons.Default.Security,
+                    label = "Controls",
+                    onClick = { onTabSelected(1) }
+                )
+                FloatingPillItem(
+                    selected = selectedTab == 2,
+                    icon = Icons.Default.CloudQueue,
+                    label = "History",
+                    onClick = { onTabSelected(2) }
+                )
+                FloatingPillItem(
+                    selected = selectedTab == 3,
+                    icon = Icons.Default.Schedule,
+                    label = "Schedule",
+                    onClick = { onTabSelected(3) }
+                )
+                FloatingPillItem(
+                    selected = selectedTab == 4,
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    onClick = { onTabSelected(4) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.FloatingPillItem(
+    selected: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val animBg by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        animationSpec = tween(220),
+        label = "pill_bg"
+    )
+    val animContentColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+        animationSpec = tween(220),
+        label = "pill_content"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = animBg,
+        modifier = Modifier
+            .weight(1f)
+            .height(52.dp)
+            .padding(horizontal = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = animContentColor,
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)
+                ),
+                color = animContentColor,
+                maxLines = 1
+            )
         }
     }
 }

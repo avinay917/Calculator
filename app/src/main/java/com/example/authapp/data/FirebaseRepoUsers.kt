@@ -26,15 +26,45 @@ object FirebaseUserRepository {
     }
 
     fun getUserRoleOnce(uid: String, onRoleFetched: (String) -> Unit) {
+        var hasResponded = false
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (!hasResponded) {
+                hasResponded = true
+                try {
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        .collection("users").document(uid).get()
+                        .addOnSuccessListener { doc ->
+                            val role = doc.getString("role") ?: "child"
+                            onRoleFetched(role)
+                        }
+                        .addOnFailureListener {
+                            onRoleFetched("child")
+                        }
+                } catch (_: Exception) {
+                    onRoleFetched("child")
+                }
+            }
+        }
+        handler.postDelayed(timeoutRunnable, 3500L)
+
         database.reference.child("users").child(uid).child("role")
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    val role = snapshot.getValue(String::class.java) ?: "child"
-                    onRoleFetched(role)
+                    if (!hasResponded) {
+                        hasResponded = true
+                        handler.removeCallbacks(timeoutRunnable)
+                        val role = snapshot.getValue(String::class.java) ?: "child"
+                        onRoleFetched(role)
+                    }
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    onRoleFetched("child")
+                    if (!hasResponded) {
+                        hasResponded = true
+                        handler.removeCallbacks(timeoutRunnable)
+                        onRoleFetched("child")
+                    }
                 }
             })
     }

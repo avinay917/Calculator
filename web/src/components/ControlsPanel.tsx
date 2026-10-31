@@ -4,37 +4,12 @@ import React from "react";
 import { MapPin, RefreshCw, ExternalLink } from "lucide-react";
 import ControlsActionButtons from "@/components/controls/ControlsActionButtons";
 import ControlsSnapshotsView from "@/components/controls/ControlsSnapshotsView";
+import { useApp } from "@/context/AppContext";
 
-interface ControlsPanelProps {
-  childLocation: any;
-  isRefreshingLocation: boolean;
-  setIsRefreshingLocation: (val: boolean) => void;
-  sendCommand: (cmd: string, val: any) => void;
-  isSirenActive: boolean;
-  isTorchActive: boolean;
-  capturingFacing: "front" | "back" | null;
-  handleRequestSnapshot: (facing: "front" | "back") => void;
-  snapshotsList: any[];
-  latestSnapshot: any;
-  setSelectedSnapshotModal: (snap: any) => void;
-  storageRetentionDays: number;
-  handleUpdateRetention: (days: number) => void;
-  isCleaningStorage: boolean;
-  cleanupStatusMessage: string | null;
-  handleRunAutoClean: () => void;
-}
+export default function ControlsPanel() {
+  const { childData, commands, isRefreshingLocation, setIsRefreshingLocation, setSelectedSnapshotModal } = useApp();
+  const { childLocation, snapshotsList, latestSnapshot, isTorchActive, isSirenActive } = childData;
 
-export default function ControlsPanel({
-  childLocation,
-  isRefreshingLocation,
-  setIsRefreshingLocation,
-  sendCommand,
-  capturingFacing,
-  handleRequestSnapshot,
-  snapshotsList,
-  latestSnapshot,
-  setSelectedSnapshotModal,
-}: ControlsPanelProps) {
   const rearSnap =
     snapshotsList.find((s) => s.cameraFacing !== "front") ||
     (latestSnapshot?.cameraFacing !== "front" ? latestSnapshot : null);
@@ -59,7 +34,7 @@ export default function ControlsPanel({
           <button
             onClick={() => {
               setIsRefreshingLocation(true);
-              sendCommand("LOCATION", true);
+              commands.sendCommand("LOCATION", true);
               setTimeout(() => setIsRefreshingLocation(false), 2000);
             }}
             disabled={isRefreshingLocation}
@@ -101,14 +76,7 @@ export default function ControlsPanel({
         )}
       </div>
 
-      {/* Action Buttons Grid */}
-      <ControlsActionButtons
-        capturingFacing={capturingFacing}
-        onRequestSnapshot={handleRequestSnapshot}
-        sendCommand={sendCommand}
-      />
-
-      {/* Dedicated Snapshot Views */}
+      <ControlsActionButtons />
       <ControlsSnapshotsView
         rearSnap={rearSnap}
         frontSnap={frontSnap}

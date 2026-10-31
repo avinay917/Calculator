@@ -16,7 +16,11 @@ object FirebaseDeviceStateRepository {
     private val crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
 
     fun updateChildLocation(childId: String, location: UserLocation) {
+        if (childId.isEmpty()) return
         database.reference.child("users").child(childId).child("location").setValue(location)
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        database.reference.child("location").child(childId).setValue(location)
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun requestChildLocation(childId: String) {
@@ -90,18 +94,17 @@ object FirebaseDeviceStateRepository {
         }
 
     fun recordNetworkHistory(childId: String, item: NetworkHistoryItem) {
-        if (childId.isEmpty()) return
-        val ref = database.reference.child("network_history").child(childId).push()
-        ref.setValue(item.copy(id = ref.key ?: ""))
-            .addOnFailureListener { e -> crashlytics.recordException(e) }
+        saveNetworkHistoryToFirestore(childId, item)
     }
 
     fun listenToNetworkHistory(childId: String, onHistory: (List<NetworkHistoryItem>) -> Unit): ValueEventListener =
         FirebaseRepository.listenToChildNodeList("network_history", childId, limit = 50, transform = { it.sortedByDescending { n -> n.connectedAt }.take(50) }, onData = onHistory)
 
     fun saveNetworkHistoryToFirestore(childId: String, item: NetworkHistoryItem) {
+        if (childId.isEmpty()) return
         val docRef = firestore.collection("network_history").document(childId).collection("items").document()
-        FirebaseRepository.saveChildDocumentDual("network_history", "network_history", childId, docRef.id, item.copy(id = docRef.id))
+        docRef.set(item.copy(id = docRef.id))
+            .addOnFailureListener { e -> crashlytics.recordException(e) }
     }
 
     fun listenToChildNetworkHistoryFirestore(childId: String, limit: Long = 50, onUpdate: (List<NetworkHistoryItem>) -> Unit): ListenerRegistration =

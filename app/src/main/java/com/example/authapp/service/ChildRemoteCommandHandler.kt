@@ -28,6 +28,28 @@ object ChildRemoteCommandHandler {
         value: Any?,
         onSyncInstalledApps: (String) -> Unit
     ) {
+        // Dispatches through modular RemoteActionDispatcher for 1-step extensible feature architecture
+        val handled = RemoteActionDispatcher.dispatch(
+            context = context,
+            scope = coroutineScope,
+            uid = uid,
+            command = command,
+            value = value,
+            onSyncInstalledApps = onSyncInstalledApps
+        )
+        if (!handled) {
+            handleLegacyCommand(context, coroutineScope, uid, command, value, onSyncInstalledApps)
+        }
+    }
+
+    private fun handleLegacyCommand(
+        context: Context,
+        coroutineScope: CoroutineScope,
+        uid: String,
+        command: String,
+        value: Any?,
+        onSyncInstalledApps: (String) -> Unit
+    ) {
         val appContext = context.applicationContext
         val effectiveUid = uid.ifEmpty { AppHealthTelemetry.getEffectiveUserId(appContext) }
         when (command) {

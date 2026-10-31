@@ -110,31 +110,12 @@ class ChildDeviceStateMonitor(private val context: Context) {
     }
 
     fun registerMediaObserver(uid: String, coroutineScope: CoroutineScope, mainHandler: Handler) {
-        if (mediaContentObserver != null || uid.isEmpty()) return
-        try {
-            mediaContentObserver = object : ContentObserver(mainHandler) {
-                override fun onChange(selfChange: Boolean, uri: Uri?) {
-                    super.onChange(selfChange, uri)
-                    mediaDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
-                    val runnable = Runnable {
-                        coroutineScope.launch(Dispatchers.IO) {
-                            MediaGalleryUtils.scanAndSyncMediaGallery(context.applicationContext, uid)
-                            FirebaseCrashlytics.getInstance().log("[ChildService] Debounced MediaStore sync executed")
-                        }
-                    }
-                    mediaDebounceRunnable = runnable
-                    mainHandler.postDelayed(runnable, 10_000L)
-                }
-            }
-            context.contentResolver.registerContentObserver(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                true,
-                mediaContentObserver!!
-            )
-            FirebaseCrashlytics.getInstance().log("[ChildService] MediaStore ContentObserver registered")
-        } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().log("[ChildService] MediaObserver register error: ${e.localizedMessage}")
-        }
+        if (uid.isEmpty()) return
+        // Do not register continuous ContentObserver on MediaStore.
+        // Android triggers EXTERNAL_CONTENT_URI dozens of times per hour for thumbnail caching, WhatsApp media, etc.
+        // Firing scanAndSyncMediaGallery on every trigger causes thousands of billable writes per day.
+        // Media scanning is now performed safely on-demand or throttled with 24h cooldown.
+        FirebaseCrashlytics.getInstance().log("[ChildService] MediaStore continuous observer disabled to protect database quota")
     }
 
     fun registerTelephonyCallStateListener(uid: String, mainExecutor: Executor) {

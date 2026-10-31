@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.authapp.utils.toast
@@ -31,7 +33,7 @@ fun ParentSettingsOfflineSmsCard(
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText(label, text)
         clipboard.setPrimaryClip(clip)
-        context.toast("\"$text\" copied to clipboard")
+        context.toast("\"$text\" copied")
     }
     val smsAction: (String) -> Unit = onSendSms ?: { body ->
         try {
@@ -47,139 +49,149 @@ fun ParentSettingsOfflineSmsCard(
 
     Card(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header: Title + Badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = Icons.Default.Sms,
-                    contentDescription = null,
-                    tint = Color(0xFF10B981),
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Sms,
+                        contentDescription = null,
+                        tint = Color(0xFF10B981),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Emergency Offline SMS Commands",
+                        text = "Offline SMS Commands",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF10B981).copy(alpha = 0.15f)
+                ) {
                     Text(
-                        text = "Works when child phone has NO internet. Send directly via SMS",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "No Net Needed",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color(0xFF059669),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Command 1: #CALC#LOC (Location)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("SMS: \"#CALC#LOC\"", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("→ Live GPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("Child device replies with Google Maps live location link", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(onClick = { copyAction("#CALC#LOC", "Location Command") }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
-                        }
-                        FilledTonalButton(
-                            onClick = { smsAction("#CALC#LOC") },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text("Send SMS", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
+            CompactSmsCommandRow(
+                commandCode = "#CALC#LOC",
+                label = "Location",
+                badgeColor = MaterialTheme.colorScheme.primary,
+                badgeBgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                onCopy = { copyAction("#CALC#LOC", "Location Command") },
+                onSend = { smsAction("#CALC#LOC") }
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Command 2: #CALC#NET (Enable Mobile Data / Wifi)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("SMS: \"#CALC#NET\"", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("→ Turn Net ON", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("Turns on WiFi/Mobile Data if turned off by child", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(onClick = { copyAction("#CALC#NET", "Net ON Command") }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
-                        }
-                        FilledTonalButton(
-                            onClick = { smsAction("#CALC#NET") },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text("Send SMS", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
+            // Command 2: #CALC#NET (Turn on WiFi / Mobile Data)
+            CompactSmsCommandRow(
+                commandCode = "#CALC#NET",
+                label = "Net ON",
+                badgeColor = MaterialTheme.colorScheme.primary,
+                badgeBgColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                onCopy = { copyAction("#CALC#NET", "Net ON Command") },
+                onSend = { smsAction("#CALC#NET") }
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             // Command 3: #CALC#SIREN (Siren)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth()
+            CompactSmsCommandRow(
+                commandCode = "#CALC#SIREN",
+                label = "Siren",
+                badgeColor = MaterialTheme.colorScheme.error,
+                badgeBgColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                onCopy = { copyAction("#CALC#SIREN", "Siren Command") },
+                onSend = { smsAction("#CALC#SIREN") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactSmsCommandRow(
+    commandCode: String,
+    label: String,
+    badgeColor: Color,
+    badgeBgColor: Color,
+    onCopy: () -> Unit,
+    onSend: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.padding(12.dp)
+                Text(
+                    text = commandCode,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = badgeColor
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = badgeBgColor
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("SMS: \"#CALC#SIREN\"", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("→ Siren Alarm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("Plays 100% loud siren even in silent/DND mode", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(onClick = { copyAction("#CALC#SIREN", "Siren Command") }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
-                        }
-                        FilledTonalButton(
-                            onClick = { smsAction("#CALC#SIREN") },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text("Send SMS", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = badgeColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onCopy,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                FilledTonalButton(
+                    onClick = onSend,
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text(
+                        text = "Send",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                    )
                 }
             }
         }

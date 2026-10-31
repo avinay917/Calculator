@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,9 +35,11 @@ fun ChildUserCard(
     onWhatsAppClick: (() -> Unit)? = null,
     onAlertsClick: () -> Unit,
     onScheduleClick: () -> Unit,
+    onUnlinkClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showHealthDialog by remember { mutableStateOf(false) }
+    var showConfirmUnlink by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -106,6 +109,20 @@ fun ChildUserCard(
                         )
                     }
                 }
+                if (onUnlinkClick != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { showConfirmUnlink = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Unlink Device",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
 
             if (!user.isOnline && user.lastSeen > 0L) {
@@ -151,6 +168,29 @@ fun ChildUserCard(
             user = user,
             health = deviceHealth,
             onDismiss = { showHealthDialog = false }
+        )
+    }
+
+    if (showConfirmUnlink && onUnlinkClick != null) {
+        AlertDialog(
+            onDismissRequest = { showConfirmUnlink = false },
+            title = { Text("Unlink Device?") },
+            text = { Text("Kya aap ${user.name.ifEmpty { "Child Device" }} ko unlink karna chahte hain? Unlink karne par child phone par naya pairing code generate ho jayega.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmUnlink = false
+                        onUnlinkClick()
+                    }
+                ) {
+                    Text("Unlink", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmUnlink = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

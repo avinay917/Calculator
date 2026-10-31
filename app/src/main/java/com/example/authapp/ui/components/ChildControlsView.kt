@@ -37,30 +37,12 @@ fun ChildControlsView(
     modifier: Modifier = Modifier
 ) {
     if (childUsers.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    modifier = Modifier.size(56.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "No Child Devices Connected",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Connect a child device to manage app limits and study mode.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        EmptyStateCard(
+            icon = Icons.Default.Security,
+            title = "No Child Devices Connected",
+            subtitle = "Connect a child device to manage app limits and study mode.",
+            modifier = modifier.fillMaxSize()
+        )
         return
     }
 
@@ -72,28 +54,18 @@ fun ChildControlsView(
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        ChildSelectorRow(
+            childUsers = childUsers,
+            selectedChildId = activeChild.uid,
+            onSelectChild = { uid -> childUsers.find { it.uid == uid }?.let(onSelectChild) }
+        )
         if (childUsers.size > 1) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(childUsers) { child ->
-                    FilterChip(
-                        selected = child.uid == activeChild.uid,
-                        onClick = { onSelectChild(child) },
-                        label = { Text(child.name.ifEmpty { "Child Device" }) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            }
             Spacer(modifier = Modifier.height(12.dp))
         }
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 120.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item {

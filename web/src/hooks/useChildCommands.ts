@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { User as FirebaseUser } from "firebase/auth";
 import { ref, set, get, update, onValue, off, query, orderByChild, equalTo } from "firebase/database";
-import { doc, setDoc } from "firebase/firestore";
-import { rtdb, firestore } from "@/lib/firebase";
+import { rtdb } from "@/lib/firebase";
 
 export function useChildCommands(
   user: FirebaseUser | null,
@@ -42,6 +41,11 @@ export function useChildCommands(
       timestamp: Date.now(),
     });
     alert(`Command '${command}' (${value ? "ON" : "OFF"}) sent to device.`);
+  };
+
+  const handleVibratePhone = async (seconds: number = 3) => {
+    if (!activeChildId) return;
+    await sendCommand("VIBRATE", seconds);
   };
 
   const handleRequestSnapshot = async (facing: "front" | "back" = "back") => {
@@ -157,20 +161,15 @@ export function useChildCommands(
       let childUid: string | null = null;
       let childEmail: string = "";
 
+      let foundCodeType: "child" | "parent" | "user" | null = null;
+
       const childCodeSnap = await get(ref(rtdb, `child_pairing_codes/${trimmed}`));
       if (childCodeSnap.exists()) {
         const data = childCodeSnap.val();
         if (data.childUid) {
           childUid = data.childUid;
           childEmail = data.childEmail || "";
-          try {
-            await update(ref(rtdb), {
-              [`child_pairing_codes/${trimmed}/isUsed`]: true,
-              [`child_pairing_codes/${trimmed}/linkedParentUid`]: user.uid,
-              [`child_pairing_codes/${trimmed}/linkedParentEmail`]: user.email || "",
-              [`child_pairing_codes/${trimmed}/linkedAt`]: Date.now(),
-            });
-          } catch (_e) {}
+          foundCodeType = "child";
         }
       }
 
@@ -181,6 +180,7 @@ export function useChildCommands(
           if (pData.linkedChildUid) {
             childUid = pData.linkedChildUid;
             childEmail = pData.childEmail || "";
+            foundCodeType = "parent";
           }
         }
       }
@@ -203,15 +203,52 @@ export function useChildCommands(
         return;
       }
 
+      // 1. Admin account cannot link to any child (Admin manages platform, not individual child)
+      const userSnap = await get(ref(rtdb, `users/${user.uid}`));
+      if (userSnap.exists() && userSnap.val().role === "admin") {
+        setPairingError("Admin account ko kisi child se link hone ki zaroorat nahi hai. Kripya Parent account ka upyog karein.");
+        setIsVerifyingCode(false);
+        return;
+      }
+
+      // 2. Strict 1-Parent to 1-Child enforcement: Parent can only have 1 linked child
+      const existingChildrenSnap = await get(
+        query(ref(rtdb, "users"), orderByChild("parentId"), equalTo(user.uid))
+      );
+      if (existingChildrenSnap.exists()) {
+        const linkedMap = existingChildrenSnap.val();
+        const otherChildren = Object.keys(linkedMap).filter((k) => k !== childUid);
+        if (otherChildren.length > 0) {
+          setPairingError("Aapke account se pehle se 1 child device linked hai! Ek parent sirf 1 child ko monitor kar sakta hai. Naya child link karne ke liye pehle maujooda child ko Remove/Unpair karein.");
+          setIsVerifyingCode(false);
+          return;
+        }
+      }
+
+      // 3. Strict 1-Child to 1-Parent enforcement: Child can only belong to 1 parent
+      const targetChildSnap = await get(ref(rtdb, `users/${childUid}`));
+      if (targetChildSnap.exists()) {
+        const targetData = targetChildSnap.val();
+        if (targetData.parentId && targetData.parentId !== user.uid) {
+          setPairingError("Yeh child pehle se kisi doosre parent se linked hai! Naye parent se link karne ke liye pehle child ko purane parent se Remove/Unpair karna hoga.");
+          setIsVerifyingCode(false);
+          return;
+        }
+      }
+
       const updates: Record<string, any> = {};
       updates[`users/${childUid}/parentId`] = user.uid;
-      await update(ref(rtdb), updates);
-
-      try {
-        await setDoc(doc(firestore, "users", childUid), { parentId: user.uid }, { merge: true });
-      } catch (e) {
-        console.warn("Firestore sync error:", e);
+      if (foundCodeType === "child") {
+        updates[`child_pairing_codes/${trimmed}/isUsed`] = true;
+        updates[`child_pairing_codes/${trimmed}/linkedParentUid`] = user.uid;
+        updates[`child_pairing_codes/${trimmed}/linkedParentEmail`] = user.email || "";
+        updates[`child_pairing_codes/${trimmed}/linkedAt`] = Date.now();
+      } else if (foundCodeType === "parent") {
+        updates[`pairing_codes/${trimmed}/isUsed`] = true;
+        updates[`pairing_codes/${trimmed}/linkedParentUid`] = user.uid;
+        updates[`pairing_codes/${trimmed}/linkedAt`] = Date.now();
       }
+      await update(ref(rtdb), updates);
 
       setPairingSuccess(`Successfully linked child device (${childEmail || childUid.slice(0, 8)})!`);
       setChildPairingInput("");
@@ -241,12 +278,6 @@ export function useChildCommands(
       updates[`streams/${childUid}`] = null;
       await update(ref(rtdb), updates);
 
-      try {
-        await setDoc(doc(firestore, "users", childUid), { parentId: "" }, { merge: true });
-      } catch (e) {
-        console.warn("Firestore unpair sync error:", e);
-      }
-
       if (activeChildId === childUid) setActiveChildId("");
       alert("Child device unpaired successfully. A new pairing code will be generated on child phone.");
     } catch (err: any) {
@@ -260,6 +291,7 @@ export function useChildCommands(
     handleRequestSnapshot,
     handleToggleBlockApp,
     handleUninstallApp,
+    handleVibratePhone,
     storageRetentionDays,
     isCleaningStorage,
     cleanupStatusMessage,

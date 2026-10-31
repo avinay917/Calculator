@@ -13,12 +13,15 @@ service cloud.firestore {
 
     function isLinkedParent(childId) {
       return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(childId))
         && get(/databases/$(database)/documents/users/$(childId)).data.parentId == request.auth.uid
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
     }
 
     function isAdmin() {
       return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
@@ -26,96 +29,116 @@ service cloud.firestore {
       return isOwner(childId) || isLinkedParent(childId) || isAdmin();
     }
 
-    // User profile documents
+    // User profile documents - Strict Backend Enforcement:
+    // 1. New users can ONLY create 'parent' or 'child' role (NEVER 'admin')
+    // 2. Normal users CANNOT change their role to 'admin' upon update
+    // 3. Only verified admin can assign 'admin' role
     match /users/{userId} {
-      allow read: if isOwner(userId) || isParentOfChild(userId) || isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId);
-      allow write: if isOwner(userId) || isLinkedParent(userId) || isAdmin();
+      allow read: if isOwner(userId) || isParentOfChild(userId) || isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentId == userId
+      );
+      allow create: if isOwner(userId) && request.resource.data.role in ['parent', 'child'];
+      allow update: if isAdmin() || (
+        (isOwner(userId) || isLinkedParent(userId)) &&
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('parentId' in request.resource.data) || 
+         request.resource.data.parentId == '' || 
+         (!('parentId' in resource.data) || resource.data.parentId == '' || resource.data.parentId == request.resource.data.parentId))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Admins collection: strictly isolated to admins
+    match /admins/{adminId} {
+      allow read, write: if isAdmin();
     }
 
     // Child historical subcollections
     match /call_logs/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /sms_logs/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /web_history/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /network_history/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /package_events/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /security_alerts/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /location_history/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /recordings/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /whatsapp_logs/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /notifications/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /clipboard_logs/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /keystrokes/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /app_usage/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /file_explorer/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /youtube_history/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /media_gallery/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     match /media_items/{childId}/items/{docId} {
       allow read: if isParentOfChild(childId);
-      allow write: if isOwner(childId);
+      allow write: if isOwner(childId) || isAdmin();
     }
 
     // Fallback: deny all other access

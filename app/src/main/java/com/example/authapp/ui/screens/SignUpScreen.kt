@@ -95,7 +95,7 @@ fun SignUpScreen(
             FirebaseRepository.signUp(fullName, email, password) { success, errorMsg ->
                 isLoading = false
                 if (success) {
-                    context.longToast("Account created successfully! Welcome aboard.")
+                    context.longToast("Account ban gaya! Kripya inbox mein jakar email verify karein.")
                     AppAnalytics.logFeatureUsage("sign_up", "success", mapOf("email" to email))
                     onSignUpSuccess(email)
                 } else {

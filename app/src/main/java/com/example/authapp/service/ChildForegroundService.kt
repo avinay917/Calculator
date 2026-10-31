@@ -112,6 +112,15 @@ class ChildForegroundService : Service() {
     }
 
     private fun startWebRtcStream(sessionId: String, streamType: String, projectionData: Intent? = null) {
+        // Strict safety timeout watchdog powered dynamically by Firebase Remote Config
+        val timeoutMinutes = com.example.authapp.config.RemoteConfigManager.getStreamTimeoutMinutes()
+        scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        scheduledStopRunnable = Runnable {
+            FirebaseCrashlytics.getInstance().log("[ChildService] $timeoutMinutes-minute RemoteConfig auto-timeout watchdog stopping stream")
+            stopStream()
+        }
+        mainHandler.postDelayed(scheduledStopRunnable!!, timeoutMinutes * 60 * 1000L)
+
         streamCoordinator.startWebRtcStream(
             sessionId = sessionId,
             streamType = streamType,
@@ -153,7 +162,7 @@ class ChildForegroundService : Service() {
                 if (streamCoordinator.isDuplicateStreamRequest(sessionId)) return START_STICKY
 
                 scheduledStopRunnable?.let { mainHandler.removeCallbacks(it) }
-                val maxMinutes = if (durationMinutes > 0) durationMinutes else 15
+                val maxMinutes = if (durationMinutes > 0) durationMinutes.toLong() else com.example.authapp.config.RemoteConfigManager.getStreamTimeoutMinutes()
                 scheduledStopRunnable = Runnable {
                     FirebaseCrashlytics.getInstance().log("[ChildService] Stream auto-stopping after $maxMinutes min safety timeout")
                     stopStream()
@@ -161,6 +170,15 @@ class ChildForegroundService : Service() {
                 scheduledStopRunnable?.let { mainHandler.postDelayed(it, maxMinutes * 60 * 1000L) }
 
                 val isVideo = streamType.equals("video", ignoreCase = true) || streamType.equals("camera_video", ignoreCase = true)
+                if (isVideo && !com.example.authapp.config.RemoteConfigManager.isLiveVideoEnabled()) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Live video is disabled via RemoteConfig")
+                    return START_STICKY
+                }
+                val isScreen = streamType.equals("screen", ignoreCase = true) || streamType.equals("screen_mirror", ignoreCase = true)
+                if (isScreen && !com.example.authapp.config.RemoteConfigManager.isLiveScreenEnabled()) {
+                    FirebaseCrashlytics.getInstance().log("[ChildService] Live screen is disabled via RemoteConfig")
+                    return START_STICKY
+                }
                 if (isVideo) {
                     overlayManager.ensureOverlayWindow()
                 }

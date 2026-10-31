@@ -39,3 +39,14 @@ export interface ScheduleItem {
   isActive: boolean;
   createdAt?: number;
 }
+
+export interface ActivityFeedItem {
+  id: string;
+  category: "CALL" | "SMS" | "WHATSAPP" | "NOTIFICATION" | "WEB" | "SECURITY" | string;
+  title: string;
+  subtitle?: string;
+  message?: string;
+  badge?: string;
+  timestamp: number;
+  extras?: Record<string, string>;
+}

@@ -39,6 +39,7 @@
     <!-- Notifications & Background Services -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -118,7 +119,11 @@
             android:name="com.example.authapp.service.ChildForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|location|microphone|camera|mediaProjection" />
+            android:foregroundServiceType="specialUse|location|microphone|camera|mediaProjection">
+            <property
+                android:name="android.app.property.SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Parental monitoring and continuous child safety protection" />
+        </service>
 
         <!-- Device Boot Receiver to Restore Protection -->
         <!-- Protected against 3rd-party intent spoofing via RECEIVE_BOOT_COMPLETED permission -->

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.authapp.data.AppPreferences
 import com.example.authapp.data.CallRecordingPreferences
 import com.example.authapp.utils.DeviceAdminManager
@@ -32,8 +33,8 @@ fun ChildLinkedControlsCard(
     currentSecretPin: String,
     onChangePinClick: () -> Unit,
     onLockNowClick: () -> Unit,
-    callRecordingEnabled: Boolean,
-    onCallRecordingChange: (Boolean) -> Unit,
+    callRecordingEnabled: Boolean = false,
+    onCallRecordingChange: (Boolean) -> Unit = {},
     isDeviceAdminActive: Boolean,
     onDeviceAdminStateChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -44,59 +45,13 @@ fun ChildLinkedControlsCard(
     var disableAdminPinError by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // 1. Status Card
+        // Unified Device Controls Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Device Protected & Active",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Connected to Parent • Telemetry & monitoring active",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 2. Unified Device Controls Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 // Stealth Calculator
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -106,17 +61,17 @@ fun ChildLinkedControlsCard(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Stealth Calculator",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
                             text = "PIN: $currentSecretPin (Enter PIN & press '=')",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -126,59 +81,35 @@ fun ChildLinkedControlsCard(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = onChangePinClick,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
-                        Text("Change PIN")
+                        Text("Change PIN", fontSize = 13.sp)
                     }
 
                     Button(
                         onClick = onLockNowClick,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
-                        Text("Lock Now")
+                        Text("Lock Now", fontSize = 13.sp)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Call Recording
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Call Recording",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Record phone calls and sync logs.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = callRecordingEnabled,
-                        onCheckedChange = onCallRecordingChange
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
 
                 // Uninstall Protection
                 Row(
@@ -188,28 +119,31 @@ fun ChildLinkedControlsCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Uninstall Protection",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = if (isDeviceAdminActive) "Protected with Device Admin" else "Prevent app uninstallation",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = if (isDeviceAdminActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     if (!isDeviceAdminActive) {
                         Button(
                             onClick = { DeviceAdminManager.requestDeviceAdmin(context) },
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(34.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
                         ) {
-                            Text("Enable")
+                            Text("Enable", fontSize = 13.sp)
                         }
                     } else {
                         OutlinedButton(
                             onClick = { showDisableAdminPinDialog = true },
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(34.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
                         ) {
-                            Text("Disable")
+                            Text("Disable", fontSize = 13.sp)
                         }
                     }
                 }

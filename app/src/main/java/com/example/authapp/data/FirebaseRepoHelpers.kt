@@ -14,12 +14,10 @@ object FirebaseRepoHelpers {
     inline fun <reified T> listenToChildNode(
         nodePath: String,
         childUid: String,
+        limit: Int = 50,
         crossinline onData: (List<T>) -> Unit
     ): ValueEventListener {
-        return FirebaseDatabase.getInstance().reference.child(nodePath).child(childUid)
-            .onValueChange { snapshot ->
-                onData(snapshot.toListOf())
-            }
+        return listenToChildNodeList(nodePath, childUid, limit = limit, transform = { it }, onData = onData)
     }
 
     inline fun <reified T> listenToChildNodeList(
@@ -70,13 +68,41 @@ object FirebaseRepoHelpers {
         FirebaseDatabase.getInstance().reference.child(rtdbPath).child(childId).child(itemKey).setValue(item)
             .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
 
-        // 2. Only mirror to Firestore if this collection is actually consumed by Firestore listeners (notifications, media_gallery)
-        // This eliminates 70%+ redundant billable Firestore write operations for calls, SMS, web history, and network logs
-        if (collectionName == "notifications" || collectionName == "media_gallery") {
-            FirebaseFirestore.getInstance().collection(collectionName).document(childId)
-                .collection("items").document(itemKey)
-                .set(item, SetOptions.merge())
+        // 2. Dual writes to Firestore eliminated: RTDB is 100% free and unlimited.
+        // Fast streaming events (notifications, media items, calls, SMS, logs) do not consume Firestore write quotas.
+    }
+
+    inline fun <T> pushChildItem(
+        path: String,
+        childId: String,
+        item: T,
+        crossinline withId: (T, String) -> T = { itm, _ -> itm }
+    ) {
+        if (childId.isEmpty()) return
+        try {
+            val ref = FirebaseDatabase.getInstance().reference.child(path).child(childId).push()
+            val toSave = withId(item, ref.key ?: System.currentTimeMillis().toString())
+            ref.setValue(toSave)
                 .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+        }
+    }
+
+    inline fun <T> syncChildMap(
+        path: String,
+        childId: String,
+        items: List<T>,
+        limit: Int = 50,
+        crossinline keySelector: (T) -> String
+    ) {
+        if (childId.isEmpty() || items.isEmpty()) return
+        try {
+            val map = items.take(limit).associateBy { keySelector(it) }
+            FirebaseDatabase.getInstance().reference.child(path).child(childId).setValue(map)
+                .addOnFailureListener { e -> FirebaseCrashlytics.getInstance().recordException(e) }
+        } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 }

@@ -40,6 +40,10 @@ fun CalculatorScreen(
 
     val secretPin = remember { AppPreferences.getSecretPin(context) }
 
+    LaunchedEffect(Unit) {
+        ChildPermissionsHelper.startMonitoringService(context)
+    }
+
     fun evaluateMath(expr: String): String {
         if (expr.isBlank()) return "0"
         return try {
