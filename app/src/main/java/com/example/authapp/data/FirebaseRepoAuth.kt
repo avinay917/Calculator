@@ -11,6 +11,22 @@ import com.google.firebase.messaging.FirebaseMessaging
 object FirebaseAuthRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val database: FirebaseDatabase get() = FirebaseDatabase.getInstance()
+    private val firestore: com.google.firebase.firestore.FirebaseFirestore get() = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+    private val crashlytics: com.google.firebase.crashlytics.FirebaseCrashlytics get() = com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
+
+    fun syncUserProfileToFirestore(uid: String) {
+        if (uid.isEmpty()) return
+        database.reference.child("users").child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val user = snapshot.getValue(User::class.java)
+                if (user != null) {
+                    firestore.collection("users").document(uid).set(user, com.google.firebase.firestore.SetOptions.merge())
+                        .addOnFailureListener { e -> crashlytics.recordException(e) }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
 
     fun signUp(
         fullName: String,
@@ -73,6 +89,7 @@ object FirebaseAuthRepository {
                     val uid = user?.uid
                     if (uid != null) {
                         FirebaseRepository.setupPresenceSystem(uid)
+                        syncUserProfileToFirestore(uid)
                     }
                     updateFcmToken()
                     onResult(true, null)
@@ -128,6 +145,7 @@ object FirebaseAuthRepository {
         userRef.updateChildren(statusMap)
         if (isOnline) {
             FirebaseRepository.setupPresenceSystem(uid)
+            syncUserProfileToFirestore(uid)
         }
     }
 

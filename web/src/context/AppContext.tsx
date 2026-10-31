@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { ref, onValue } from "firebase/database";
-import { auth, rtdb } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, rtdb, firestore } from "@/lib/firebase";
 import { MainTabType } from "@/types/dashboard";
 import { ActivityTabType } from "@/components/ActivityLogList";
 import { useChildDataSync } from "@/hooks/useChildDataSync";
@@ -108,6 +109,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const unsub = onValue(roleRef, (snap) => {
       setUserRole(snap.val() === "admin" ? "admin" : "parent");
     });
+
+    // Auto-heal Parent user profile in Firestore to satisfy Firestore security rules
+    const userDocRef = doc(firestore, "users", user.uid);
+    setDoc(userDocRef, {
+      uid: user.uid,
+      email: user.email || "",
+      name: user.displayName || user.email?.split("@")[0] || "Parent",
+      role: "parent",
+      lastSeen: Date.now()
+    }, { merge: true }).catch((err) => console.warn("Firestore profile sync error:", err));
+
     return () => unsub();
   }, [user]);
 

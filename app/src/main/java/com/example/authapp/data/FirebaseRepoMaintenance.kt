@@ -83,7 +83,10 @@ object FirebaseMaintenanceRepository {
                         .addListenerForSingleValueEvent(object : ValueEventListener {
                             override fun onDataChange(snapSnapshot: DataSnapshot) {
                                 val snapUpdates = mutableMapOf<String, Any?>()
-                                for (snap in snapSnapshot.children) {
+                                val sortedSnaps = snapSnapshot.children.sortedByDescending { it.child("timestamp").getValue(Long::class.java) ?: 0L }
+                                // Preserve at least the most recent 1 snapshot so UI never displays an empty/broken state
+                                val snapsToPrune = if (sortedSnaps.size > 1) sortedSnaps.drop(1) else emptyList()
+                                for (snap in snapsToPrune) {
                                     val ts = snap.child("timestamp").getValue(Long::class.java) ?: 0L
                                     if (ts > 0L && ts < cutoffTimestamp) {
                                         val downloadUrl = snap.child("downloadUrl").getValue(String::class.java)

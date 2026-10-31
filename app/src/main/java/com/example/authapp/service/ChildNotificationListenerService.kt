@@ -10,7 +10,8 @@ import com.example.authapp.data.NotificationItem
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class ChildNotificationListenerService : NotificationListenerService() {
-    private val recentNotificationCache = android.util.LruCache<String, Long>(50)
+    private val recentNotificationCache = android.util.LruCache<String, Long>(200)
+    private val recentWhatsAppCache = android.util.LruCache<String, Long>(200)
 
     @Volatile
     private var isConnected = false
@@ -99,31 +100,41 @@ class ChildNotificationListenerService : NotificationListenerService() {
                     lowerText.contains("spin the wheel") ||
                     packageName == "com.android.providers.downloads"
 
-            if (isIgnoredProgress) {
+            val isWhatsApp = packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)
+            val flags = sbn.notification?.flags ?: 0
+            val isGroupSummary = (flags and Notification.FLAG_GROUP_SUMMARY) != 0
+            val isWhatsAppSummary = isWhatsApp && (isGroupSummary ||
+                    lowerText.matches(Regex(".*\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?.*", RegexOption.IGNORE_CASE)) ||
+                    lowerText.matches(Regex(".*\\d+\\s+new messages?.*", RegexOption.IGNORE_CASE)) ||
+                    (lowerTitle == "whatsapp" && (lowerText.contains("messages") || lowerText.contains("chats"))))
+
+            if (isIgnoredProgress || isWhatsAppSummary) {
                 return
             }
 
             val uid = AppHealthTelemetry.getEffectiveUserId(applicationContext)
             if (uid.isNotEmpty()) {
-                val item = NotificationItem(
-                    packageName = packageName,
-                    appName = appName,
-                    title = title,
-                    text = text,
-                    timestamp = System.currentTimeMillis()
-                )
-                FirebaseRepository.pushNotification(uid, item)
-                FirebaseRepository.pushActivityFeedItem(uid, com.example.authapp.model.ActivityFeedItem(
-                    category = "NOTIFICATION",
-                    title = appName.ifEmpty { packageName },
-                    subtitle = title,
-                    message = text,
-                    badge = "APP",
-                    timestamp = item.timestamp
-                ))
+                if (!isWhatsApp) {
+                    val item = NotificationItem(
+                        packageName = packageName,
+                        appName = appName,
+                        title = title,
+                        text = text,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    FirebaseRepository.pushNotification(uid, item)
+                    FirebaseRepository.pushActivityFeedItem(uid, com.example.authapp.model.ActivityFeedItem(
+                        category = "NOTIFICATION",
+                        title = appName.ifEmpty { packageName },
+                        subtitle = title,
+                        message = text,
+                        badge = "APP",
+                        timestamp = item.timestamp
+                    ))
+                }
 
                     // WhatsApp Chat & Status Automatic Interceptor
-                if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b" || packageName.contains("whatsapp", ignoreCase = true)) {
+                if (isWhatsApp) {
                     val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
                     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
                     val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
@@ -186,6 +197,20 @@ class ChildNotificationListenerService : NotificationListenerService() {
                         bigText.isNotEmpty() -> bigText
                         textLines.isNotEmpty() -> textLines
                         else -> "WhatsApp notification update"
+                    }
+
+                    val waDedupKey = "${title.trim().lowercase()}:${messageDisplay.trim().lowercase()}"
+                    val isDuplicateWa = synchronized(recentWhatsAppCache) {
+                        val lastWa = recentWhatsAppCache.get(waDedupKey)
+                        if (lastWa != null && (now - lastWa) < 4000L) {
+                            true
+                        } else {
+                            recentWhatsAppCache.put(waDedupKey, now)
+                            false
+                        }
+                    }
+                    if (isDuplicateWa) {
+                        return
                     }
 
                     val waItem = com.example.authapp.data.WhatsAppLogItem(

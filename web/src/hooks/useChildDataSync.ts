@@ -197,7 +197,17 @@ export function useChildDataSync(
     // Snapshot request status
     unsubs.push(onValue(ref(rtdb, `streams/${activeChildId}/snapshotRequest`), (snap) => {
       const val = snap.val();
-      if (val && (val.status === "COMPLETED" || val.status === "FAILED")) setCapturingFacing(null);
+      if (val && (val.status === "COMPLETED" || val.status === "FAILED")) {
+        setCapturingFacing(null);
+        if (val.status === "COMPLETED" && val.downloadUrl) {
+          setLatestSnapshot((prev: any) => prev?.downloadUrl === val.downloadUrl ? prev : {
+            id: "snap_" + (val.timestamp || Date.now()),
+            downloadUrl: val.downloadUrl,
+            timestamp: val.timestamp || Date.now(),
+            cameraFacing: val.cameraFacing || "back"
+          });
+        }
+      }
     }));
 
     // Parent controls (blockedPackages + uninstallPin)

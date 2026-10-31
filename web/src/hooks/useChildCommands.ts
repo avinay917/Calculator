@@ -68,18 +68,18 @@ export function useChildCommands(
     setTimeout(() => setCapturingFacing(null), 15000);
   };
 
-  const handleToggleBlockApp = (packageName: string, currentBlocked: boolean) => {
+  const handleToggleBlockApp = async (packageName: string, currentBlocked: boolean) => {
     if (!activeChildId || !packageName) return;
     const sanitized = packageName.replace(/\./g, "_");
     const nextBlocked = !currentBlocked;
-    set(ref(rtdb, `parent_controls/${activeChildId}/blockedPackages/${sanitized}`), nextBlocked);
-    set(ref(rtdb, `commands/${activeChildId}/${nextBlocked ? "BLOCK_APP" : "UNBLOCK_APP"}`), packageName);
+    await set(ref(rtdb, `parent_controls/${activeChildId}/blockedPackages/${sanitized}`), nextBlocked);
+    await sendCommand(nextBlocked ? "BLOCK_APP" : "UNBLOCK_APP", packageName);
   };
 
-  const handleUninstallApp = (packageName: string) => {
+  const handleUninstallApp = async (packageName: string) => {
     if (!activeChildId || !packageName) return;
     if (confirm(`Aap child phone se '${packageName}' uninstall karne ki request bhejna chahte hain?`)) {
-      set(ref(rtdb, `commands/${activeChildId}/UNINSTALL_APP`), packageName);
+      await sendCommand("UNINSTALL_APP", packageName);
       alert(`Uninstall request bheji gayi! Child phone par prompt aayega.`);
     }
   };

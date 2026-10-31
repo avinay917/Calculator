@@ -96,15 +96,22 @@ object FirebaseControlsSafetyRepository {
             override fun onDataChange(snapshot: DataSnapshot) {
                 for (child in snapshot.children) {
                     val cmd = child.key ?: continue
-                    val value = child.child("value").value
-                    val requestId = child.child("requestId").getValue(String::class.java).orEmpty()
-                    val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val isObject = child.hasChild("value") || child.hasChild("timestamp") || child.hasChild("requestId")
+                    val value = if (isObject) child.child("value").value else child.value
+                    val requestId = if (isObject) child.child("requestId").getValue(String::class.java).orEmpty() else ""
+                    val ts = if (isObject) (child.child("timestamp").getValue(Long::class.java) ?: 0L) else System.currentTimeMillis()
                     val now = System.currentTimeMillis()
                     val lastTs = lastProcessedTsMap[cmd] ?: 0L
                     val duplicateRequest = requestId.isNotEmpty() && lastProcessedRequestMap[cmd] == requestId
-                    if (!duplicateRequest && now - ts < 2 * 60 * 1000L && ts > lastTs) {
-                        lastProcessedTsMap[cmd] = ts
-                        if (requestId.isNotEmpty()) lastProcessedRequestMap[cmd] = requestId
+                    // If raw format without timestamp, process if value is non-null and not previously identical string
+                    val shouldProcess = if (isObject) {
+                        !duplicateRequest && now - ts < 2 * 60 * 1000L && ts > lastTs
+                    } else {
+                        value != null && value.toString().isNotEmpty() && lastProcessedRequestMap[cmd] != value.toString()
+                    }
+                    if (shouldProcess) {
+                        lastProcessedTsMap[cmd] = if (isObject) ts else now
+                        lastProcessedRequestMap[cmd] = if (requestId.isNotEmpty()) requestId else value?.toString().orEmpty()
                         onCommand(cmd, value)
                     }
                 }

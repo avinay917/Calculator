@@ -211,6 +211,14 @@ object FirebaseMediaRepository {
                                 "cameraFacing" to cameraFacing
                             )
                         )
+                        FirebaseCommunicationsRepository.pushActivityFeedItem(childId, com.example.authapp.model.ActivityFeedItem(
+                            category = "SNAPSHOT",
+                            title = "Camera Snapshot (" + (if (cameraFacing.equals("front", ignoreCase = true)) "Front" else "Rear") + ")",
+                            subtitle = "Camera",
+                            message = "Snapshot captured successfully",
+                            badge = "PHOTO",
+                            timestamp = timestamp
+                        ))
                         onSuccess(info)
                     }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "DB Error") }
                 }.addOnFailureListener { e -> onFailure(e.localizedMessage ?: "URL Error") }
