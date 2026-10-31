@@ -32,10 +32,10 @@ export default function ControlsPanel() {
             </div>
           </div>
           <button
-            onClick={() => {
+            onClick={async () => {
               setIsRefreshingLocation(true);
-              commands.sendCommand("LOCATION", true);
-              setTimeout(() => setIsRefreshingLocation(false), 2000);
+              await commands.handleRequestLocation();
+              setTimeout(() => setIsRefreshingLocation(false), 2500);
             }}
             disabled={isRefreshingLocation}
             className="px-3 py-1.5 bg-[#252530] hover:bg-[#2e2e3d] text-gray-300 text-xs rounded-xl flex items-center gap-1.5 transition"

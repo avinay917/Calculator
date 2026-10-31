@@ -28,7 +28,7 @@ export function useChildCommands(
       const val = snap.val();
       if (typeof val === "number") setStorageRetentionDays(val);
     });
-    return () => off(retRef, "value", unsub);
+    return () => unsub();
   }, [user]);
 
   const sendCommand = async (command: string, value: any = true) => {
@@ -41,6 +41,13 @@ export function useChildCommands(
       timestamp: Date.now(),
     });
     alert(`Command '${command}' (${value ? "ON" : "OFF"}) sent to device.`);
+  };
+
+  const handleRequestLocation = async () => {
+    if (!activeChildId) return;
+    const reqRef = ref(rtdb, `users/${activeChildId}/locationRequest`);
+    await set(reqRef, Date.now()).catch(() => {});
+    await sendCommand("LOCATION", true).catch(() => {});
   };
 
   const handleVibratePhone = async (seconds: number = 3) => {
@@ -288,6 +295,7 @@ export function useChildCommands(
   return {
     capturingFacing,
     sendCommand,
+    handleRequestLocation,
     handleRequestSnapshot,
     handleToggleBlockApp,
     handleUninstallApp,

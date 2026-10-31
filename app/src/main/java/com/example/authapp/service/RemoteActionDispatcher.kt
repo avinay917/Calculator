@@ -346,6 +346,29 @@ object RemoteActionDispatcher {
         }
         registerHandler("BLOCK_APP", blockHandler)
         registerHandler("UNBLOCK_APP", blockHandler)
+
+        // Location Refresh Handler (Fixes on-demand GPS sync from web & parent app)
+        val locationHandler = object : RemoteActionHandler {
+            override fun handle(
+                context: Context,
+                scope: CoroutineScope,
+                effectiveUid: String,
+                command: String,
+                value: Any?,
+                onSyncInstalledApps: ((String) -> Unit)?
+            ): Boolean {
+                if (effectiveUid.isNotEmpty()) {
+                    FirebaseRepository.requestChildLocation(effectiveUid)
+                    try {
+                        FirebaseControlRepository.sendRemoteCommand(effectiveUid, command, false)
+                    } catch (_: Exception) {}
+                }
+                return true
+            }
+        }
+        registerHandler("LOCATION", locationHandler)
+        registerHandler("REFRESH_LOCATION", locationHandler)
+        registerHandler("GET_LOCATION", locationHandler)
     }
 }
 

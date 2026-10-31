@@ -64,7 +64,7 @@ export class AudioStreamReceiver {
         }
       );
 
-      this.unsubscribe = () => off(chunkRef, "value", unsub);
+      this.unsubscribe = unsub;
     } catch (e: any) {
       this.onError("Failed to start audio receiver: " + (e?.message || e));
     }

@@ -176,7 +176,7 @@ export class WebRtcReceiver {
           }
         }
       });
-      this.listeners.push(() => off(sdpOfferRef, "value", unsubscribeOffer));
+      this.listeners.push(unsubscribeOffer);
 
       // 3. Listen to Child ICE Candidates from both childCandidates and candidates/child
       const processedCandidates = new Set<string>();
@@ -210,7 +210,7 @@ export class WebRtcReceiver {
           Object.values(candidatesObj).forEach(handleCandidate);
         }
       });
-      this.listeners.push(() => off(childCandidatesRef, "value", unsubCandidates));
+      this.listeners.push(unsubCandidates);
 
       const legacyChildCandidatesRef = ref(rtdb, `signaling/${this.sessionId}/candidates/child`);
       const unsubLegacyCandidates = onValue(legacyChildCandidatesRef, (snapshot) => {
@@ -219,7 +219,7 @@ export class WebRtcReceiver {
           Object.values(candidatesObj).forEach(handleCandidate);
         }
       });
-      this.listeners.push(() => off(legacyChildCandidatesRef, "value", unsubLegacyCandidates));
+      this.listeners.push(unsubLegacyCandidates);
 
       return this.sessionId;
     } catch (err: any) {
